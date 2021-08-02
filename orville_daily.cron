@@ -4,7 +4,7 @@
 ORVILLE_DATA_DIR=/data/orville
 
 # Where the software is stored
-ORVILLE_SOFTWARE_DIR=/home/jdowell/orville
+ORVILLE_SOFTWARE_DIR=/home/jdowell/orville3
 
 # Delete (u,v) radial and spectra plots more than three weeks old
 find ${ORVILLE_DATA_DIR}/baselines -mtime +22 -exec rm -r {} \;

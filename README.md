@@ -1,5 +1,7 @@
 # Orville Wideband Imager
 
+![Travis](https://travis-ci.com/lwa-project/orville_wideband_imager.svg?branch=master)
+
 [![Paper](https://img.shields.io/badge/arXiv-2103.03347-blue.svg)](https://arxiv.org/abs/2103.03347)   [![Memo](https://img.shields.io/badge/lwa%20memo-215-blue)](http://leo.phys.unm.edu/~lwa/memos/memo/lwa0215.pdf)
 
 

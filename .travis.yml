@@ -16,6 +16,8 @@ addons:
             - software-properties-common
             - python-dev
             - python3-dev
+            - libfftw3-dev
+            - libgdbm-dev
 
 install:
     - pip install \
@@ -28,5 +30,4 @@ install:
     - pip install pylint
 
 script:
-    - cd tests
     - python -m unittest discover

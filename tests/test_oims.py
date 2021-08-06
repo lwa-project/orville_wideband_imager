@@ -17,7 +17,7 @@ import unittest
 import OrvilleImageDB
 
 
-__version__  = "0.1"
+__version__  = "0.2"
 __author__    = "Jayce Dowell"
 
 
@@ -69,7 +69,6 @@ class oims_tests(unittest.TestCase):
         testFile = os.path.join(self.testPath, 'test.oims')
         
         db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
-        db.header.station = b'LWA-SV'       # TODO: Need to fix this in orvile_imager.py
         nf = OrvilleImageDB.OrvilleImageDB(testFile, 'w', imager_version=db.header.imager_version, 
                                                           station=db.header.station)
                                             

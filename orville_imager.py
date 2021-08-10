@@ -1145,7 +1145,7 @@ class WriterOp(object):
                             
                         ### Update the colorbar limits
                         if i == 0:
-                            vmax[c].append( percentile(img, 98.0) )
+                            vmax[c].append( percentile(img, 99.75) )
                             
                         ### Plot the sky and clip at the horizon
                         ax[i].cla()

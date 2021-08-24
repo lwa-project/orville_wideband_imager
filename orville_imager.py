@@ -1145,7 +1145,7 @@ class WriterOp(object):
                             
                         ### Update the colorbar limits
                         if i == 0:
-                            vmax[c].append( percentile(img, 98.0) )
+                            vmax[c].append( percentile(img, 99.75) )
                             
                         ### Plot the sky and clip at the horizon
                         ax[i].cla()
@@ -1197,6 +1197,11 @@ class WriterOp(object):
                     canvas = matplotlib.backends.backend_agg.FigureCanvasAgg(fig)
                     canvas.print_figure(outname, dpi=78, facecolor='black')
                     
+                    ## Timestamp file
+                    outname = os.path.join(self.output_dir_lwatv, 'lwatv_timestamp')
+                    with open(outname, 'w') as fh:
+                        fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
+                        
                     self.log.debug("Wrote LWATV %i, %i to disk as '%s'", intCount, c, os.path.basename(outname))
                     
                 time_tag += navg * (int(fS) // 100)
@@ -1296,13 +1301,14 @@ class UploaderOp(object):
                 output = output.decode()
                 latest_lwatv = output.split('\n')[0]
                 shutil.copy2(latest_lwatv, '/tmp/lwatv.png')
+                shutil.copy2(os.path.join(self.output_dir_lwatv, 'lwatv_timestamp'), '/tmp/lwatv_timestamp')
             except (subprocess.CalledProcessError, OSError, IOError) as e:
                 pass
                 
             # Upload and make active
             try:
                 ## Stage
-                p = subprocess.Popen('rsync -e ssh -av /tmp/lwatv*.png \
+                p = subprocess.Popen('rsync -e ssh -av /tmp/lwatv*.png /tmp/lwatv_timestamp \
                                         mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/',
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     shell=True)

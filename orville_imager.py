@@ -654,12 +654,12 @@ class FlaggerOp(object):
                             adata = idata[autos,:,:].mean(axis=0)
                             
                             ## Max out across polarization
-                            adata = numpy.max(adata, axis=1)
+                            adata = numpy.max(numpy.abs(adata), axis=1)
                             adata = numpy.array(adata)
                             
                             ## Smooth the spectrum and normalize
                             sdata = adata*0
-                            for i in range(adata.shape[0]):
+                            for i in range(adata.size):
                                 win_min = max([0, i-3])
                                 win_max = min([i+3+1, adata.shape[0]])
                                 sdata[i] = numpy.median(adata[win_min:win_max])
@@ -672,13 +672,18 @@ class FlaggerOp(object):
                             
                             ## Find the RFI
                             bad = numpy.where(numpy.abs(bdata - dm) > self.clip*ds)[0]
-
+                            
+                            ## Copy the data over
+                            copy_array(odata, idata)
+                            
                             ## Flag by zeroing out the visibility data
                             ## TODO:  This seems bad for the archival OIMS data
-                            copy_array(odata, idata)
                             for b in bad:
-                                odata[:,b,:] = 0
-                                
+                                for c in (b-1, b, b+1):
+                                    if c < 0 or c >= odata.shape[1]:
+                                        continue
+                                    odata[:,c,:] = 0
+                                    
                             time_tag += navg * (int(fS) // 100)
                             
                             curr_time = time.time()

@@ -949,7 +949,7 @@ class ImagingOp(object):
                             self.sdata = self.sdata.reshape((nchan,nstand,nstand,npol,npol))
                             BFMap("""
                                 if( j > i ) {
-                                    auto k = i*(2*(256-1)+1-i)/2 + j;
+                                    auto k = i*(2*(%i-1)+1-i)/2 + j;
                                     auto xx = idata(k,c,0,0).conj() * phases(c,k,0,0);
                                     auto yx = idata(k,c,0,1).conj() * phases(c,k,0,1);
                                     auto xy = idata(k,c,1,0).conj() * phases(c,k,1,0);
@@ -970,7 +970,7 @@ class ImagingOp(object):
                                     odata(c,j,i,1,0) = xy + yx;
                                     odata(c,j,i,1,1) = Complex<float>(0.0,1.0)*(xy - yx);   
                                 }
-                                """, 
+                                """ % (nstand,), 
                                 {'idata':self.rdata, 'phases':self.gphases, 'odata':self.sdata}, 
                                 axis_names=('c','i','j'), shape=(nchan,nstand,nstand))
                             self.sdata = self.sdata.reshape(nchan//self.decimation,self.decimation*nstand**2,npol**2)

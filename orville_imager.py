@@ -651,10 +651,12 @@ class FlaggerOp(object):
                             odata = ospan.data_view(numpy.complex64).reshape(oshape)
                             
                             ## Pull out the auto-correlations and average over stand
-                            adata = idata[autos,:,:].mean(axis=0)
+                            adata = idata[autos,:,:,:].mean(axis=0)
                             
                             ## Max out across polarization
-                            adata = numpy.max(numpy.abs(adata), axis=1)
+                            adata = adata.reshape(-1,npol*npol)
+                            adata = numpy.abs(adata)
+                            adata = numpy.max(adata, axis=1)
                             adata = numpy.array(adata)
                             
                             ## Smooth the spectrum and normalize

@@ -655,13 +655,14 @@ class FlaggerOp(object):
                             
                             ## Max out across polarization
                             adata = numpy.max(adata, axis=1)
+                            adata = numpy.array(adata)
                             
                             ## Smooth the spectrum and normalize
                             sdata = adata*0
-                            for i in range(adata.shape[1]):
+                            for i in range(adata.shape[0]):
                                 win_min = max([0, i-3])
                                 win_max = min([i+3+1, adata.shape[0]])
-                                sdata[i] = numpy.median(adata[win_min:win_max], axis=0)
+                                sdata[i] = numpy.median(adata[win_min:win_max])
                             sdata /= numpy.mean(sdata)
                             
                             ## Build the bandpass
@@ -671,15 +672,13 @@ class FlaggerOp(object):
                             
                             ## Find the RFI
                             bad = numpy.where(numpy.abs(bdata - dm) > self.clip*ds)[0]
-                                              
+
                             ## Flag by zeroing out the visibility data
                             ## TODO:  This seems bad for the archival OIMS data
-                            for b in bad:
-                                idata[:,b,:] = 0
-                                
-                            ## Save
                             copy_array(odata, idata)
-                            
+                            for b in bad:
+                                odata[:,b,:] = 0
+                                
                             time_tag += navg * (int(fS) // 100)
                             
                             curr_time = time.time()

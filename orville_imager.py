@@ -630,7 +630,7 @@ class FlaggerOp(object):
                 ohdr = ihdr.copy()
                 ohdr_str = json.dumps(ohdr)
                 
-                autos = [i*(2*(256-1)+1-i)//2+i for i in range(256)]
+                autos = [i*(2*(nstand-1)+1-i)//2+i for i in range(nstand)]
                 
                 prev_time = time.time()
                 with oring.begin_sequence(time_tag=iseq.time_tag, header=ohdr_str) as oseq:

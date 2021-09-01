@@ -244,9 +244,10 @@ class CaptureOp(object):
         del capture
 
 class SpectraOp(object):
-    def __init__(self, log, iring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
         self.log = log
         self.iring = iring
+        self.mring = mring
         self.output_dir = os.path.join(base_dir, 'spectra')
         self.core = core
         self.gpu = gpu
@@ -262,9 +263,11 @@ class SpectraOp(object):
         self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
-        self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
+        self.in_proclog.update({'nring':2,
+                                'ring0':self.iring.name,
+                                'ring1':self.mring.name})
         
-    def _plot_spectra(self, time_tag, freq, specs, status):
+    def _plot_spectra(self, time_tag, freq, specs, status, mask):
         # Plotting setup
         nchan = freq.size
         nstand = specs.shape[0]
@@ -274,7 +277,8 @@ class SpectraOp(object):
         except ValueError:
             minval = 0.0
             maxval = 1.0
-            
+        bad = numpy.where(mask == 0)[0]
+        
         # Image setup
         width = height = 16
         im = PIL.Image.new('RGB', (width * 65 + 1, height * 65 + 21), '#FFFFFF')
@@ -309,6 +313,12 @@ class SpectraOp(object):
             y = ((54.0 / (maxval - minval)) * (specs[s,:,1] - minval)).clip(0, 54)
             draw.line(list(zip(x0 + x, y0 - y)), fill=c)
             
+            ## Mask
+            c = '#000000'
+            for b in bad:
+                x = b * 64 // nchan
+                draw.line(list(zip((x,x), (0,54))), fill=c)
+                
         # Summary
         ySummary = height * 65 + 2
         timeStr = datetime.utcfromtimestamp(time_tag / fS)
@@ -341,65 +351,72 @@ class SpectraOp(object):
             self.sequence_proclog.update(ihdr)
             self.log.info('SpectraOp: Config - %s', ihdr)
             
-            # Setup the ring metadata and gulp sizes
-            chan0  = ihdr['chan0']
-            nchan  = ihdr['nchan']
-            nbl    = ihdr['nbl']
-            nstand = int(numpy.sqrt(8*nbl+1)-1)//2
-            npol   = ihdr['npol']
-            navg   = ihdr['navg']
-            time_tag0 = iseq.time_tag
-            time_tag  = time_tag0
-            igulp_size = nstand*(nstand+1)//2*nchan*npol*npol*8
-            ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
-            self.iring.resize(igulp_size, igulp_size*10)
-            
-            # Setup the arrays for the frequencies and auto-correlations
-            freq = chan0*fC + numpy.arange(nchan)*4*fC
-            autos = [i*(2*(nstand-1)+1-i)//2 + i for i in range(nstand)]
-            
-            intCount = 0
-            prev_time = time.time()
-            for ispan in iseq.read(igulp_size):
-                if ispan.size < igulp_size:
-                    continue # Ignore final gulp
-                curr_time = time.time()
-                acquire_time = curr_time - prev_time
-                prev_time = curr_time
+            for mseq in self.mring.read(guarantee=True):
+                mhdr = json.loads(mseq.header.tostring())
                 
-                ## Setup and load
-                t0 = time.time()
-                idata = ispan.data_view(numpy.complex64).reshape(ishape)
+                # Setup the ring metadata and gulp sizes
+                chan0  = ihdr['chan0']
+                nchan  = ihdr['nchan']
+                nbl    = ihdr['nbl']
+                nstand = int(numpy.sqrt(8*nbl+1)-1)//2
+                npol   = ihdr['npol']
+                navg   = ihdr['navg']
+                time_tag0 = iseq.time_tag
+                time_tag  = time_tag0
+                igulp_size = nstand*(nstand+1)//2*nchan*npol*npol*8
+                ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
+                self.iring.resize(igulp_size, igulp_size*10)
                 
-                ## Pull out the auto-correlations
-                adata = idata[autos,:,:,:].real
-                adata = adata[:,:,[0,1],[0,1]]
+                # Setup the arrays for the frequencies and auto-correlations
+                freq = chan0*fC + numpy.arange(nchan)*4*fC
+                autos = [i*(2*(nstand-1)+1-i)//2 + i for i in range(nstand)]
                 
-                ## Plot
-                im = self._plot_spectra(time_tag, freq, 10*numpy.log10(adata), status)
-                
-                ## Save
-                ### Timetag stuff
-                mjd, h, m, s = timetag_to_mjdatetime(time_tag)
-                ### The actual save
-                outname = os.path.join(self.output_dir, str(mjd))
-                if not os.path.exists(outname):
-                    os.mkdir(outname)
-                filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.png' % (mjd, h, m, s, freq.min()/1e6, freq.max()/1e6)
-                outname = os.path.join(outname, filename)
-                im.save(outname, 'PNG')
-                self.log.debug("Wrote spectra %i to disk as '%s'", intCount, os.path.basename(outname))
-                
-                time_tag += navg * (fS / 100.0)
-                intCount += 1
-                
-                curr_time = time.time()
-                process_time = curr_time - prev_time
-                self.log.debug('Spectra plotter processing time was %.3f s', process_time)
-                prev_time = curr_time
-                self.perf_proclog.update({'acquire_time': acquire_time, 
-                                          'reserve_time': 0.0, 
-                                          'process_time': process_time,})
+                intCount = 0
+                prev_time = time.time()
+                for ispan in iseq.read(igulp_size):
+                    for mspan in mseq.read(nchan*1):
+                        if ispan.size < igulp_size:
+                            continue # Ignore final gulp
+                        if mspan.size < nchan*1:
+                            continue # Ignore final gulp
+                        curr_time = time.time()
+                        acquire_time = curr_time - prev_time
+                        prev_time = curr_time
+                        
+                        ## Setup and load
+                        t0 = time.time()
+                        idata = ispan.data_view(numpy.complex64).reshape(ishape)
+                        mdata = mspan.data_view(numpy.uint8).reshape(nchan,)
+                        
+                        ## Pull out the auto-correlations
+                        adata = idata[autos,:,:,:].real
+                        adata = adata[:,:,[0,1],[0,1]]
+                        
+                        ## Plot
+                        im = self._plot_spectra(time_tag, freq, 10*numpy.log10(adata), status, mdata)
+                        
+                        ## Save
+                        ### Timetag stuff
+                        mjd, h, m, s = timetag_to_mjdatetime(time_tag)
+                        ### The actual save
+                        outname = os.path.join(self.output_dir, str(mjd))
+                        if not os.path.exists(outname):
+                            os.mkdir(outname)
+                        filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.png' % (mjd, h, m, s, freq.min()/1e6, freq.max()/1e6)
+                        outname = os.path.join(outname, filename)
+                        im.save(outname, 'PNG')
+                        self.log.debug("Wrote spectra %i to disk as '%s'", intCount, os.path.basename(outname))
+                        
+                        time_tag += navg * (fS / 100.0)
+                        intCount += 1
+                        
+                        curr_time = time.time()
+                        process_time = curr_time - prev_time
+                        self.log.debug('Spectra plotter processing time was %.3f s', process_time)
+                        prev_time = curr_time
+                        self.perf_proclog.update({'acquire_time': acquire_time, 
+                                                  'reserve_time': 0.0, 
+                                                  'process_time': process_time,})
         self.log.info("SpectraOp - Done")
 
 
@@ -575,6 +592,7 @@ class BaselineOp(object):
                                           'process_time': process_time,})
         self.log.info("BaselineOp - Done")
 
+
 class FlaggerOp(object):
     def __init__(self, log, iring, oring, clip=3, core=-1, gpu=-1):
         self.log = log
@@ -622,8 +640,8 @@ class FlaggerOp(object):
                 
                 igulp_size = nstand*(nstand+1)//2*nchan*npol*npol*8      # complex64
                 ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
-                ogulp_size = igulp_size              # complex64
-                oshape = ishape
+                ogulp_size = nchan*1              # uint8
+                oshape = (nchan,)
                 self.iring.resize(igulp_size, igulp_size*10)
                 self.oring.resize(ogulp_size, ogulp_size*10)
                 
@@ -648,7 +666,7 @@ class FlaggerOp(object):
                             
                             ## Setup and load
                             idata = ispan.data_view(numpy.complex64).reshape(ishape)
-                            odata = ospan.data_view(numpy.complex64).reshape(oshape)
+                            odata = ospan.data_view(numpy.uint8).reshape(oshape)
                             
                             ## Pull out the auto-correlations and average over stand
                             adata = idata[autos,:,:,:].mean(axis=0)
@@ -673,19 +691,23 @@ class FlaggerOp(object):
                             ds = numpy.std(bdata)
                             
                             ## Find the RFI
-                            bad = numpy.where(numpy.abs(bdata - dm) > self.clip*ds)[0]
+                            mask = numpy.where(numpy.abs(bdata - dm) > self.clip*ds, 1, 0)
+                            mask = mask.astype(numpy.uint8)
                             
-                            ## Copy the data over
-                            copy_array(odata, idata)
+                            ## Grow the mask
+                            mask_left = numpy.roll(mask, -1)
+                            mask_left[-1] = 0
+                            mask_right = numpy.roll(mask, 1)
+                            mask_right[0] = 0
+                            mask |= mask_left
+                            mask |= mask_right
                             
-                            ## Flag by zeroing out the visibility data
-                            ## TODO:  This seems bad for the archival OIMS data
-                            for b in bad:
-                                for c in (b-1, b, b+1):
-                                    if c < 0 or c >= odata.shape[1]:
-                                        continue
-                                    odata[:,c,:] = 0
-                                    
+                            ## Report
+                            self.log.info("Flagged %i (%.1f%%) of channels", mask.sum(), 100*mask.sum()/mask.size)
+                            
+                            ## Invert and save
+                            odata[...] = 1 - mask
+                            
                             time_tag += navg * (int(fS) // 100)
                             
                             curr_time = time.time()
@@ -1016,9 +1038,10 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
         self.log = log
         self.iring = iring
+        self.mring = mring
         self.output_dir_images = os.path.join(base_dir, 'images')
         self.output_dir_archive = os.path.join(base_dir, 'archive')
         self.output_dir_lwatv = os.path.join(base_dir, 'lwatv')
@@ -1040,7 +1063,9 @@ class WriterOp(object):
         self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
-        self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
+        self.in_proclog.update({'nring':2,
+                                'ring0':self.iring.name,
+                                'ring1':self.mring.name})
         
         self.station = copy.deepcopy(STATION)
         
@@ -1187,157 +1212,169 @@ class WriterOp(object):
             self.sequence_proclog.update(ihdr)
             self.log.info('WriterOp: Config - %s', ihdr)
             
-            # Setup the ring metadata and gulp sizes
-            chan0      = ihdr['chan0']
-            nchan      = ihdr['nchan']
-            decimation = ihdr['decimation']
-            npol       = ihdr['npol']
-            navg       = ihdr['navg']
-            ngrid      = ihdr['ngrid']
-            res        = ihdr['res']
-            time_tag0  = iseq.time_tag
-            time_tag   = time_tag0
-            igulp_size = nchan*npol*npol*ngrid*ngrid*4        # float32
-            ishape = (nchan,npol*npol,ngrid,ngrid)
-            self.iring.resize(igulp_size, igulp_size*10)
-            
-            clip_size = 180.0/numpy.pi/res
-            
-            # Setup the frequencies
-            t0 = time.time()
-            freq = chan0*fC + numpy.arange(nchan)*4*fC
-            arc_freq = freq*1.0
-            arc_freq = arc_freq.reshape(6, -1)
-            arc_freq = arc_freq.mean(axis=1)
-            
-            # Setup the frequencies to write images for
-            ichans = [nchan//2,]   ## Only make one image at the center of the band
-            
-            # Setup the buffer for the automatic color scale control
-            vmax = [deque([], maxlen=60) for c in freq]
-            
-            intCount = 0
-            prev_time = time.time()
-            for ispan in iseq.read(igulp_size):
-                if ispan.size < igulp_size:
-                    continue # Ignore final gulp
-                curr_time = time.time()
-                acquire_time = curr_time - prev_time
-                prev_time = curr_time
+            for mseq in self.mring.read(guarantee=True):
+                mhdr = json.loads(mseq.header.tostring())
                 
-                ## Setup and load
-                idata = ispan.data_view(numpy.float32).reshape(ishape)
+                # Setup the ring metadata and gulp sizes
+                chan0      = ihdr['chan0']
+                nchan      = ihdr['nchan']
+                decimation = ihdr['decimation']
+                npol       = ihdr['npol']
+                navg       = ihdr['navg']
+                ngrid      = ihdr['ngrid']
+                res        = ihdr['res']
+                time_tag0  = iseq.time_tag
+                time_tag   = time_tag0
+                igulp_size = nchan*npol*npol*ngrid*ngrid*4        # float32
+                ishape = (nchan,npol*npol,ngrid,ngrid)
+                self.iring.resize(igulp_size, igulp_size*10)
                 
-                ## Write the full image set to disk
-                tSave = time.time()
-                self._save_image(self.station, time_tag, ihdr, freq, idata)
-                self.log.debug('Save time: %.3f s', time.time()-tSave)
+                clip_size = 180.0/numpy.pi/res
                 
-                ## Write the archive image set to disk
-                tArchive = time.time()
-                arc_data = idata.reshape(arc_freq.size,-1,npol*npol,ngrid,ngrid)
-                arc_data = arc_data.mean(axis=1)
-                self._save_archive_image(self.station, time_tag, ihdr, arc_freq, arc_data)
-                self.log.debug('Archive save time: %.3f s', time.time()-tArchive)
+                # Setup the frequencies
+                t0 = time.time()
+                freq = chan0*fC + numpy.arange(nchan)*4*fC
+                arc_freq = freq*1.0
+                arc_freq = arc_freq.reshape(6, -1)
+                arc_freq = arc_freq.mean(axis=1)
                 
-                ## Timetag stuff
-                unix_time_tag_s = time_tag // int(fS)
-                date_str = datetime.utcfromtimestamp(unix_time_tag_s).strftime('%Y/%m/%d %H:%M:%S UTC')
+                # Setup the frequencies to write images for
+                ichans = [nchan//2,]   ## Only make one image at the center of the band
                 
-                ## Compute the locations of the brigth sources and the Galactic plane
-                self.station.date = date_str[:-4]
-                for src in srcs:
-                    src.compute(self.station)
-                ateam_x = [numpy.cos(src.alt)*numpy.sin(src.az) for src in srcs if src.alt > 0]
-                ateam_y = [numpy.cos(src.alt)*numpy.cos(src.az) for src in srcs if src.alt > 0]
-                ateam_s = [src.name                             for src in srcs if src.alt > 0]
-                for g in gplane:
-                    g.compute(self.station)
-                plane_x = [numpy.cos(g.alt)*numpy.sin(g.az) if g.alt > 0 else numpy.nan for g in gplane]
-                plane_x = numpy.array(plane_x)
-                plane_y = [numpy.cos(g.alt)*numpy.cos(g.az) if g.alt > 0 else numpy.nan for g in gplane]
-                plane_y = numpy.array(plane_y)
+                # Setup the buffer for the automatic color scale control
+                vmax = [deque([], maxlen=60) for c in freq]
                 
-                ## Plot
-                for c in ichans:
-                    for i,p,l in ((0,0,'I'), (1,3,'V')):
-                        ### Pull out the data and get it ready for plotting
-                        img = idata[c,p,:,:]
-                        if l == 'V':
-                            l = '|V|'
-                            img = numpy.abs(img)
-                            
-                        ### Update the colorbar limits
-                        if i == 0:
-                            vmax[c].append( percentile(img, 99.75) )
-                            
-                        ### Plot the sky and clip at the horizon
-                        ax[i].cla()
-                        img = ax[i].imshow(img, origin='lower',
-                                           vmin=0, vmax=max([1e-6, numpy.median(vmax[c])]),
-                                           interpolation='bilinear', cmap='jet')
-                        clip = mpatches.Circle((ngrid/2., ngrid/2.), 1.03*clip_size,
-                                               facecolor='none', edgecolor='none')
-                        ax[i].add_patch(clip)
-                        img.set_clip_path(clip)
-                        ax[i].set_xticks([])
-                        ax[i].set_yticks([])
+                intCount = 0
+                prev_time = time.time()
+                for ispan in iseq.read(igulp_size):
+                    for mspan in imseq.read(nchan*1):
+                        if ispan.size < igulp_size:
+                            continue # Ignore final gulp
+                        if mspan.size < nchan*1:
+                            continue # Ignore final gulp
+                        curr_time = time.time()
+                        acquire_time = curr_time - prev_time
+                        prev_time = curr_time
                         
-                        ### Add in the locations of the A Team sources
-                        for x,y,n in zip(ateam_x, ateam_y, ateam_s):
-                            ax[i].text(ngrid//2-x*clip_size, ngrid//2+(y +  0.0083)*clip_size, n,
-                                       color='white', fontsize=14)
+                        ## Setup and load
+                        idata = ispan.data_view(numpy.float32).reshape(ishape)
+                        mdata = mspan.data_view(numpy.uint8).reshape(nchan,1,1,1)
+                        
+                        ## Write the full image set to disk
+                        tSave = time.time()
+                        self._save_image(self.station, time_tag, ihdr, freq, idata)
+                        self.log.debug('Save time: %.3f s', time.time()-tSave)
+                        
+                        ## Write the archive image set to disk
+                        tArchive = time.time()
+                        arc_data = idata.reshape(arc_freq.size,-1,npol*npol,ngrid,ngrid)
+                        arc_mask = mdata.reshape(arc_freq.size,-1,1,1,1)
+                        mask_mean = arc_mask.sum(axis=1) / arc_mask.shape[1]
+                        for band in range(mask_mean.shape[0]):
+                            if band < 0.5:
+                                arc_mask[band,:,:,:,:] = 0
+                        arc_data = (arc_data*arc_mask).sum(axis=1) / arc_mask.sum(axis=1)
+                        self._save_archive_image(self.station, time_tag, ihdr, arc_freq, arc_data)
+                        self.log.debug('Archive save time: %.3f s', time.time()-tArchive)
+                        
+                        ## Timetag stuff
+                        unix_time_tag_s = time_tag // int(fS)
+                        date_str = datetime.utcfromtimestamp(unix_time_tag_s).strftime('%Y/%m/%d %H:%M:%S UTC')
+                        
+                        ## Compute the locations of the brigth sources and the Galactic plane
+                        self.station.date = date_str[:-4]
+                        for src in srcs:
+                            src.compute(self.station)
+                        ateam_x = [numpy.cos(src.alt)*numpy.sin(src.az) for src in srcs if src.alt > 0]
+                        ateam_y = [numpy.cos(src.alt)*numpy.cos(src.az) for src in srcs if src.alt > 0]
+                        ateam_s = [src.name                             for src in srcs if src.alt > 0]
+                        for g in gplane:
+                            g.compute(self.station)
+                        plane_x = [numpy.cos(g.alt)*numpy.sin(g.az) if g.alt > 0 else numpy.nan for g in gplane]
+                        plane_x = numpy.array(plane_x)
+                        plane_y = [numpy.cos(g.alt)*numpy.cos(g.az) if g.alt > 0 else numpy.nan for g in gplane]
+                        plane_y = numpy.array(plane_y)
+                        
+                        ## Plot
+                        for c in ichans:
+                            for i,p,l in ((0,0,'I'), (1,3,'V')):
+                                ### Pull out the data and get it ready for plotting
+                                img = idata[c,p,:,:]
+                                if l == 'V':
+                                    l = '|V|'
+                                    img = numpy.abs(img)
+                                    
+                                ### Update the colorbar limits
+                                if i == 0:
+                                    vmax[c].append( percentile(img, 99.75) )
+                                    
+                                ### Plot the sky and clip at the horizon
+                                ax[i].cla()
+                                img = ax[i].imshow(img, origin='lower',
+                                                   vmin=0, vmax=max([1e-6, numpy.median(vmax[c])]),
+                                                   interpolation='bilinear', cmap='jet')
+                                clip = mpatches.Circle((ngrid/2., ngrid/2.), 1.03*clip_size,
+                                                       facecolor='none', edgecolor='none')
+                                ax[i].add_patch(clip)
+                                img.set_clip_path(clip)
+                                ax[i].set_xticks([])
+                                ax[i].set_yticks([])
+                                
+                                ### Add in the locations of the A Team sources
+                                for x,y,n in zip(ateam_x, ateam_y, ateam_s):
+                                    ax[i].text(ngrid//2-x*clip_size, ngrid//2+(y +  0.0083)*clip_size, n,
+                                               color='white', fontsize=14)
+                                    
+                                ### Add in the Galactic plane
+                                ax[i].plot(ngrid//2-plane_x*clip_size, ngrid//2+plane_y*clip_size,
+                                           marker='', linestyle='--', color='white', alpha=0.60)
+                                
+                                
+                                ### Add in the polarization labels 
+                                if i == 0:
+                                    ax[i].text(0.01, 0.94, l, verticalalignment='top',
+                                               horizontalalignment='left', color='white',
+                                               fontsize=14, transform=fig.transFigure)
+                                else:
+                                    ax[i].text(0.99, 0.94, l, verticalalignment='top',
+                                               horizontalalignment='right', color='white',
+                                               fontsize=14, transform=fig.transFigure)
+                                    
+                            ### Add in the timestamp and frequency information
+                            ax[0].text(0.01, 0.99, date_str, verticalalignment='top',
+                                    horizontalalignment='left', color='white',
+                                    fontsize=14, transform=fig.transFigure)
+                            ax[1].text(0.99, 0.99, '%.3f MHz' % (freq[c]/1e6,), verticalalignment='top',
+                                    horizontalalignment='right', color='white',
+                                    fontsize=14, transform=fig.transFigure)
                             
-                        ### Add in the Galactic plane
-                        ax[i].plot(ngrid//2-plane_x*clip_size, ngrid//2+plane_y*clip_size,
-                                   marker='', linestyle='--', color='white', alpha=0.60)
-                        
-                        
-                        ### Add in the polarization labels 
-                        if i == 0:
-                            ax[i].text(0.01, 0.94, l, verticalalignment='top',
-                                       horizontalalignment='left', color='white',
-                                       fontsize=14, transform=fig.transFigure)
-                        else:
-                            ax[i].text(0.99, 0.94, l, verticalalignment='top',
-                                       horizontalalignment='right', color='white',
-                                       fontsize=14, transform=fig.transFigure)
+                            ## Save
+                            mjd, h, m, s = timetag_to_mjdatetime(time_tag)
+                            outname = os.path.join(self.output_dir_lwatv, str(mjd))
+                            if not os.path.exists(outname):
+                                os.mkdir(outname)
+                            filename = '%i_%02i%02i%02i_%.3fMHz.png' % (mjd, h, m, s, freq[c]/1e6)
+                            outname = os.path.join(outname, filename)
+                            canvas = matplotlib.backends.backend_agg.FigureCanvasAgg(fig)
+                            canvas.print_figure(outname, dpi=78, facecolor='black')
                             
-                    ### Add in the timestamp and frequency information
-                    ax[0].text(0.01, 0.99, date_str, verticalalignment='top',
-                            horizontalalignment='left', color='white',
-                            fontsize=14, transform=fig.transFigure)
-                    ax[1].text(0.99, 0.99, '%.3f MHz' % (freq[c]/1e6,), verticalalignment='top',
-                            horizontalalignment='right', color='white',
-                            fontsize=14, transform=fig.transFigure)
-                    
-                    ## Save
-                    mjd, h, m, s = timetag_to_mjdatetime(time_tag)
-                    outname = os.path.join(self.output_dir_lwatv, str(mjd))
-                    if not os.path.exists(outname):
-                        os.mkdir(outname)
-                    filename = '%i_%02i%02i%02i_%.3fMHz.png' % (mjd, h, m, s, freq[c]/1e6)
-                    outname = os.path.join(outname, filename)
-                    canvas = matplotlib.backends.backend_agg.FigureCanvasAgg(fig)
-                    canvas.print_figure(outname, dpi=78, facecolor='black')
-                    
-                    ## Timestamp file
-                    outname = os.path.join(self.output_dir_lwatv, 'lwatv_timestamp')
-                    with open(outname, 'w') as fh:
-                        fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
+                            ## Timestamp file
+                            outname = os.path.join(self.output_dir_lwatv, 'lwatv_timestamp')
+                            with open(outname, 'w') as fh:
+                                fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
+                                
+                            self.log.debug("Wrote LWATV %i, %i to disk as '%s'", intCount, c, os.path.basename(outname))
+                            
+                        time_tag += navg * (int(fS) // 100)
+                        intCount += 1
                         
-                    self.log.debug("Wrote LWATV %i, %i to disk as '%s'", intCount, c, os.path.basename(outname))
-                    
-                time_tag += navg * (int(fS) // 100)
-                intCount += 1
-                
-                curr_time = time.time()
-                process_time = curr_time - prev_time
-                self.log.debug('Writer processing time was %.3f s', process_time)
-                prev_time = curr_time
-                self.perf_proclog.update({'acquire_time': acquire_time, 
-                                          'reserve_time': -1, 
-                                          'process_time': process_time,})
+                        curr_time = time.time()
+                        process_time = curr_time - prev_time
+                        self.log.debug('Writer processing time was %.3f s', process_time)
+                        prev_time = curr_time
+                        self.perf_proclog.update({'acquire_time': acquire_time, 
+                                                  'reserve_time': -1, 
+                                                  'process_time': process_time,})
         self.log.info("WriterOp - Done")
 
 
@@ -1525,7 +1562,7 @@ def main(args):
         
     # Create the rings that we need
     capture_ring = Ring(name="capture", space='system')
-    flagged_ring = Ring(name="flagger", space='system')
+    rfimask_ring = Ring(name="rfimask", space='system')
     writer_ring = Ring(name="writer", space='system')
     
     # Setup the processing blocks
@@ -1538,20 +1575,20 @@ def main(args):
     ops.append(CaptureOp(log, capture_ring,
                          isock, nBL*6, 1, 9000, 1, 1, core=cores.pop(0)))
     ## The flagger
-    ops.append(FlaggerOp(log, capture_ring, flagged_ring,
+    ops.append(FlaggerOp(log, capture_ring, rfimask_ring,
                          core=cores.pop(0)))
     ## The spectra plotter
-    ops.append(SpectraOp(log, flagged_ring, base_dir=args.output_dir,
+    ops.append(SpectraOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The radial (u,v) plotter
-    ops.append(BaselineOp(log, flagged_ring, base_dir=args.output_dir,
+    ops.append(BaselineOp(log, capture_ring, base_dir=args.output_dir,
                           core=cores.pop(0), gpu=gpus.pop(0)))
     ## The imager
-    ops.append(ImagingOp(log, flagged_ring, writer_ring,
+    ops.append(ImagingOp(log, capture_ring, writer_ring,
                          decimation=args.decimation,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image writer and plotter for LWA TV
-    ops.append(WriterOp(log, writer_ring, base_dir=args.output_dir,
+    ops.append(WriterOp(log, writer_ring, rfimask_ring, base_dir=args.output_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
     ops.append(UploaderOp(log, base_dir=args.output_dir,

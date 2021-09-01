@@ -316,8 +316,8 @@ class SpectraOp(object):
             ## Mask
             c = '#000000'
             for b in bad:
-                xl = b * 64 // nchan
-                draw.line(list(zip((xl,xl), (0,54))), fill=c)
+                xl = x0 + b * 64 // nchan
+                draw.line(list(zip((xl,xl), (0,16))), fill=c)
                 
         # Summary
         ySummary = height * 65 + 2

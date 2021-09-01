@@ -316,8 +316,8 @@ class SpectraOp(object):
             ## Mask
             c = '#000000'
             for b in bad:
-                x = b * 64 // nchan
-                draw.line(list(zip((x,x), (0,54))), fill=c)
+                xl = b * 64 // nchan
+                draw.line(list(zip((xl,xl), (0,54))), fill=c)
                 
         # Summary
         ySummary = height * 65 + 2
@@ -1247,7 +1247,7 @@ class WriterOp(object):
                 intCount = 0
                 prev_time = time.time()
                 for ispan in iseq.read(igulp_size):
-                    for mspan in imseq.read(nchan*1):
+                    for mspan in mseq.read(nchan*1):
                         if ispan.size < igulp_size:
                             continue # Ignore final gulp
                         if mspan.size < nchan*1:
@@ -1359,8 +1359,8 @@ class WriterOp(object):
                             canvas.print_figure(outname, dpi=78, facecolor='black')
                             
                             ## Timestamp file
-                            outname = os.path.join(self.output_dir_lwatv, 'lwatv_timestamp')
-                            with open(outname, 'w') as fh:
+                            outname_ts = os.path.join(self.output_dir_lwatv, 'lwatv_timestamp')
+                            with open(outname_ts, 'w') as fh:
                                 fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
                                 
                             self.log.debug("Wrote LWATV %i, %i to disk as '%s'", intCount, c, os.path.basename(outname))

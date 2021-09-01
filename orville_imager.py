@@ -704,6 +704,7 @@ class FlaggerOp(object):
                             
                             ## Report
                             self.log.info("Flagged %i (%.1f%%) of channels", mask.sum(), 100*mask.sum()/mask.size)
+                            self.log.debug("Flagged channels %s", ' '.join([str(v) for v in mask if v == 1]))
                             
                             ## Invert and save
                             odata[...] = 1 - mask

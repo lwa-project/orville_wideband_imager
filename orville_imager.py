@@ -1272,7 +1272,7 @@ class WriterOp(object):
                         arc_mask = mdata.reshape(arc_freq.size,-1,1,1,1)
                         mask_mean = arc_mask.sum(axis=1) / arc_mask.shape[1]
                         for band in range(mask_mean.shape[0]):
-                            if band < 0.5:
+                            if mask_mean[band,0,0,0] < 0.5:
                                 arc_mask[band,:,:,:,:] = 0
                         arc_data = (arc_data*arc_mask).sum(axis=1) / arc_mask.sum(axis=1)
                         self._save_archive_image(self.station, time_tag, ihdr, arc_freq, arc_data)

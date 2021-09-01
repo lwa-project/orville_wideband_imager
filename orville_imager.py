@@ -1259,6 +1259,7 @@ class WriterOp(object):
                         ## Setup and load
                         idata = ispan.data_view(numpy.float32).reshape(ishape)
                         mdata = mspan.data_view(numpy.uint8).reshape(nchan,1,1,1)
+                        mdata = mdata.copy()
                         
                         ## Write the full image set to disk
                         tSave = time.time()

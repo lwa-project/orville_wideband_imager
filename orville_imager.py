@@ -1229,6 +1229,10 @@ class WriterOp(object):
                 ishape = (nchan,npol*npol,ngrid,ngrid)
                 self.iring.resize(igulp_size, igulp_size*10)
                 
+                mgulp_size = nchan*1                               # uint8
+                mshape = (nchan,1,1,1)
+                self.mring.resize(mgulp_size, mgulp_size*10)
+                
                 clip_size = 180.0/numpy.pi/res
                 
                 # Setup the frequencies
@@ -1246,7 +1250,7 @@ class WriterOp(object):
                 
                 intCount = 0
                 prev_time = time.time()
-                for ispan,mspan in zip(iseq.read(igulp_size), mseq.read(nchan*1)):
+                for ispan,mspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size)):
                     if ispan.size < igulp_size:
                         continue # Ignore final gulp
                     if mspan.size < nchan*1:
@@ -1257,7 +1261,7 @@ class WriterOp(object):
                     
                     ## Setup and load
                     idata = ispan.data_view(numpy.float32).reshape(ishape)
-                    mdata = mspan.data_view(numpy.uint8).reshape(nchan,1,1,1)
+                    mdata = mspan.data_view(numpy.uint8).reshape(mshape)
                     mdata = mdata.copy()
                     
                     ## Write the full image set to disk

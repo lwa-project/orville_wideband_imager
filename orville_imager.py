@@ -682,12 +682,12 @@ class FlaggerOp(object):
                                 win_min = max([0, i-3])
                                 win_max = min([i+3+1, adata.shape[0]])
                                 sdata[i] = numpy.median(adata[win_min:win_max])
-                            sdata /= numpy.mean(sdata)
+                            sdata /= numpy.nanmean(sdata)
                             
                             ## Build the bandpass
                             bdata = adata / sdata
-                            dm = numpy.mean(bdata)
-                            ds = numpy.std(bdata)
+                            dm = numpy.nanmean(bdata)
+                            ds = numpy.nanstd(bdata)
                             
                             ## Find the RFI
                             mask = numpy.where(numpy.abs(bdata - dm) > self.clip*ds, 1, 0)

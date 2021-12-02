@@ -1,0 +1,38 @@
+name: "Test"
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.6', '3.8']
+      fail-fast: false
+    steps:
+      - name: "Software Install - Ubuntu"
+        run: |
+          sudo apt-get install -y \
+            build-essential \
+            ca-certificates \
+            coreutils \
+            curl \
+            git \
+            libfftw3-dev \
+            libgdbm-dev \
+            pkg-config \
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/checkout@v2
+      - name: "Software Install - Python" 
+        run: |
+          python -m pip install \
+            setuptools \
+            numpy \
+            matplotlib \
+            scipy \
+            h5py 
+          python -m pip install git+https://github.com/lwa-project/lsl.git
+          python -m pip install pylint
+      - name: Test
+        run: |
+          python -m unittest discover

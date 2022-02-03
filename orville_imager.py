@@ -672,7 +672,7 @@ class MatrixOp(object):
                 mask = np.zeros(idata.shape)
                 mask[:,bad,:,:] = True
 
-                idata = numpy.ma.array(idata, mask=mask)`
+                idata = numpy.ma.array(idata, mask=mask)
 
                 ##Calculate the frequency averaged correlation matrix
                 corr = idata * idata.conj() / (numpy.abs(idata)**2)

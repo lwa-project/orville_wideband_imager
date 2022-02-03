@@ -68,7 +68,7 @@ class OrvilleImageDB(object):
     # (including RA) and pixel sizes are in degrees.  All other entries are in
     # standard mks units.
     
-    _FORMAT_VERSION = 'OrvilleImageDBv002'
+    _FORMAT_VERSION = 'OrvilleImageDBv003'
     
     class _FileHeader_v1(PrintableLittleEndianStructure):
         _pack_   = 1
@@ -82,6 +82,7 @@ class OrvilleImageDB(object):
                     ('start_time',     ctypes.c_double),
                     ('stop_time',      ctypes.c_double)]
     _FileHeader_v2 = _FileHeader_v1
+    _FileHeader_v3 = _FileHeader_v2
     
     FLAG_SORTED = 0x0001
     
@@ -110,9 +111,11 @@ class OrvilleImageDB(object):
                     ('center_dec', ctypes.c_double),
                     ('center_az',  ctypes.c_double),
                     ('center_alt', ctypes.c_double)]
-        
+    _EntryHeader_v3 = _EntryHeader_v2
+    
     _TIME_OFFSET_v1 = 4
     _TIME_OFFSET_v2 = _TIME_OFFSET_v1
+    _TIME_OFFSET_v3 = _TIME_OFFSET_v2
     
     def __init__(self, filename, mode='r', imager_version='', station=''):
         """
@@ -128,9 +131,9 @@ class OrvilleImageDB(object):
         self.file = None
         self.curr_int = -1
         
-        self._FileHeader = self._FileHeader_v2
-        self._EntryHeader = self._EntryHeader_v2
-        self._TIME_OFFSET = self._TIME_OFFSET_v2
+        self._FileHeader = self._FileHeader_v3
+        self._EntryHeader = self._EntryHeader_v3
+        self._TIME_OFFSET = self._TIME_OFFSET_v3
         
         # 'station' is a required keyword
         if mode[0] == 'w' and (station == '' or station == b''):
@@ -186,6 +189,10 @@ class OrvilleImageDB(object):
                     self._FileHeader = self._FileHeader_v1
                     self._EntryHeader = self._EntryHeader_v1
                     self._TIME_OFFSET = self._TIME_OFFSET_v1
+                elif self.version == 'OrvilleImageDBv002':
+                    self._FileHeader = self._FileHeader_v2
+                    self._EntryHeader = self._EntryHeader_v2
+                    self._TIME_OFFSET = self._TIME_OFFSET_v2
                 else:
                     raise KeyError('The file "%s" does not appear to be a '
                                    'OrvilleImageDB file.  Initial string: "%s"' %
@@ -210,6 +217,8 @@ class OrvilleImageDB(object):
                 entry_header = self._EntryHeader()
                 int_size = ctypes.sizeof(entry_header) \
                           + 4*self.header.nchan*(0 + self.nstokes*self.header.ngrid**2)
+                if self.version == 'OrvilleImageDBv003':
+                    int_size += 1*self.header.nchan
                 if (fileSize - 24 - ctypes.sizeof(self.header)) % int_size != 0:
                     raise RuntimeError('The file "%s" appears to be '
                                        'corrupted.' % filename)
@@ -239,6 +248,8 @@ class OrvilleImageDB(object):
             self.header.flags = self.FLAG_SORTED     # Sorted until it's not
             self.nint = 0
             
+        self.include_mask = (self.version == 'OrvilleImageDBv003')
+        
     def __del__(self):
         if self.file is not None and not self.file.closed:
             self.close()
@@ -277,6 +288,8 @@ class OrvilleImageDB(object):
             entry_header = self._EntryHeader()
             int_size = ctypes.sizeof(entry_header) \
                        + 4*self.header.nchan*(0 + self.nstokes*self.header.ngrid**2)
+            if self.include_mask:
+                int_size += 1*self.header.nchan
             file_header = self._FileHeader()
             headerSize = 24 + ctypes.sizeof(file_header)
             self.file.seek(headerSize + int_size * index, os.SEEK_SET)
@@ -365,7 +378,7 @@ class OrvilleImageDB(object):
             self.header.flags &= ~self.FLAG_SORTED
             self._is_outdated = True
             
-    def add_image(self, info, data):
+    def add_image(self, info, data, mask=None):
         """
         Adds an integration to the database.  Returns the index of the newly
         added image.
@@ -386,9 +399,14 @@ class OrvilleImageDB(object):
             pixel_size -- Real-world size of a pixel, in degrees
             stokes_params -- a list or comma-delimited string of Stokes params
         data -- a 4D float array of image data indexed as [chan, stokes, x, y]
+        mask -- (optional) a 1D uint8 of frequency masking flags as [chan,]
         """
         
         assert(data.shape[2] == data.shape[3])
+        if self.include_mask:
+            if mask is None:
+                mask = numpy.zeros(data.shape[0], dtype=numpy.uint8)
+            assert(mask.size == data.shape[0])
         self._check_header(info['stokes_params'], data.shape[2], 
                            info['pixel_size'], data.shape[0])
         
@@ -403,7 +421,10 @@ class OrvilleImageDB(object):
         self.file.write(entry_header)
         data.astype('<f4').tofile(self.file)
         self.file.flush()
-        
+        if self.include_mask:
+            mask.astype('u1').tofile(self.file)
+            self.file.flush()
+            
         interval = [info['start_time'], info['start_time'] + info['int_len']]
         self._update_file_header(interval)
         return self.nint - 1
@@ -447,7 +468,12 @@ class OrvilleImageDB(object):
         nchan, nstokes, ngrid = self.header.nchan, self.nstokes, self.header.ngrid
         data = numpy.fromfile(self.file, '<f4', nchan*nstokes*ngrid*ngrid)
         data = data.reshape(nchan, nstokes, ngrid, ngrid)
-        
+        if self.include_mask:
+            mask = numpy.fromfile(self.file, 'u1', nchan)
+            mask = mask.reshape(nchan, 1, 1, 1)
+            data = numpy.ma.array(data)
+            data.mask = mask
+            
         self.curr_int += 1
         return info, data
         
@@ -467,6 +493,8 @@ class OrvilleImageDB(object):
         inIntHeaderStruct = inDB._EntryHeader()
         headerSize = ctypes.sizeof(inIntHeaderStruct)
         dataSize = 4*inDB.header.nchan*(0 + inDB.nstokes*inDB.header.ngrid**2)
+        if inDB.include_mask:
+            dataSize += 1*inDB.header.nchan
         int_size = headerSize + dataSize
         
         data = inDB.file.read()

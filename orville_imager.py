@@ -244,9 +244,10 @@ class CaptureOp(object):
         del capture
 
 class SpectraOp(object):
-    def __init__(self, log, iring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
         self.log = log
         self.iring = iring
+        self.mring = mring
         self.output_dir = os.path.join(base_dir, 'spectra')
         self.core = core
         self.gpu = gpu
@@ -262,9 +263,11 @@ class SpectraOp(object):
         self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
-        self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
+        self.in_proclog.update({'nring':2,
+                                'ring0':self.iring.name,
+                                'ring1':self.mring.name})
         
-    def _plot_spectra(self, time_tag, freq, specs, status):
+    def _plot_spectra(self, time_tag, freq, specs, status, mask):
         # Plotting setup
         nchan = freq.size
         nstand = specs.shape[0]
@@ -274,7 +277,8 @@ class SpectraOp(object):
         except ValueError:
             minval = 0.0
             maxval = 1.0
-            
+        bad = numpy.where(mask == 0)[0]
+        
         # Image setup
         width = height = 16
         im = PIL.Image.new('RGB', (width * 65 + 1, height * 65 + 21), '#FFFFFF')
@@ -309,6 +313,12 @@ class SpectraOp(object):
             y = ((54.0 / (maxval - minval)) * (specs[s,:,1] - minval)).clip(0, 54)
             draw.line(list(zip(x0 + x, y0 - y)), fill=c)
             
+            ## Mask
+            c = '#000000'
+            for b in bad:
+                xl = x0 + b * 64 // nchan
+                draw.line(list(zip((xl,xl), (y0,y0-8))), fill=c)
+                
         # Summary
         ySummary = height * 65 + 2
         timeStr = datetime.utcfromtimestamp(time_tag / fS)
@@ -335,8 +345,9 @@ class SpectraOp(object):
         
         status = [ant.combined_status for ant in ANTENNAS]
         
-        for iseq in self.iring.read(guarantee=True):
+        for iseq,mseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())
+            mhdr = json.loads(mseq.header.tostring())
             
             self.sequence_proclog.update(ihdr)
             self.log.info('SpectraOp: Config - %s', ihdr)
@@ -354,14 +365,20 @@ class SpectraOp(object):
             ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
             self.iring.resize(igulp_size, igulp_size*10)
             
+            mgulp_size = nchan*1                               # uint8
+            mshape = (nchan,)
+            self.mring.resize(mgulp_size, mgulp_size*10)
+            
             # Setup the arrays for the frequencies and auto-correlations
             freq = chan0*fC + numpy.arange(nchan)*4*fC
             autos = [i*(2*(nstand-1)+1-i)//2 + i for i in range(nstand)]
             
             intCount = 0
             prev_time = time.time()
-            for ispan in iseq.read(igulp_size):
+            for ispan,mspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size)):
                 if ispan.size < igulp_size:
+                    continue # Ignore final gulp
+                if mspan.size < nchan*1:
                     continue # Ignore final gulp
                 curr_time = time.time()
                 acquire_time = curr_time - prev_time
@@ -370,13 +387,14 @@ class SpectraOp(object):
                 ## Setup and load
                 t0 = time.time()
                 idata = ispan.data_view(numpy.complex64).reshape(ishape)
+                mdata = mspan.data_view(numpy.uint8).reshape(mshape)
                 
                 ## Pull out the auto-correlations
                 adata = idata[autos,:,:,:].real
                 adata = adata[:,:,[0,1],[0,1]]
                 
                 ## Plot
-                im = self._plot_spectra(time_tag, freq, 10*numpy.log10(adata), status)
+                im = self._plot_spectra(time_tag, freq, 10*numpy.log10(adata), status, mdata)
                 
                 ## Save
                 ### Timetag stuff
@@ -400,6 +418,7 @@ class SpectraOp(object):
                 self.perf_proclog.update({'acquire_time': acquire_time, 
                                           'reserve_time': 0.0, 
                                           'process_time': process_time,})
+                
         self.log.info("SpectraOp - Done")
 
 
@@ -573,6 +592,7 @@ class BaselineOp(object):
                 self.perf_proclog.update({'acquire_time': acquire_time, 
                                           'reserve_time': 0.0, 
                                           'process_time': process_time,})
+                
         self.log.info("BaselineOp - Done")
 
 class MatrixOp(object):
@@ -597,7 +617,7 @@ class MatrixOp(object):
         self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
         
         self.station = STATION
-
+        
     def main(self):
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
@@ -667,6 +687,135 @@ class MatrixOp(object):
                                           'process_time': process_time,})
 
         self.log.info("MatrixOp - Done")
+
+class FlaggerOp(object):
+    def __init__(self, log, iring, oring, clip=3, core=-1, gpu=-1):
+        self.log = log
+        self.iring = iring
+        self.oring = oring
+        self.clip = clip
+        self.core = core
+        self.gpu = gpu
+        
+        self.bind_proclog = ProcLog(type(self).__name__+"/bind")
+        self.in_proclog   = ProcLog(type(self).__name__+"/in")
+        self.out_proclog  = ProcLog(type(self).__name__+"/out")
+        self.size_proclog = ProcLog(type(self).__name__+"/size")
+        self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
+        self.perf_proclog = ProcLog(type(self).__name__+"/perf")
+        
+        self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
+        self.out_proclog.update({'nring':1, 'ring0':self.oring.name})
+        
+    def main(self):
+        cpu_affinity.set_core(self.core)
+        if self.gpu != -1:
+            BFSetGPU(self.gpu)
+        self.bind_proclog.update({'ncore': 1, 
+                                  'core0': cpu_affinity.get_core(),
+                                  'ngpu': 1,
+                                  'gpu0': BFGetGPU(),})
+ 
+        with self.oring.begin_writing() as oring:
+            for iseq in self.iring.read(guarantee=True):
+                ihdr = json.loads(iseq.header.tostring())
+                
+                self.sequence_proclog.update(ihdr)
+                self.log.info('FlaggerOp: Config - %s', ihdr)
+                
+                # Setup the ring metadata and gulp sizes
+                chan0  = ihdr['chan0']
+                nchan  = ihdr['nchan']
+                nbl    = ihdr['nbl']
+                nstand = int(numpy.sqrt(8*nbl+1)-1)//2
+                npol   = ihdr['npol']
+                navg   = ihdr['navg']
+                time_tag0 = iseq.time_tag
+                time_tag  = time_tag0*1
+                
+                igulp_size = nstand*(nstand+1)//2*nchan*npol*npol*8      # complex64
+                ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
+                ogulp_size = nchan*1              # uint8
+                oshape = (nchan,)
+                self.iring.resize(igulp_size, igulp_size*10)
+                self.oring.resize(ogulp_size, ogulp_size*10)
+                
+                ohdr = ihdr.copy()
+                ohdr_str = json.dumps(ohdr)
+                
+                autos = [i*(2*(nstand-1)+1-i)//2+i for i in range(nstand)]
+                
+                prev_time = time.time()
+                with oring.begin_sequence(time_tag=iseq.time_tag, header=ohdr_str) as oseq:
+                    for ispan in iseq.read(igulp_size):
+                        if ispan.size < igulp_size:
+                            continue # Ignore final gulp
+                        curr_time = time.time()
+                        acquire_time = curr_time - prev_time
+                        prev_time = curr_time
+                        
+                        with oseq.reserve(ogulp_size) as ospan:
+                            curr_time = time.time()
+                            reserve_time = curr_time - prev_time
+                            prev_time = curr_time
+                            
+                            ## Setup and load
+                            idata = ispan.data_view(numpy.complex64).reshape(ishape)
+                            odata = ospan.data_view(numpy.uint8).reshape(oshape)
+                            
+                            ## Pull out the auto-correlations and average over stand
+                            adata = idata[autos,:,:,:].mean(axis=0)
+                            
+                            ## Max out across polarization
+                            adata = adata.reshape(-1,npol*npol)
+                            adata = numpy.abs(adata)
+                            adata = numpy.max(adata, axis=1)
+                            adata = numpy.array(adata)
+                            
+                            ## Smooth the spectrum and normalize
+                            sdata = adata*0
+                            for i in range(adata.size):
+                                win_min = max([0, i-3])
+                                win_max = min([i+3+1, adata.shape[0]])
+                                sdata[i] = numpy.median(adata[win_min:win_max])
+                            sdata /= numpy.nanmean(sdata)
+                            
+                            ## Build the bandpass
+                            bdata = adata / sdata
+                            dm = numpy.nanmean(bdata)
+                            ds = numpy.nanstd(bdata)
+                            
+                            ## Find the RFI
+                            mask = numpy.where(numpy.abs(bdata - dm) > self.clip*ds, 1, 0)
+                            mask = mask.astype(numpy.uint8)
+                            
+                            ## Grow the mask
+                            mask_left = numpy.roll(mask, -1)
+                            mask_left[-1] = 0
+                            mask_right = numpy.roll(mask, 1)
+                            mask_right[0] = 0
+                            mask |= mask_left
+                            mask |= mask_right
+                            
+                            ## Report
+                            self.log.info("Flagged %i (%.1f%%) of channels", mask.sum(), 100*mask.sum()/mask.size)
+                            self.log.debug("Flagged channels %s", ' '.join([str(i) for i,v in enumerate(mask) if v == 1]))
+                            
+                            ## Invert and save
+                            odata[...] = 1 - mask
+                            
+                            time_tag += navg * (int(fS) // 100)
+                            
+                            curr_time = time.time()
+                            process_time = curr_time - prev_time
+                            self.log.debug('Flagger processing time was %.3f s', process_time)
+                            prev_time = curr_time
+                            self.perf_proclog.update({'acquire_time': acquire_time, 
+                                                      'reserve_time': reserve_time, 
+                                                      'process_time': process_time,})
+                            
+        self.log.info("FlaggerOp - Done")            
+
 
 class ImagingOp(object):
     def __init__(self, log, iring, oring, decimation=1, core=-1, gpu=-1):
@@ -918,7 +1067,7 @@ class ImagingOp(object):
                             self.sdata = self.sdata.reshape((nchan,nstand,nstand,npol,npol))
                             BFMap("""
                                 if( j > i ) {
-                                    auto k = i*(2*(256-1)+1-i)/2 + j;
+                                    auto k = i*(2*(%i-1)+1-i)/2 + j;
                                     auto xx = idata(k,c,0,0).conj() * phases(c,k,0,0);
                                     auto yx = idata(k,c,0,1).conj() * phases(c,k,0,1);
                                     auto xy = idata(k,c,1,0).conj() * phases(c,k,1,0);
@@ -939,7 +1088,7 @@ class ImagingOp(object):
                                     odata(c,j,i,1,0) = xy + yx;
                                     odata(c,j,i,1,1) = Complex<float>(0.0,1.0)*(xy - yx);   
                                 }
-                                """, 
+                                """ % (nstand,), 
                                 {'idata':self.rdata, 'phases':self.gphases, 'odata':self.sdata}, 
                                 axis_names=('c','i','j'), shape=(nchan,nstand,nstand))
                             self.sdata = self.sdata.reshape(nchan//self.decimation,self.decimation*nstand**2,npol**2)
@@ -985,9 +1134,10 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
         self.log = log
         self.iring = iring
+        self.mring = mring
         self.output_dir_images = os.path.join(base_dir, 'images')
         self.output_dir_archive = os.path.join(base_dir, 'archive')
         self.output_dir_lwatv = os.path.join(base_dir, 'lwatv')
@@ -1009,7 +1159,9 @@ class WriterOp(object):
         self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
-        self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
+        self.in_proclog.update({'nring':2,
+                                'ring0':self.iring.name,
+                                'ring1':self.mring.name})
         
         self.station = copy.deepcopy(STATION)
         
@@ -1150,8 +1302,9 @@ class WriterOp(object):
             bdy._epoch = ephem.J2000
             gplane.append(bdy)
             
-        for iseq in self.iring.read(guarantee=True):
+        for iseq,mseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())
+            mhdr = json.loads(mseq.header.tostring())
             
             self.sequence_proclog.update(ihdr)
             self.log.info('WriterOp: Config - %s', ihdr)
@@ -1170,6 +1323,10 @@ class WriterOp(object):
             ishape = (nchan,npol*npol,ngrid,ngrid)
             self.iring.resize(igulp_size, igulp_size*10)
             
+            mgulp_size = nchan*1                               # uint8
+            mshape = (nchan,1,1,1)
+            self.mring.resize(mgulp_size, mgulp_size*10)
+            
             clip_size = 180.0/numpy.pi/res
             
             # Setup the frequencies
@@ -1187,8 +1344,10 @@ class WriterOp(object):
             
             intCount = 0
             prev_time = time.time()
-            for ispan in iseq.read(igulp_size):
+            for ispan,mspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size)):
                 if ispan.size < igulp_size:
+                    continue # Ignore final gulp
+                if mspan.size < nchan*1:
                     continue # Ignore final gulp
                 curr_time = time.time()
                 acquire_time = curr_time - prev_time
@@ -1196,6 +1355,8 @@ class WriterOp(object):
                 
                 ## Setup and load
                 idata = ispan.data_view(numpy.float32).reshape(ishape)
+                mdata = mspan.data_view(numpy.uint8).reshape(mshape)
+                mdata = mdata.copy()
                 
                 ## Write the full image set to disk
                 tSave = time.time()
@@ -1205,7 +1366,12 @@ class WriterOp(object):
                 ## Write the archive image set to disk
                 tArchive = time.time()
                 arc_data = idata.reshape(arc_freq.size,-1,npol*npol,ngrid,ngrid)
-                arc_data = arc_data.mean(axis=1)
+                arc_mask = mdata.reshape(arc_freq.size,-1,1,1,1)
+                mask_mean = arc_mask.sum(axis=1) / arc_mask.shape[1]
+                for band in range(mask_mean.shape[0]):
+                    if mask_mean[band,0,0,0] < 0.5:
+                        arc_mask[band,:,:,:,:] = 0
+                arc_data = (arc_data*arc_mask).sum(axis=1) / arc_mask.sum(axis=1)
                 self._save_archive_image(self.station, time_tag, ihdr, arc_freq, arc_data)
                 self.log.debug('Archive save time: %.3f s', time.time()-tArchive)
                 
@@ -1291,8 +1457,8 @@ class WriterOp(object):
                     canvas.print_figure(outname, dpi=78, facecolor='black')
                     
                     ## Timestamp file
-                    outname = os.path.join(self.output_dir_lwatv, 'lwatv_timestamp')
-                    with open(outname, 'w') as fh:
+                    outname_ts = os.path.join(self.output_dir_lwatv, 'lwatv_timestamp')
+                    with open(outname_ts, 'w') as fh:
                         fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
                         
                     self.log.debug("Wrote LWATV %i, %i to disk as '%s'", intCount, c, os.path.basename(outname))
@@ -1307,6 +1473,7 @@ class WriterOp(object):
                 self.perf_proclog.update({'acquire_time': acquire_time, 
                                           'reserve_time': -1, 
                                           'process_time': process_time,})
+                
         self.log.info("WriterOp - Done")
 
 
@@ -1465,7 +1632,7 @@ def main(args):
         log.info("  %s: %s", arg, getattr(args, arg))
         
     # Setup the cores and GPUs to use
-    cores = [0, 1, 2, 3, 4, 5, 6]
+    cores = [0, 1, 2, 3, 4, 5, 6, 7]
     gpus  = [0,]*len(cores)
     log.info("CPUs:         %s", ' '.join([str(v) for v in cores]))
     log.info("GPUs:         %s", ' '.join([str(v) for v in gpus]))
@@ -1494,6 +1661,7 @@ def main(args):
         
     # Create the rings that we need
     capture_ring = Ring(name="capture", space='system')
+    rfimask_ring = Ring(name="rfimask", space='system')
     writer_ring = Ring(name="writer", space='system')
     
     # Setup the processing blocks
@@ -1505,8 +1673,11 @@ def main(args):
     isock.timeout = 5.0
     ops.append(CaptureOp(log, capture_ring,
                          isock, nBL*6, 1, 9000, 1, 1, core=cores.pop(0)))
+    ## The flagger
+    ops.append(FlaggerOp(log, capture_ring, rfimask_ring,
+                         core=cores.pop(0)))
     ## The spectra plotter
-    ops.append(SpectraOp(log, capture_ring, base_dir=args.output_dir,
+    ops.append(SpectraOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The radial (u,v) plotter
     ops.append(BaselineOp(log, capture_ring, base_dir=args.output_dir,
@@ -1516,7 +1687,7 @@ def main(args):
                          decimation=args.decimation,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image writer and plotter for LWA TV
-    ops.append(WriterOp(log, writer_ring, base_dir=args.output_dir,
+    ops.append(WriterOp(log, writer_ring, rfimask_ring, base_dir=args.output_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
     ops.append(UploaderOp(log, base_dir=args.output_dir,

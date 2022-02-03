@@ -575,6 +575,99 @@ class BaselineOp(object):
                                           'process_time': process_time,})
         self.log.info("BaselineOp - Done")
 
+class MatrixOp(object):
+    def __init__(self, log, iring, base_dir=os.getcwd(), core=-1, gpu=-1):
+        self.log = log
+        self.iring = iring
+        self.output_dir = os.path.join(base_dir, 'matrices')
+        self.core = core
+        self.gpu = gpu
+        
+        if not os.path.exists(base_dir):
+            os.mkdir(base_dir)
+        if not os.path.exists(self.output_dir):
+            os.mkdir(self.output_dir)
+            
+        self.bind_proclog = ProcLog(type(self).__name__+"/bind")
+        self.in_proclog   = ProcLog(type(self).__name__+"/in")
+        self.size_proclog = ProcLog(type(self).__name__+"/size")
+        self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
+        self.perf_proclog = ProcLog(type(self).__name__+"/perf")
+        
+        self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
+        
+        self.station = STATION
+
+    def main(self):
+        cpu_affinity.set_core(self.core)
+        if self.gpu != -1:
+            BFSetGPU(self.gpu)
+        self.bind_proclog.update({'ncore': 1, 
+                                  'core0': cpu_affinity.get_core(),
+                                  'ngpu': 1,
+                                  'gpu0': BFGetGPU(),})
+
+        for iseq in self.iring.read(guarantee=True):
+            ihdr = json.loads(iseq.header.tostring())
+            
+            self.sequence_proclog.update(ihdr)
+            self.log.info('MatrixOp: Config - %s', ihdr)
+            
+            # Setup the ring metadata and gulp sizes
+            chan0  = ihdr['chan0']
+            nchan  = ihdr['nchan']
+            nbl    = ihdr['nbl']
+            nstand = int(numpy.sqrt(8*nbl+1)-1)//2
+            npol   = ihdr['npol']
+            navg   = ihdr['navg']
+            time_tag0 = iseq.time_tag
+            time_tag  = time_tag0
+            igulp_size = nstand*(nstand+1)//2*nchan*npol*npol*8
+            ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
+            self.iring.resize(igulp_size, igulp_size*10)
+
+            intCount = 0
+            prev_time = time.time()
+            for ispan in iseq.read(igulp_size):
+                if ispan.size < igulp.size:
+                    continue #Ignore file gulp
+                curr_time = time.time()
+                acquire_time = curr_time - prev_time
+                prev_time = curr_time
+
+                ##Set up and load
+                idata = ispan.data_view(numpy.complex64).reshape(ishape)
+
+                ##Calculate the frequency averaged correlation matrix
+                corr = idata * idata.conj() / (numpy.abs(idata)**2)
+                corr = numpy.mean(corr, axis=1)
+                corr = corr.reshape((nstand, nstand, corr.shape[1], corr.shape[2]))
+
+                #Save
+                ### Timetag stuff
+                mjd, h, m, s = timetag_to_mjdatetime(time_tag)
+                ### The actual save
+                outname = os.path.join(self.output_dir, str(mjd))
+                if not os.path.exists(outname):
+                    os.mkdir(outname)
+                filename = 'CorrMatrix_%i_%02i%02i%02i.npz' % (mjd, h, m, s)
+                outname = os.path.join(outname, filename)
+                numpy.savez(outname, data=corr)
+                self.log.debug("Wrote correlation matrix %i to disk as '%s'", intCount, os.path.basename(outname))
+
+                time_tag += navg * (fS / 100.0)
+                intCount += 1
+
+                curr_time = time.time()
+                process_time = curr_time - prev_time
+                self.log.debug("Matrix plotter processing time was %.3f s", process_time)
+                prev_time = curr_time
+                self.perf_proclog.update({'acquire_time': acquire_time,
+                                          'reserve_time': 0.0,
+                                          'process_time': process_time,})
+
+        self.log.info("MatrixOp - Done")
+
 class ImagingOp(object):
     def __init__(self, log, iring, oring, decimation=1, core=-1, gpu=-1):
         self.log = log

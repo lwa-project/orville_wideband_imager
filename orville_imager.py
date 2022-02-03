@@ -655,7 +655,7 @@ class MatrixOp(object):
             intCount = 0
             prev_time = time.time()
             for ispan,mspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size)):
-                if ispan.size < igulp.size:
+                if ispan.size < igulp_size:
                     continue #Ignore final gulp
                 if mspan.size < nchan*1:
                     continue #Ignore final gulp
@@ -669,15 +669,16 @@ class MatrixOp(object):
 
                 ##Apply the flag.
                 bad = ~(mdata.astype(bool))
-                mask = np.zeros(idata.shape)
+                mask = numpy.zeros(idata.shape)
                 mask[:,bad,:,:] = True
 
+                idata = numpy.array(idata)
                 idata = numpy.ma.array(idata, mask=mask)
 
                 ##Calculate the frequency averaged correlation matrix
                 corr = idata * idata.conj() / (numpy.abs(idata)**2)
                 corr = numpy.mean(corr, axis=1)
-                corr = corr.reshape((nstand, nstand, corr.shape[1], corr.shape[2]))
+                corr = corr.reshape((nstand*(nstand+1)//2, corr.shape[1], corr.shape[2]))
 
                 #Save
                 ### Timetag stuff

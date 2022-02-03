@@ -596,9 +596,10 @@ class BaselineOp(object):
         self.log.info("BaselineOp - Done")
 
 class MatrixOp(object):
-    def __init__(self, log, iring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
         self.log = log
         self.iring = iring
+        self.mring = mring
         self.output_dir = os.path.join(base_dir, 'matrices')
         self.core = core
         self.gpu = gpu
@@ -627,8 +628,9 @@ class MatrixOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
 
-        for iseq in self.iring.read(guarantee=True):
+        for iseq,mseq in zip(self.iring.read(guarantee=True),self.mring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())
+            mhdr = json.loads(mseq.header.tostring())
             
             self.sequence_proclog.update(ihdr)
             self.log.info('MatrixOp: Config - %s', ihdr)
@@ -646,17 +648,31 @@ class MatrixOp(object):
             ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
             self.iring.resize(igulp_size, igulp_size*10)
 
+            mgulp_size = nchan*1
+            mshape = (nchan,)
+            self.mring.resize(mgulp_size, mgulp_size*10)
+
             intCount = 0
             prev_time = time.time()
-            for ispan in iseq.read(igulp_size):
+            for ispan,mspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size)):
                 if ispan.size < igulp.size:
-                    continue #Ignore file gulp
+                    continue #Ignore final gulp
+                if mspan.size < nchan*1:
+                    continue #Ignore final gulp
                 curr_time = time.time()
                 acquire_time = curr_time - prev_time
                 prev_time = curr_time
 
                 ##Set up and load
                 idata = ispan.data_view(numpy.complex64).reshape(ishape)
+                mdata = mspan.data_view(numpy.uint8).reshape(mshape)
+
+                ##Apply the flag.
+                bad = ~(mdata.astype(bool))
+                mask = np.zeros(idata.shape)
+                mask[:,bad,:,:] = True
+
+                idata = numpy.ma.array(idata, mask=mask)`
 
                 ##Calculate the frequency averaged correlation matrix
                 corr = idata * idata.conj() / (numpy.abs(idata)**2)
@@ -1676,6 +1692,9 @@ def main(args):
     ## The flagger
     ops.append(FlaggerOp(log, capture_ring, rfimask_ring,
                          core=cores.pop(0)))
+    ## The correlation matrix
+    ops.append(MatrixOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
+                         core=cores.pop(0), gpu=gpus.pop(0)))
     ## The spectra plotter
     ops.append(SpectraOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))

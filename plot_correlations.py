@@ -42,6 +42,7 @@ def _plot_matrices(correlations, averages):
             ax.plot(x, averages[:,i,j], 'o')
             if indx > 1:
                 ax.set_xlabel('Antenna Number', fontsize=12)
+            ax.set_xlim((x.min(), x.max()))
             ax.set_ylabel('Mean', fontsize=12)
             ax.tick_params(which='both', direction='in', length=8, labelsize=12)
 

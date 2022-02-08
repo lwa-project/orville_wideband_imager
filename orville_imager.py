@@ -652,7 +652,7 @@ class MatrixOp(object):
             mshape = (nchan,)
             self.mring.resize(mgulp_size, mgulp_size*10)
 
-            integrations = deque(maxlen=4)
+            integrations = deque([], maxlen=2)
 
             intCount = 0
             prev_time = time.time()
@@ -669,24 +669,24 @@ class MatrixOp(object):
                 idata = ispan.data_view(numpy.complex64).reshape(ishape)
                 mdata = mspan.data_view(numpy.uint8).reshape(mshape)
 
-                ##Apply the flag.
-                bad = ~(mdata.astype(bool))
-                mask = numpy.zeros(idata.shape)
-                mask[:,bad,:,:] = True
-
+                ##Normalize
                 idata = numpy.array(idata)
-                idata = numpy.ma.array(idata, mask=mask)
+                idata /= numpy.abs(idata)
+
+                ##Apply the flags
+                bad = ~(mdata.astype(bool))
+                idata[:,bad,:,:] = 0
+                idata /= mdata.sum()
 
                 ##Add the flagged data to the deque and make sure we 
-                ##have 4 integrations to use. If we have 4, compute
+                ##have 2 integrations to use. If we have 2, compute
                 ##the averaged correlation matrix appropriately.
                 integrations.append(idata)
-                if len(integrations) == 4:
-                    even = numpy.stack((integrations[0], integrations[2]), axis=0)
-                    odd  = numpy.stack((integrations[1], integrations[3]), axis=0)
+                if len(integrations) == 2:
+                    even, odd = integrations
 
-                    corr = even * odd.conj() / (numpy.abs(even)*numpy.abs(odd))
-                    corr = numpy.mean(corr, axis=(0,2))
+                    corr = even * odd.conj()
+                    corr = numpy.sum(corr, axis=1)
                 
                     #Save
                     ### Timetag stuff

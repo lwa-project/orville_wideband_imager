@@ -38,20 +38,17 @@ def _plot_matrices(correlations, averages):
         for j in range(2):
             indx = 2*i + j
             ax = axes[indx][1]
-            #ax.cla()
             ax.plot(x, averages[:,i,j], 'o')
             if indx > 1:
                 ax.set_xlabel('Antenna Number', fontsize=12)
-            ax.set_xlim((x.min(), x.max()))
+                ax.set_xlim((x.min(), x.max()))
             ax.set_ylabel('Mean', fontsize=12)
             ax.tick_params(which='both', direction='in', length=8, labelsize=12)
 
             ax = axes[indx][0]
             ax.set_title(mapper[indx],fontsize=14)
-            #ax.cla()
             c=ax.imshow(correlations[:,:,i,j], aspect='auto', origin='lower', interpolation='nearest', vmin=vmin, vmax=vmax, extent=(x.min(),x.max(),y.min(),y.max()))
             ax.set_ylabel('Antenna Number', fontsize=12)
-            ax.set_xticks([])
             ax.tick_params(which='both', direction='in', length=8, labelsize=12)
 
     cb = fig.colorbar(c, ax=axes)#, orientation='horizontal')

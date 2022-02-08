@@ -7,15 +7,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-#from lsl.common.stations import lwasv
-
-#STATION = lwasv
-#ANTENNAS = STATION.antennas
-
 def _plot_matrices(correlations, averages):
     #Build the plot.
-    pols = ['XX', 'XY', 'YX', 'YY']
-    fig = plt.figure(1) #constrained_layout=True)
+    fig = plt.figure(1) 
     axes = []
     gs = gridspec.GridSpec(2,2)
     for i in range(4):
@@ -33,7 +27,7 @@ def _plot_matrices(correlations, averages):
 
     #Plot.
     x = y = np.arange(correlations.shape[0]) + 1
-    mapper = {0: 'XX', 1: 'YX', 2: 'XY', 3: 'YY'}
+    mapper = {0: 'XX', 1: 'XY', 2: 'YX', 3: 'YY'}
     for i in range(2):
         for j in range(2):
             indx = 2*i + j
@@ -51,7 +45,7 @@ def _plot_matrices(correlations, averages):
             ax.set_ylabel('Antenna Number', fontsize=12)
             ax.tick_params(which='both', direction='in', length=8, labelsize=12)
 
-    cb = fig.colorbar(c, ax=axes)#, orientation='horizontal')
+    cb = fig.colorbar(c, ax=axes)
     cb.set_label(r'$|C_{ij}|$', fontsize=12)
 
     plt.show()  
@@ -61,10 +55,9 @@ def main(args):
     #Read in the data.
     corr = np.load(args.file)['data']
 
-    #Build the full correlation matrix.
-    #nstands = len(ANTENNAS) // 2
+    #Build the full correlation matrix. 
     nstands = 256
-    cmatrix = np.zeros((nstands, nstands, 2, 2))
+    cmatrix = np.zeros((nstands, nstands, 2, 2), dtype=np.complex64)
     count = 0
     for i in range(nstands):
         for j in range(i, nstands):
@@ -75,6 +68,8 @@ def main(args):
                 cmatrix[j,i,1,0] = cmatrix[j,i,0,1].conj()
 
             count += 1
+
+    cmatrix = np.abs(cmatrix)
 
     #Compute the average for each antenna.
     avg = np.mean(cmatrix, axis=1)

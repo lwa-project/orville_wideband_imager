@@ -72,6 +72,9 @@ def main(args):
         for j in range(i, nstands):
             cmatrix[i,j,:,:] = corr[count,:,:]
             cmatrix[j,i,:,:] = corr[count,:,:].conj()
+            if i == j:
+                cmatrix[i,j,1,0] = cmatrix[i,j,0,1].conj()
+                cmatrix[j,i,1,0] = cmatrix[j,i,0,1].conj()
 
             count += 1
 
@@ -90,4 +93,3 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     main(args)
-

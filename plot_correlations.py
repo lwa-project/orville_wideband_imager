@@ -7,6 +7,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
+#from lsl.common.stations import lwasv
+
+#STATION = lwasv
+#ANTENNAS = STATION.antennas
+
 def _plot_matrices(correlations, averages):
     #Build the plot.
     pols = ['XX', 'XY', 'YX', 'YY']
@@ -58,10 +63,22 @@ def main(args):
     #Read in the data.
     corr = np.load(args.file)['data']
 
-    #Compute the average for each antenna.
-    avg = np.mean(corr, axis=1)
+    #Build the full correlation matrix.
+    #nstands = len(ANTENNAS) // 2
+    nstands = 256
+    cmatrix = np.zeros((nstands, nstands, 2, 2))
+    count = 0
+    for i in range(nstands):
+        for j in range(i, nstands):
+            cmatrix[i,j,:,:] = corr[count,:,:]
+            cmatrix[j,i,:,:] = corr[count,:,:].conj()
 
-    _plot_matrices(corr, avg)
+            count += 1
+
+    #Compute the average for each antenna.
+    avg = np.mean(cmatrix, axis=1)
+
+    _plot_matrices(cmatrix, avg)
 
 
 if __name__ == '__main__':

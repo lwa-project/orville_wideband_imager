@@ -652,6 +652,8 @@ class MatrixOp(object):
             mshape = (nchan,)
             self.mring.resize(mgulp_size, mgulp_size*10)
 
+            integrations = deque(maxlen=4)
+
             intCount = 0
             prev_time = time.time()
             for ispan,mspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size)):
@@ -675,29 +677,38 @@ class MatrixOp(object):
                 idata = numpy.array(idata)
                 idata = numpy.ma.array(idata, mask=mask)
 
-                ##Calculate the frequency averaged correlation matrix
-                corr = idata * idata.conj() / (numpy.abs(idata)**2)
-                corr = numpy.mean(corr, axis=1)
-                corr = corr.reshape((nstand*(nstand+1)//2, corr.shape[1], corr.shape[2]))
+                ##Add the flagged data to the deque and make sure we 
+                ##have 4 integrations to use. If we have 4, compute
+                ##the averaged correlation matrix appropriately.
+                integrations.append(idata)
+                if len(integrations) == 4:
+                    even = numpy.stack((integrations[0], integrations[2]), axis=0)
+                    odd  = numpy.stack((integrations[1], integrations[3]), axis=0)
 
-                #Save
-                ### Timetag stuff
-                mjd, h, m, s = timetag_to_mjdatetime(time_tag)
-                ### The actual save
-                outname = os.path.join(self.output_dir, str(mjd))
-                if not os.path.exists(outname):
-                    os.mkdir(outname)
-                filename = 'CorrMatrix_%i_%02i%02i%02i.npz' % (mjd, h, m, s)
-                outname = os.path.join(outname, filename)
-                numpy.savez(outname, data=corr)
-                self.log.debug("Wrote correlation matrix %i to disk as '%s'", intCount, os.path.basename(outname))
+                    corr = even * odd.conj() / (numpy.abs(even)*numpy.abs(odd))
+                    corr = numpy.mean(corr, axis=(0,2))
+                
+                    #Save
+                    ### Timetag stuff
+                    mjd, h, m, s = timetag_to_mjdatetime(time_tag)
+                    ### The actual save
+                    outname = os.path.join(self.output_dir, str(mjd))
+                    if not os.path.exists(outname):
+                        os.mkdir(outname)
+                    filename = 'CorrMatrix_%i_%02i%02i%02i.npz' % (mjd, h, m, s)
+                    outname = os.path.join(outname, filename)
+                    numpy.savez(outname, data=corr)
+                    self.log.debug("Wrote correlation matrix %i to disk as '%s'", intCount, os.path.basename(outname))
+                
+                    intCount += 1
+                else:
+                    pass
 
                 time_tag += navg * (fS / 100.0)
-                intCount += 1
 
                 curr_time = time.time()
                 process_time = curr_time - prev_time
-                self.log.debug("Matrix plotter processing time was %.3f s", process_time)
+                self.log.debug("MatrixOp processing time was %.3f s", process_time)
                 prev_time = curr_time
                 self.perf_proclog.update({'acquire_time': acquire_time,
                                           'reserve_time': 0.0,

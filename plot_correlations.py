@@ -23,8 +23,8 @@ def _plot_matrices(correlations, averages):
                 subplot_spec=gs[i], wspace=0.0, hspace=0.0,
                 height_ratios=[1.0,0.3])
         axes.append([])
-        axes[-1].append(fig.add_subplot(gsp[1]))
         axes[-1].append(fig.add_subplot(gsp[0]))
+        axes[-1].append(fig.add_subplot(gsp[1], sharex=axes[-1][-1]))
 
     fig.canvas.draw()
 
@@ -37,7 +37,7 @@ def _plot_matrices(correlations, averages):
     for i in range(2):
         for j in range(2):
             indx = 2*i + j
-            ax = axes[indx][0]
+            ax = axes[indx][1]
             #ax.cla()
             ax.plot(x, averages[:,i,j], 'o')
             if indx > 1:
@@ -46,7 +46,7 @@ def _plot_matrices(correlations, averages):
             ax.set_ylabel('Mean', fontsize=12)
             ax.tick_params(which='both', direction='in', length=8, labelsize=12)
 
-            ax = axes[indx][1]
+            ax = axes[indx][0]
             ax.set_title(mapper[indx],fontsize=14)
             #ax.cla()
             c=ax.imshow(correlations[:,:,i,j], aspect='auto', origin='lower', interpolation='nearest', vmin=vmin, vmax=vmax, extent=(x.min(),x.max(),y.min(),y.max()))

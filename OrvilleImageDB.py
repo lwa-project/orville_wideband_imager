@@ -196,7 +196,7 @@ class OrvilleImageDB(object):
                 else:
                     raise KeyError('The file "%s" does not appear to be a '
                                    'OrvilleImageDB file.  Initial string: "%s"' %
-                                   (fileName, self.version))
+                                   (filename, self.version))
             
             file_header = self._FileHeader()
             

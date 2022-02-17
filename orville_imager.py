@@ -1564,6 +1564,10 @@ class AnalogSettingsOp(object):
                 config = config.decode()
                 config = config.split('\n')
                 for line in config:
+                    line = line.strip().rstrip()
+                    if len(line) < 3:
+                        continue
+                        
                     try:
                         key, value, yymmdd, hhmmss = line.split(';;;', 3)
                         value = int(value, 10)
@@ -1583,7 +1587,9 @@ class AnalogSettingsOp(object):
                                       'reserve_time': -1, 
                                       'process_time': process_time,})
             
-            time.sleep(max([60-process_time, 0]))
+            t_sleep = time.time() + max([60-process_time, 0])
+            while time.time() < t_sleep:
+                time.sleep(1)
 
 
 class LogFileHandler(TimedRotatingFileHandler):

@@ -1578,6 +1578,7 @@ class AnalogSettingsOp(object):
                 self.log.warn('Failed to download ASP configuration: %s', str(err))
                 
             ASP_CONFIG.append(new_config)
+            self.log.debug('ASP configuration set to: %s', str(ASP_CONFIG[0]))
             
             curr_time = time.time()
             process_time = curr_time - prev_time

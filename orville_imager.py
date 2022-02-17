@@ -1569,7 +1569,7 @@ class AnalogSettingsOp(object):
                         value = int(value, 10)
                         new_config[mapping[key]] = value
                     except (IndexError, ValueError) as err:
-                        self.log.warn('Failed to parse ASP configuration line '%s': %s, line, str(err))
+                        self.log.warn("Failed to parse ASP configuration line '%s': %s", line, str(err))
             except Exception as err:
                 self.log.warn('Failed to download ASP configuration: %s', str(err))
                 

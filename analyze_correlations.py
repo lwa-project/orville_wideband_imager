@@ -167,18 +167,6 @@ def main(args):
     print(f'Found {np.sum(~mask[:,0])} bad antennas in XX')
     print(f'Found {np.sum(~mask[:,1])} bad antennas in YY')
 
-    #Compute the cross-polarization metric using the new mask.
-    #cross_pol = []
-    #for i in range(cmatrix.shape[2]):
-    #    for j,k in zip([0,1],[1,0]):
-    #        d = cmatrix[:,:,i,i] - cmatrix[:,:,j,k]
-    #        cross_pol.append( np.mean(d, axis=0, where=mask[:,i]) )
-
-    #cross_pol = np.array(cross_pol)
-    #R = np.amax(cross_pol, axis=0)
-    #crossed = np.where( R < 0 )[0]
-    #print(f'Found {crossed.size} potentially cross-polarized antennas')
-
     #Plot, if requested.
     if args.plot:
         _plot_matrices(cmatrix, ~mask, crossed)

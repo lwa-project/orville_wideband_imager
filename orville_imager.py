@@ -682,14 +682,6 @@ class FlaggerOp(object):
                     except OSError as err:
                         self.log.warn("Cannot load frequency flag file: %s", str(err))
                         
-                # Grow the mask
-                mask_left = numpy.roll(mask, -1)
-                mask_left[-1] = 0
-                mask_right = numpy.roll(mask, 1)
-                mask_right[0] = 0
-                mask |= mask_left
-                mask |= mask_right
-                
                 ## Report
                 self.log.info("Frequency flag file is '%s'", str(self.flagfile))
                 self.log.info("Flagged %i (%.1f%%) of channels", mask.sum(), 100*mask.sum()/mask.size)

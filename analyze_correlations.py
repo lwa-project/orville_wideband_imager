@@ -5,12 +5,13 @@ import sys
 import warnings
 import argparse
 import numpy as np
+import bottleneck as bn
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 warnings.filterwarnings(category=RuntimeWarning, action='ignore')
 
-def summary_text(infile, mjd, time, mask, crossed):
+def summary_text(infile, mjd, time, mask, suspectX, suspectY, crossed):
     #Note: Stands are 1-indexed, so the +1 is required in the reporting.
 
     message = f"""Summary of Orville Wideband Imager Correlation Metrics
@@ -18,21 +19,34 @@ Data File: {infile}
 MJD: {mjd}
 Timetag: {time}
 
-Number of potentially problemed antennas for XX pol: {np.sum(mask[:,0])}
+Number of bad antennas for XX pol: {np.sum(mask[:,0])}
 List: {np.where(mask[:,0])[0] + 1}
 
-Number of potentially problemed antennas for YY pol: {np.sum(mask[:,1])}
+Number of bad antennas for YY pol: {np.sum(mask[:,1])}
 List: {np.where(mask[:,1])[0] + 1}
+
+Number of suspect antennas for XX pol: {len(suspectX)}
+List: {suspectX + 1}
+
+Number of suspect antennas for YY pol: {len(suspectY)}
+List: {suspectY + 1}
 
 Number of potentially cross-polarized antennas: {crossed.size}
 List: {crossed + 1}
     """
     return message
 
-def _plot_matrices(correlations, mask, crossed):
+def _plot_matrices(matrix, title=None, mask=None, susX=None, susY=None, crossed=None):
     #Build the plot.
+    if title is None:
+        title = 'LWA-SV Correlation Matrices' 
+        mapper = {0: 'XX', 1: 'XY', 2: 'YX', 3: 'YY'}
+    else:
+        title = title
+        mapper = {0: 'XX - XY', 1: 'XX - YX', 2: 'YY - XY', 3: 'YY - YX'}
+
     fig = plt.figure(1)
-    fig.suptitle('LWA-SV Correlation Matrices', fontsize=16)
+    fig.suptitle(title, fontsize=16)
     axes = []
     gs = gridspec.GridSpec(2,2)
     for i in range(4):
@@ -46,21 +60,27 @@ def _plot_matrices(correlations, mask, crossed):
     fig.canvas.draw()
 
     #Set the color scale.
-    vmin, vmax = np.percentile(np.abs(correlations), q=[1,99])
+    vmin, vmax = np.percentile(np.abs(matrix), q=[1,99])
 
     #Plot.
-    x = y = np.arange(correlations.shape[0]) + 1
-    mapper = {0: 'XX', 1: 'XY', 2: 'YX', 3: 'YY'}
+    x = y = np.arange(matrix.shape[0]) + 1
     for i in range(2):
         for j in range(2):
-            avg = (np.sum(correlations[:,:,i,j], axis=0) - np.diag(correlations[:,:,i,j])) / (correlations.shape[0] - 1)
+            avg = (np.sum(matrix[:,:,i,j], axis=0) - np.diag(matrix[:,:,i,j])) / (matrix.shape[0] - 1)
 
             indx = 2*i + j
             ax = axes[indx][1]
             ax.plot(x, avg, 'o')
             if j == i:
-                ax.plot(x[mask[:,i]], avg[mask[:,i]], 'ro')
-            ax.plot(x[crossed], avg[crossed], 'mo')
+                if mask is not None:
+                    ax.plot(x[mask[:,i]], avg[mask[:,i]], 'ro')
+                if i == 0 and susX is not None:
+                    ax.plot(x[susX], avg[susX], 'yo')
+                if i == 1 and susY is not None:
+                    ax.plot(x[susY], avg[susY], 'yo')
+            if crossed is not None:
+                ax.plot(x[crossed], avg[crossed], 'mo')
+ 
             if indx > 1:
                 ax.set_xlabel('Antenna Number', fontsize=12)
                 ax.set_xlim((x.min(), x.max()))
@@ -69,7 +89,7 @@ def _plot_matrices(correlations, mask, crossed):
 
             ax = axes[indx][0]
             ax.set_title(mapper[indx],fontsize=14)
-            c=ax.imshow(correlations[:,:,i,j], aspect='auto', origin='lower', interpolation='nearest', vmin=vmin, vmax=vmax, extent=(x.min(),x.max(),y.min(),y.max()))
+            c=ax.imshow(matrix[:,:,i,j], aspect='auto', origin='lower', interpolation='nearest', vmin=vmin, vmax=vmax, extent=(x.min(),x.max(),y.min(),y.max()))
             ax.set_ylabel('Antenna Number', fontsize=12)
             ax.tick_params(which='both', direction='in', length=8, labelsize=12)
 
@@ -115,39 +135,58 @@ def main(args):
         dead.append(np.where( avg == 0 )[0])
 
     #Mask out dead antennas
-    mask = np.ones((cmatrix.shape[1], cmatrix.shape[2]),dtype=bool)
+    mask = np.ones((cmatrix.shape[1], cmatrix.shape[2]), dtype=bool)
     for i in range(mask.shape[1]):
         mask[dead[i],i] = False
 
     #Compute the cross-polarization metric, ignoring the dead antennas.
     cross_pol = []
+    d = np.zeros_like(cmatrix)
     for i in range(cmatrix.shape[2]):
         for j,k in zip([0,1],[1,0]):
-            d = cmatrix[:,:,i,i] - cmatrix[:,:,j,k]
-            cross_pol.append( np.mean(d, axis=0, where=mask[:,i]) )
+            d[:,:,i,j] = cmatrix[:,:,i,i] - cmatrix[:,:,j,k]
+            cross_pol.append( np.mean(d[:,:,i,j], axis=0, where=mask[:,i]) )
 
-    cross_pol = np.array(cross_pol)
     R = np.amax(cross_pol, axis=0)
     crossed = np.where( R < 0 )[0]
-    print(f'Found {crossed.size} potentially cross-polarized antennas')
-    
+
+    #Plot the cross-correlation matrices, if requested.
+    if args.plot:
+        _plot_matrices(d, title='Cross-Correlation Matrices', mask=~mask, crossed=crossed)
+
+    del d
+
+    suspectX, suspectY = [], []
     #Iteratively recompute the flagging metric until no more are flagged.
     while True:
         for i in range(cmatrix.shape[2]):
             avg = np.mean(cmatrix[:,:,i,i], axis=0, where=mask[:,i])
-            bad = np.where( np.abs(avg - np.median(avg)) > np.std(avg) )[0]
-            
+ 
+            med = np.median(avg)
+            bad = np.where( np.abs(avg-med) >= 3*np.std(avg) )[0]
+            sus = np.where( (np.abs(avg-med) >= np.std(avg)) & (np.abs(avg-med) < 3*np.std(avg)) )[0]
+
+            if i == 0:
+                suspectX.append(sus)
+            else:
+                suspectY.append(sus)
+
             mask[bad,i] = False
             
             if i == 0:
                 X_bad = bad.size
+                X_sus = sus.size
             else:
                 Y_bad = bad.size
+                Y_sus = sus.size
  
-        if (X_bad == 0) and (Y_bad == 0):
+        if (X_bad+X_sus == 0) and (Y_bad+Y_sus == 0):
             break
         else:
             continue
+
+    suspectX = np.unique(np.concatenate(suspectX),0)
+    suspectY = np.unique(np.concatenate(suspectY),0)
 
     #The outrigger tends to always get flagged
     #since it doesn't correlate strongly with any other
@@ -166,10 +205,13 @@ def main(args):
     #Print summary of bad antennas.
     print(f'Found {np.sum(~mask[:,0])} bad antennas in XX')
     print(f'Found {np.sum(~mask[:,1])} bad antennas in YY')
+    print(f'Found {suspectX.size} sus antennas in XX')
+    print(f'Found {suspectY.size} sus antennas in YY')
+    print(f'Found {crossed.size} potentially cross-polarized antennas')
 
     #Plot, if requested.
     if args.plot:
-        _plot_matrices(cmatrix, ~mask, crossed)
+        _plot_matrices(cmatrix, mask=~mask, susX=suspectX, susY=suspectY, crossed=crossed)
 
     #Write out a summary file, if requested.
     if args.write:
@@ -190,7 +232,7 @@ def main(args):
         
         #Write the file.
         outfile = open(filename, 'w')
-        outfile.write(summary_text(args.file.split('/')[-1], mjd, time, ~mask, crossed))
+        outfile.write(summary_text(args.file.split('/')[-1], mjd, time, ~mask, suspectX, suspectY, crossed))
         outfile.close()
 
 if __name__ == '__main__':

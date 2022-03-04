@@ -18,6 +18,7 @@ import threading
 import subprocess
 from datetime import datetime
 from collections import deque
+from urllib.request import urlopen
 
 from scipy.special import pro_ang1, iv
 from scipy.stats import scoreatpercentile as percentile
@@ -71,6 +72,12 @@ W_STEP = 0.1
 
 SUPPORT_SIZE = 7
 SUPPORT_OVERSAMPLE = 64
+
+
+ASP_CONFIG = deque([{'asp_filter': -1,
+                     'asp_atten_1': -1,
+                     'asp_atten_2': -1,
+                     'asp_atten_s': -1},], 1)
 
 
 def round_up_to_even(n, maxprimes=3):
@@ -717,7 +724,8 @@ class MatrixOp(object):
         self.log.info("MatrixOp - Done")
 
 class FlaggerOp(object):
-    def __init__(self, log, iring, oring, clip=3, core=-1, gpu=-1):
+    def __init__(self, flagfile, log, iring, oring, clip=3, core=-1, gpu=-1):
+        self.flagfile = flagfile
         self.log = log
         self.iring = iring
         self.oring = oring
@@ -773,6 +781,35 @@ class FlaggerOp(object):
                 
                 autos = [i*(2*(nstand-1)+1-i)//2+i for i in range(nstand)]
                 
+                # Setup the mask
+                freq = chan0*fC + numpy.arange(nchan)*4*fC
+                mask = numpy.zeros(freq.size, dtype=numpy.uint8)
+                if self.flagfile is not None:
+                    try:
+                        with open(self.flagfile, 'r') as fh:
+                            for line in fh:
+                                line = line.strip().rstrip()
+                                if len(line) < 3:
+                                    continue
+                                if line[0] == '#':
+                                    continue
+                                    
+                                try:
+                                    f = float(line)*1e6
+                                    mask[numpy.where(numpy.abs(freq-f) < 100e3)] = 1
+                                except ValueError:
+                                    pass
+                    except OSError as err:
+                        self.log.warn("Cannot load frequency flag file: %s", str(err))
+                        
+                ## Report
+                self.log.info("Frequency flag file is '%s'", str(self.flagfile))
+                self.log.info("Flagged %i (%.1f%%) of channels", mask.sum(), 100*mask.sum()/mask.size)
+                self.log.debug("Flagged channels %s", ' '.join([str(i) for i,v in enumerate(mask) if v == 1]))
+                
+                # Invert the mask
+                mask = 1 - mask
+                    
                 prev_time = time.time()
                 with oring.begin_sequence(time_tag=iseq.time_tag, header=ohdr_str) as oseq:
                     for ispan in iseq.read(igulp_size):
@@ -791,46 +828,8 @@ class FlaggerOp(object):
                             idata = ispan.data_view(numpy.complex64).reshape(ishape)
                             odata = ospan.data_view(numpy.uint8).reshape(oshape)
                             
-                            ## Pull out the auto-correlations and average over stand
-                            adata = idata[autos,:,:,:].mean(axis=0)
-                            
-                            ## Max out across polarization
-                            adata = adata.reshape(-1,npol*npol)
-                            adata = numpy.abs(adata)
-                            adata = numpy.max(adata, axis=1)
-                            adata = numpy.array(adata)
-                            
-                            ## Smooth the spectrum and normalize
-                            sdata = adata*0
-                            for i in range(adata.size):
-                                win_min = max([0, i-3])
-                                win_max = min([i+3+1, adata.shape[0]])
-                                sdata[i] = numpy.median(adata[win_min:win_max])
-                            sdata /= numpy.nanmean(sdata)
-                            
-                            ## Build the bandpass
-                            bdata = adata / sdata
-                            dm = numpy.nanmean(bdata)
-                            ds = numpy.nanstd(bdata)
-                            
-                            ## Find the RFI
-                            mask = numpy.where(numpy.abs(bdata - dm) > self.clip*ds, 1, 0)
-                            mask = mask.astype(numpy.uint8)
-                            
-                            ## Grow the mask
-                            mask_left = numpy.roll(mask, -1)
-                            mask_left[-1] = 0
-                            mask_right = numpy.roll(mask, 1)
-                            mask_right[0] = 0
-                            mask |= mask_left
-                            mask |= mask_right
-                            
-                            ## Report
-                            self.log.info("Flagged %i (%.1f%%) of channels", mask.sum(), 100*mask.sum()/mask.size)
-                            self.log.debug("Flagged channels %s", ' '.join([str(i) for i,v in enumerate(mask) if v == 1]))
-                            
-                            ## Invert and save
-                            odata[...] = 1 - mask
+                            ## Save
+                            odata[...] = mask
                             
                             time_tag += navg * (int(fS) // 100)
                             
@@ -1193,9 +1192,10 @@ class WriterOp(object):
         
         self.station = copy.deepcopy(STATION)
         
-    def _save_image(self, station, time_tag, hdr, freq, data):
+    def _save_image(self, station, time_tag, hdr, freq, data, mask=None):
         # Get the fill level as a fraction
         global FILL_QUEUE
+        global ASP_CONFIG
         try:
             fill = FILL_QUEUE.get_nowait()
             self.log.debug("Fill level is %.1f%%", 100.0*fill)
@@ -1225,7 +1225,8 @@ class WriterOp(object):
                 'center_alt':    hdr['phase_center_alt'] * 180/numpy.pi,
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
-                
+        info.update(ASP_CONFIG[0])
+        
         # Write the image to disk
         outname = os.path.join(self.output_dir_images, str(mjd))
         if not os.path.exists(outname):
@@ -1234,13 +1235,14 @@ class WriterOp(object):
         outname = os.path.join(outname, filename)
         
         db = OrvilleImageDB(outname, mode='a', station=station.name)
-        db.add_image(info, data)
+        db.add_image(info, data, mask=mask)
         db.close()
         self.log.debug("Added integration to disk as part of '%s'", os.path.basename(outname))
         
     def _save_archive_image(self, station, time_tag, hdr, freq, data):
         # Get the fill level as a fraction
         global FILL_QUEUE
+        global ASP_CONFIG
         try:
             fill = FILL_QUEUE.get_nowait()
             self.log.debug("Fill level is %.1f%%", 100.0*fill)
@@ -1270,7 +1272,8 @@ class WriterOp(object):
                 'center_alt':    hdr['phase_center_alt'] * 180/numpy.pi,
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
-                
+        info.update(ASP_CONFIG[0])
+        
         # Write the image to disk
         outname = os.path.join(self.output_dir_archive, str(mjd))
         if not os.path.exists(outname):
@@ -1388,7 +1391,7 @@ class WriterOp(object):
                 
                 ## Write the full image set to disk
                 tSave = time.time()
-                self._save_image(self.station, time_tag, ihdr, freq, idata)
+                self._save_image(self.station, time_tag, ihdr, freq, idata, mask=1-mdata)
                 self.log.debug('Save time: %.3f s', time.time()-tSave)
                 
                 ## Write the archive image set to disk
@@ -1626,6 +1629,82 @@ class UploaderOp(object):
             time.sleep(max([10-process_time, 0]))
 
 
+class AnalogSettingsOp(object):
+    def __init__(self, log, core=-1, gpu=-1):
+        self.log = log
+        
+        self.core = core
+        self.gpu = gpu
+        
+        self.bind_proclog = ProcLog(type(self).__name__+"/bind")
+        self.perf_proclog = ProcLog(type(self).__name__+"/perf")
+        
+        self.shutdown_event = threading.Event()
+        
+    def shutdown(self):
+        self.shutdown_event.set()
+        
+    def main(self):
+        cpu_affinity.set_core(self.core)
+        if self.gpu != -1:
+            BFSetGPU(self.gpu)
+        self.bind_proclog.update({'ncore': 1, 
+                                  'core0': cpu_affinity.get_core(),
+                                  'ngpu': 1,
+                                  'gpu0': BFGetGPU(),})
+        
+        mapping = {'AT1': 'asp_atten_1',
+                   'AT2': 'asp_atten_2',
+                   'ATS': 'asp_atten_s',
+                   'FIL': 'asp_filter'}
+        
+        prev_time = time.time()
+        while not self.shutdown_event.is_set():
+            curr_time = time.time()
+            acquire_time = curr_time - prev_time
+            prev_time = curr_time
+            
+            new_config = {'asp_filter': -1,
+                          'asp_atten_1': -1,
+                          'asp_atten_2': -1,
+                          'asp_atten_s': -1}
+            
+            try:
+                uh = urlopen('https://lwalab.phys.unm.edu/OpScreen/lwasv/arx.dat',
+                             timeout=5)
+                config = uh.read()
+                config = config.decode()
+                config = config.split('\n')
+                for line in config:
+                    line = line.strip().rstrip()
+                    if len(line) < 3:
+                        continue
+                        
+                    try:
+                        key, value, yymmdd, hhmmss = line.split(';;;', 3)
+                        value = int(value, 10)
+                        new_config[mapping[key]] = value
+                    except (IndexError, ValueError) as err:
+                        self.log.warn("Failed to parse ASP configuration line '%s': %s", line, str(err))
+            except Exception as err:
+                self.log.warn('Failed to download ASP configuration: %s', str(err))
+                
+            ASP_CONFIG.append(new_config)
+            self.log.debug('ASP configuration set to: %s', str(ASP_CONFIG[0]))
+            
+            curr_time = time.time()
+            process_time = curr_time - prev_time
+            self.log.debug('Uploader processing time was %.3f s', process_time)
+            prev_time = curr_time
+            self.perf_proclog.update({'acquire_time': acquire_time, 
+                                      'reserve_time': -1, 
+                                      'process_time': process_time,})
+            
+            t_sleep = time.time() + max([60-process_time, 0])
+            while time.time() < t_sleep:
+                time.sleep(1)
+
+
 class LogFileHandler(TimedRotatingFileHandler):
     def __init__(self, filename, rollover_callback=None):
         days_per_file =  1
@@ -1702,7 +1781,7 @@ def main(args):
     ops.append(CaptureOp(log, capture_ring,
                          isock, nBL*6, 1, 9000, 1, 1, core=cores.pop(0)))
     ## The flagger
-    ops.append(FlaggerOp(log, capture_ring, rfimask_ring,
+    ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring,
                          core=cores.pop(0)))
     ## The correlation matrix
     ops.append(MatrixOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
@@ -1723,6 +1802,9 @@ def main(args):
     ## The image uploader
     ops.append(UploaderOp(log, base_dir=args.output_dir,
                           core=cores.pop(0), gpu=gpus.pop(0)))
+    ## The ASP settings getter
+    ops.append(AnalogSettingsOp(log,
+                                core=cores.pop(0), gpu=gpus.pop(0)))
     
     # Launch everything and wait
     threads = [threading.Thread(target=op.main) for op in ops]
@@ -1755,6 +1837,8 @@ if __name__ == '__main__':
                         help='Specify log file')
     parser.add_argument('-o', '--output-dir', type=str, default=os.getcwd(),
                         help='base directory to write output data to')
+    parser.add_argument('-f', '--flagfile', type=str,
+                        help='path to flagger file that gives frequencies to flag')
     args = parser.parse_args()
     main(args)
     

@@ -33,6 +33,7 @@ Environment=VMA_MTU=9000
 ExecStart=/bin/bash -ec '\
 numactl --cpunodebind=0 --membind=0 -- \
 python3 /home/jdowell/orville3/orville_imager.py \
+   --flagfile   /home/jdowell/orville3/bad_freq.txt \
 	 --logfile    /data/orville/log/wideband-imager.log \
 	 --output-dir /data/orville'
 

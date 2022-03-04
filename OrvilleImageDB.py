@@ -511,9 +511,10 @@ class OrvilleImageDB(object):
         data = data.reshape(nchan, nstokes, ngrid, ngrid)
         if self.include_mask:
             mask = numpy.fromfile(self.file, 'u1', nchan)
-            mask = mask.reshape(nchan, 1, 1, 1)
-            data = numpy.ma.array(data)
-            data.mask = mask
+            reshaped_mask = numpy.full(data.shape, False, dtype=numpy.bool) # Create Bool array filled with False values
+            reshaped_mask[numpy.argwhere(mask),...] = True # Propogate True across rows of flagged channels
+            data = numpy.ma.array(data) # Create masked array the same way
+            data.mask = reshaped_mask # Append new mask            
             
         self.curr_int += 1
         return info, data

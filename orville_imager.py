@@ -1739,7 +1739,7 @@ def main(args):
         log.info("  %s: %s", arg, getattr(args, arg))
         
     # Setup the cores and GPUs to use
-    cores = [0, 1, 2, 3, 4, 5, 6, 7]
+    cores = [0, 1, 2, 3, 4, 5, 6, 7, 7]
     gpus  = [0,]*len(cores)
     log.info("CPUs:         %s", ' '.join([str(v) for v in cores]))
     log.info("GPUs:         %s", ' '.join([str(v) for v in gpus]))

@@ -142,23 +142,24 @@ class OrvilleImageDB(object):
                     ('asp_atten_s', ctypes.c_int)]
     class _EntryHeader_v5(PrintableLittleEndianStructure):
         _pack_   = 1
-        _fields_ = [('sync_word',   ctypes.c_uint),
-                    ('start_time',  ctypes.c_double),
-                    ('int_len',     ctypes.c_double),
-                    ('fill',        ctypes.c_double),
-                    ('lst',         ctypes.c_double),
-                    ('start_freq',  ctypes.c_double),
-                    ('stop_freq',   ctypes.c_double),
-                    ('bandwidth',   ctypes.c_double),
-                    ('center_ra',   ctypes.c_double),
-                    ('center_dec',  ctypes.c_double),
-                    ('center_az',   ctypes.c_double),
-                    ('center_alt',  ctypes.c_double),
-                    ('asp_filter',  ctypes.c_int),
-                    ('asp_atten_1', ctypes.c_int),
-                    ('asp_atten_2', ctypes.c_int),
-                    ('asp_atten_s', ctypes.c_int),
-                    ('adp_status',  ctypes.c_int)]
+        _fields_ = [('sync_word',    ctypes.c_uint),
+                    ('start_time',   ctypes.c_double),
+                    ('int_len',      ctypes.c_double),
+                    ('fill',         ctypes.c_double),
+                    ('lst',          ctypes.c_double),
+                    ('start_freq',   ctypes.c_double),
+                    ('stop_freq',    ctypes.c_double),
+                    ('bandwidth',    ctypes.c_double),
+                    ('center_ra',    ctypes.c_double),
+                    ('center_dec',   ctypes.c_double),
+                    ('center_az',    ctypes.c_double),
+                    ('center_alt',   ctypes.c_double),
+                    ('asp_filter',   ctypes.c_int),
+                    ('asp_atten_1',  ctypes.c_int),
+                    ('asp_atten_2',  ctypes.c_int),
+                    ('asp_atten_s',  ctypes.c_int),
+                    ('sys_stat_asp', ctypes.c_int),
+                    ('sys_stat_adp', ctypes.c_int)]
     
     _TIME_OFFSET_v1 = 4
     _TIME_OFFSET_v2 = _TIME_OFFSET_v1
@@ -473,7 +474,8 @@ class OrvilleImageDB(object):
         entry_header.sync_word = 0xC0DECAFE
         for key in ('start_time', 'int_len', 'fill', 'lst', 'start_freq', 'stop_freq',
                     'bandwidth', 'center_ra', 'center_dec', 'center_az', 'center_alt',
-                    'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s', 'adp_status'):
+                    'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s',
+                    'sys_stat_asp', 'sys_stat_adp'):
             if key in ('fill', 'center_az', 'center_alt') and self.version != self._FORMAT_VERSION:
                 continue
             if key.startswith('asp_'):
@@ -481,7 +483,7 @@ class OrvilleImageDB(object):
                     continue
                 elif key not in info:
                     info[key] = -1
-            if key.startswith('adp_'):
+            if key.startswith('sys_stat_'):
                 if self.version != self._FORMAT_VERSION:
                     try:
                         info[key] = _SUMMARY_VALUES[info[key]]

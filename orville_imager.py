@@ -78,7 +78,8 @@ STATION_CONFIG = deque([{'asp_filter': -1,
                          'asp_atten_1': -1,
                          'asp_atten_2': -1,
                          'asp_atten_s': -1,
-                         'adp_status':  'UNK'},], 1)
+                         'sys_stat_asp': 'UNK',
+                         'sys_stat_adp': 'UNK'},], 1)
 
 
 def round_up_to_even(n, maxprimes=3):
@@ -1549,7 +1550,8 @@ class AnalogSettingsOp(object):
                           'asp_atten_1': -1,
                           'asp_atten_2': -1,
                           'asp_atten_s': -1,
-                          'adp_status': 'UNK'}
+                          'sys_stat_asp': 'UNK'
+                          'sys_stat_adp': 'UNK'}
             
             try:
                 uh = urlopen('https://lwalab.phys.unm.edu/OpScreen/lwasv/arx.dat',
@@ -1582,10 +1584,16 @@ class AnalogSettingsOp(object):
                     if len(line) < 3:
                         continue
                         
-                    if line.startswith('ADP'):
+                    if line.startswith('ASP'):
+                        try:
+                            _, asp_status, _, _ = line.split(';;;', 3)
+                            new_config['sys_stat_asp'] = asp_status
+                        except (IndexError, ValueError) as err:
+                            self.log.warn("Failed to parse station summary line '%s': %s", line, str(err))
+                    elif line.startswith('ADP'):
                         try:
                             _, adp_status, _, _ = line.split(';;;', 3)
-                            new_config['adp_status'] = adp_status
+                            new_config['sys_stat_adp'] = adp_status
                         except (IndexError, ValueError) as err:
                             self.log.warn("Failed to parse station summary line '%s': %s", line, str(err))
             except Exception as err:

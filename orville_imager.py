@@ -74,10 +74,11 @@ SUPPORT_SIZE = 7
 SUPPORT_OVERSAMPLE = 64
 
 
-ASP_CONFIG = deque([{'asp_filter': -1,
-                     'asp_atten_1': -1,
-                     'asp_atten_2': -1,
-                     'asp_atten_s': -1},], 1)
+STATION_CONFIG = deque([{'asp_filter': -1,
+                         'asp_atten_1': -1,
+                         'asp_atten_2': -1,
+                         'asp_atten_s': -1,
+                         'adp_status':  'UNK'},], 1)
 
 
 def round_up_to_even(n, maxprimes=3):
@@ -1075,7 +1076,7 @@ class WriterOp(object):
     def _save_image(self, station, time_tag, hdr, freq, data, mask=None):
         # Get the fill level as a fraction
         global FILL_QUEUE
-        global ASP_CONFIG
+        global STATION_CONFIG
         try:
             fill = FILL_QUEUE.get_nowait()
             self.log.debug("Fill level is %.1f%%", 100.0*fill)
@@ -1105,7 +1106,7 @@ class WriterOp(object):
                 'center_alt':    hdr['phase_center_alt'] * 180/numpy.pi,
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
-        info.update(ASP_CONFIG[0])
+        info.update(STATION_CONFIG[0])
         
         # Write the image to disk
         outname = os.path.join(self.output_dir_images, str(mjd))
@@ -1122,7 +1123,7 @@ class WriterOp(object):
     def _save_archive_image(self, station, time_tag, hdr, freq, data):
         # Get the fill level as a fraction
         global FILL_QUEUE
-        global ASP_CONFIG
+        global STATION_CONFIG
         try:
             fill = FILL_QUEUE.get_nowait()
             self.log.debug("Fill level is %.1f%%", 100.0*fill)
@@ -1152,7 +1153,7 @@ class WriterOp(object):
                 'center_alt':    hdr['phase_center_alt'] * 180/numpy.pi,
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
-        info.update(ASP_CONFIG[0])
+        info.update(STATION_CONFIG[0])
         
         # Write the image to disk
         outname = os.path.join(self.output_dir_archive, str(mjd))
@@ -1547,7 +1548,8 @@ class AnalogSettingsOp(object):
             new_config = {'asp_filter': -1,
                           'asp_atten_1': -1,
                           'asp_atten_2': -1,
-                          'asp_atten_s': -1}
+                          'asp_atten_s': -1,
+                          'adp_status': 'UNK'}
             
             try:
                 uh = urlopen('https://lwalab.phys.unm.edu/OpScreen/lwasv/arx.dat',
@@ -1569,8 +1571,28 @@ class AnalogSettingsOp(object):
             except Exception as err:
                 self.log.warn('Failed to download ASP configuration: %s', str(err))
                 
-            ASP_CONFIG.append(new_config)
-            self.log.debug('ASP configuration set to: %s', str(ASP_CONFIG[0]))
+            try:
+                uh = urlopen('https://lwalab.phys.unm.edu/OpScreen/lwasv/summary.dat',
+                             timeout=5)
+                config = uh.read()
+                config = config.decode()
+                config = config.split('\n')
+                for line in config:
+                    line = line.strip().rstrip()
+                    if len(line) < 3:
+                        continue
+                        
+                    if line.startswith('ADP'):
+                        try:
+                            _, adp_status, _, _ = line.split(';;;', 3)
+                            new_config['adp_status'] = adp_status
+                        except (IndexError, ValueError) as err:
+                            self.log.warn("Failed to parse station summary line '%s': %s", line, str(err))
+            except Exception as err:
+                self.log.warn('Failed to download station summary: %s', str(err))
+                
+            STATION_CONFIG.append(new_config)
+            self.log.debug('ASP configuration set to: %s', str(STATION_CONFIG[0]))
             
             curr_time = time.time()
             process_time = curr_time - prev_time

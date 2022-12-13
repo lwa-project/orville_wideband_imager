@@ -12,6 +12,14 @@ import shutil
 import tempfile
 
 
+_SUMMARY_VALUES = {'NORMAL':  1,
+                   'WARNING': 2,
+                   'ERROR':   3,
+                   'BOOTING': 4,
+                   'SHUTDWN': 5,
+                   'UNK':     6}
+
+
 class PrintableLittleEndianStructure(ctypes.LittleEndianStructure):
     """
     Sub-class of ctypes.LittleEndianStructure that adds a as_dict()
@@ -68,7 +76,7 @@ class OrvilleImageDB(object):
     # (including RA) and pixel sizes are in degrees.  All other entries are in
     # standard mks units.
     
-    _FORMAT_VERSION = 'OrvilleImageDBv004'
+    _FORMAT_VERSION = 'OrvilleImageDBv005'
     
     class _FileHeader_v1(PrintableLittleEndianStructure):
         _pack_   = 1
@@ -84,6 +92,7 @@ class OrvilleImageDB(object):
     _FileHeader_v2 = _FileHeader_v1
     _FileHeader_v3 = _FileHeader_v2
     _FileHeader_v4 = _FileHeader_v3
+    _FileHeader_v5 = _FileHeader_v4
     
     FLAG_SORTED = 0x0001
     
@@ -131,11 +140,31 @@ class OrvilleImageDB(object):
                     ('asp_atten_1', ctypes.c_int),
                     ('asp_atten_2', ctypes.c_int),
                     ('asp_atten_s', ctypes.c_int)]
+    class _EntryHeader_v5(PrintableLittleEndianStructure):
+        _pack_   = 1
+        _fields_ = [('sync_word',   ctypes.c_uint),
+                    ('start_time',  ctypes.c_double),
+                    ('int_len',     ctypes.c_double),
+                    ('fill',        ctypes.c_double),
+                    ('lst',         ctypes.c_double),
+                    ('start_freq',  ctypes.c_double),
+                    ('stop_freq',   ctypes.c_double),
+                    ('bandwidth',   ctypes.c_double),
+                    ('center_ra',   ctypes.c_double),
+                    ('center_dec',  ctypes.c_double),
+                    ('center_az',   ctypes.c_double),
+                    ('center_alt',  ctypes.c_double),
+                    ('asp_filter',  ctypes.c_int),
+                    ('asp_atten_1', ctypes.c_int),
+                    ('asp_atten_2', ctypes.c_int),
+                    ('asp_atten_s', ctypes.c_int),
+                    ('adp_status',  ctypes.c_int)]
     
     _TIME_OFFSET_v1 = 4
     _TIME_OFFSET_v2 = _TIME_OFFSET_v1
     _TIME_OFFSET_v3 = _TIME_OFFSET_v2
     _TIME_OFFSET_v4 = _TIME_OFFSET_v3
+    _TIME_OFFSET_v5 = _TIME_OFFSET_v4
     
     def __init__(self, filename, mode='r', imager_version='', station=''):
         """
@@ -424,6 +453,7 @@ class OrvilleImageDB(object):
             asp_atten_1 -- (optional) ASP first attenuator setting
             asp_atten_2 -- (optional) ASP second attenuator setting
             asp_atten_s -- (optional) ASP split attenuator setting
+            adp_status -- (optional) ADP status word (1 = NORMAL, 2 = WARNING, 3 = ERROR)
             pixel_size -- Real-world size of a pixel, in degrees
             stokes_params -- a list or comma-delimited string of Stokes params
         data -- a 4D float array of image data indexed as [chan, stokes, x, y]
@@ -443,7 +473,7 @@ class OrvilleImageDB(object):
         entry_header.sync_word = 0xC0DECAFE
         for key in ('start_time', 'int_len', 'fill', 'lst', 'start_freq', 'stop_freq',
                     'bandwidth', 'center_ra', 'center_dec', 'center_az', 'center_alt',
-                    'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s'):
+                    'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s', 'adp_status'):
             if key in ('fill', 'center_az', 'center_alt') and self.version != self._FORMAT_VERSION:
                 continue
             if key.startswith('asp_'):
@@ -451,6 +481,14 @@ class OrvilleImageDB(object):
                     continue
                 elif key not in info:
                     info[key] = -1
+            if key.startswith('adp_'):
+                if self.version != self._FORMAT_VERSION:
+                    try:
+                        info[key] = _SUMMARY_VALUES[info[key]]
+                    except KeyError:
+                        info[key] = _SUMMARY_VALUES['UNK']
+                elif key not in info:
+                    info[key] = _SUMMARY_VALUES['UNK']
             setattr(entry_header, key, info[key])
         self.file.write(entry_header)
         data.astype('<f4').tofile(self.file)

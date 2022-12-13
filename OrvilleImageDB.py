@@ -20,6 +20,11 @@ _SUMMARY_VALUES = {'NORMAL':  1,
                    'UNK':     6}
 
 
+_VALUE_SUMMARIES = {}
+for key in _SUMMARY_VALUES.keys():
+    _VALUE_SUMMARIES[_SUMMARY_VALUES[key]] = key
+
+
 class PrintableLittleEndianStructure(ctypes.LittleEndianStructure):
     """
     Sub-class of ctypes.LittleEndianStructure that adds a as_dict()
@@ -454,7 +459,8 @@ class OrvilleImageDB(object):
             asp_atten_1 -- (optional) ASP first attenuator setting
             asp_atten_2 -- (optional) ASP second attenuator setting
             asp_atten_s -- (optional) ASP split attenuator setting
-            adp_status -- (optional) ADP status word (1 = NORMAL, 2 = WARNING, 3 = ERROR)
+            sys_status_asp -- (optional) ASP system status
+            sys_status_adp -- (optional) ADP system status
             pixel_size -- Real-world size of a pixel, in degrees
             stokes_params -- a list or comma-delimited string of Stokes params
         data -- a 4D float array of image data indexed as [chan, stokes, x, y]
@@ -524,6 +530,8 @@ class OrvilleImageDB(object):
             asp_atten_1 -- ASP first attenuator setting
             asp_atten_2 -- ASP second attenuator setting
             asp_atten_s -- ASP split attenuator setting
+            sys_status_asp -- ASP system status
+            sys_status_adp -- ADP system status
             pixel_size -- Real-world size of a pixel, in degrees
             stokes_params -- a list or comma-delimited string of Stokes params
         data -- a 4D float array of image data indexed as [chan, stokes, x, y]
@@ -541,11 +549,17 @@ class OrvilleImageDB(object):
             info[key] = getattr(self.header, key, None)
         for key in ('start_time', 'int_len', 'fill', 'lst', 'start_freq', 'stop_freq',
                     'bandwidth', 'center_ra', 'center_dec', 'center_az', 'center_alt',
-                    'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s'):
+                    'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s',
+                    'sys_stat_asp', 'sys_stat_adp'):
             info[key] = getattr(entry_header, key, None)
             if key.startswith('asp_') and info[key] is None:
                 info[key] = -1
-                
+            if key.startswith('sys_stat_'):
+                try:
+                    info[key] = _VALUE_SUMMARIES[info[key]]
+                except KeyError:
+                    info[key] = 'UNK'
+                    
         nchan, nstokes, ngrid = self.header.nchan, self.nstokes, self.header.ngrid
         data = numpy.fromfile(self.file, '<f4', nchan*nstokes*ngrid*ngrid)
         data = data.reshape(nchan, nstokes, ngrid, ngrid)

@@ -60,7 +60,7 @@ def _plot_matrices(matrix, title=None, mask=None, susX=None, susY=None, crossed=
     fig.canvas.draw()
 
     #Set the color scale.
-    vmin, vmax = np.percentile(np.abs(matrix), q=[1,99])
+    vmin, vmax = np.nanpercentile(np.abs(matrix), q=[1,99])
 
     #Plot.
     x = y = np.arange(matrix.shape[0]) + 1
@@ -124,14 +124,13 @@ def main(args):
     for i in range(cmatrix.shape[2]):
         for j in range(cmatrix.shape[3]):
             cmatrix[:,:,i,j] /= np.nanmax(cmatrix[:,:,i,j])
-    cmatrix[np.where(~np.isfinite(cmatrix))] = 0.0
 
     #Flag totally dead antennas using XX and YY data.
     #The averaging ignores the autocorrelations.
     dead = []
     avg = np.zeros((cmatrix.shape[1], cmatrix.shape[2]),dtype=np.float64)
     for i in range(cmatrix.shape[2]):
-        avg = np.sum(cmatrix[:,:,i,i]-np.diag(cmatrix[:,:,i,i]), axis=0) / (cmatrix.shape[0]-1)
+        avg = np.nansum(cmatrix[:,:,i,i]-np.diag(cmatrix[:,:,i,i]), axis=0) / (cmatrix.shape[0]-1)
 
         dead.append(np.where( avg == 0 )[0])
 
@@ -146,7 +145,7 @@ def main(args):
     for i in range(cmatrix.shape[2]):
         for j,k in zip([0,1],[1,0]):
             d[:,:,i,j] = cmatrix[:,:,i,i] - cmatrix[:,:,j,k]
-            cross_pol.append( np.mean(d[:,:,i,j], axis=0, where=mask[:,i]) )
+            cross_pol.append( np.nanmean(d[:,:,i,j], axis=0, where=mask[:,i]) )
 
     R = np.amax(cross_pol, axis=0)
     crossed = np.where( R < 0 )[0]

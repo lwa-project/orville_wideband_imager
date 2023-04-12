@@ -123,8 +123,9 @@ def main(args):
     cmatrix = np.abs(cmatrix)
     for i in range(cmatrix.shape[2]):
         for j in range(cmatrix.shape[3]):
-            cmatrix[:,:,i,j] /= cmatrix[:,:,i,j].max()
- 
+            cmatrix[:,:,i,j] /= np.nanmax(cmatrix[:,:,i,j])
+    cmatrix[np.where(~np.isfinite(cmatrix))] = 0.0
+
     #Flag totally dead antennas using XX and YY data.
     #The averaging ignores the autocorrelations.
     dead = []

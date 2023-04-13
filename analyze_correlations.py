@@ -2,6 +2,7 @@
 
 import os
 import sys
+import json
 import warnings
 import argparse
 import numpy as np
@@ -11,13 +12,19 @@ import matplotlib.gridspec as gridspec
 
 warnings.filterwarnings(category=RuntimeWarning, action='ignore')
 
-def summary_text(infile, mjd, time, mask, suspectX, suspectY, crossed):
+def summary_text(infile, mjd, time, mask, suspectX, suspectY, crossed, header=None):
     #Note: Stands are 1-indexed, so the +1 is required in the reporting.
+
+    header_info = ''
+    if header is not None:
+        header_info += f"Central Frequency: {header['cfreq']/1e6:.3f}  MHz\n"
+        header_info += f"Bandwidth: {header['bw']/1e6:.3f} MHz\n"
 
     message = f"""Summary of Orville Wideband Imager Correlation Metrics
 Data File: {infile}
 MJD: {mjd}
 Timetag: {time}
+{header_info}
 
 Number of bad antennas for XX pol: {np.sum(mask[:,0])}
 List: {np.where(mask[:,0])[0] + 1}
@@ -101,6 +108,11 @@ def _plot_matrices(matrix, title=None, mask=None, susX=None, susY=None, crossed=
 def main(args):
 
     #Read in the data.
+    try:
+        header = np.load(args.file)['hdr']
+        header = json.loads(header.item())
+    except KeyError:
+        header = None
     corr = np.load(args.file)['data']
 
     #Build the full correlation matrix. 
@@ -232,7 +244,7 @@ def main(args):
         
         #Write the file.
         outfile = open(filename, 'w')
-        outfile.write(summary_text(args.file.split('/')[-1], mjd, time, ~mask, suspectX, suspectY, crossed))
+        outfile.write(summary_text(args.file.split('/')[-1], mjd, time, ~mask, suspectX, suspectY, crossed, header=header))
         outfile.close()
 
 if __name__ == '__main__':

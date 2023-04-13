@@ -660,6 +660,7 @@ class MatrixOp(object):
             self.mring.resize(mgulp_size, mgulp_size*10)
 
             integrations = deque([], maxlen=2)
+            fhdr = json.dumps(ihdr)
 
             intCount = 0
             prev_time = time.time()
@@ -704,7 +705,7 @@ class MatrixOp(object):
                         os.mkdir(outname)
                     filename = 'CorrMatrix_%i_%02i%02i%02i.npz' % (mjd, h, m, s)
                     outname = os.path.join(outname, filename)
-                    numpy.savez(outname, data=corr)
+                    numpy.savez(outname, hdr=fhdr, data=corr, mask=mdata)
                     self.log.debug("Wrote correlation matrix %i to disk as '%s'", intCount, os.path.basename(outname))
                 
                     intCount += 1

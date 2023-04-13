@@ -93,7 +93,7 @@ def _plot_matrices(matrix, title=None, mask=None, susX=None, susY=None, crossed=
             ax.set_ylabel('Antenna Number', fontsize=12)
             ax.tick_params(which='both', direction='in', length=8, labelsize=12)
 
-    cb = fig.colorbar(c, ax=axes)
+    cb = fig.colorbar(c, ax=[s for a in axes for s in a])
     cb.set_label(r'$|C_{ij}|$', fontsize=12)
 
     plt.show()  

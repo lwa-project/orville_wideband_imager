@@ -4,14 +4,14 @@
 ORVILLE_DATA_DIR=/data/orville
 
 # Where the software is stored
-ORVILLE_SOFTWARE_DIR=/home/jdowell/orville3
+ORVILLE_SOFTWARE_DIR=/opt/orville3
 
-# Delete (u,v) radial and spectra plots more than three weeks old
-find ${ORVILLE_DATA_DIR}/baselines -mtime +22 -exec rm -r {} \;
-find ${ORVILLE_DATA_DIR}/spectra -mtime +22 -exec rm -r {} \;
+# Delete (u,v) radial and spectra plots more than three days old
+find ${ORVILLE_DATA_DIR}/baselines -mtime +4 -exec rm -r {} \;
+find ${ORVILLE_DATA_DIR}/spectra -mtime +4 -exec rm -r {} \;
 
-# Delete old logs more than 6 months old
-find ${ORVILLE_DATA_DIR}/log -mtime +181 -exec rm {} \;
+# Delete old logs more than 6 weeks old
+find ${ORVILLE_DATA_DIR}/log -mtime +43 -exec rm {} \;
 
 # Build movies of the LWATV images from previous days
 for mjd in `find ${ORVILLE_DATA_DIR}/lwatv -type d -name 6\* | sort | head -n -1 `; do
@@ -23,15 +23,15 @@ done
 
 # Upload the movies
 rsync -e ssh -avHL ${ORVILLE_DATA_DIR}/movies/*[0-9][0-9].mov ${ORVILLE_DATA_DIR}/movies/movielist.js \
-      mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/
+      mcsdr@lwalab.phys.unm.edu:/var/www/lwatv3/
 
 # Backup the archive
 rsync -e ssh -avH ${ORVILLE_DATA_DIR}/archive/6* \
-      pasi@lda10g.alliance.unm.edu:/FileStore/Orville/
+      pasi@lda10g.alliance.unm.edu:/FileStore/Orville2/
 
-# Delete events as needed to keep us below 25 TB
+# Delete events as needed to keep us below 0.5 TB
 rawsize=`du -b ${ORVILLE_DATA_DIR}/images | tail -n1 | awk '{print $1}'`
-while [[ "${rawsize}" -ge $((25*1024*1024*1024*1024)) ]]; do
+while [[ "${rawsize}" -ge $((512*1024*1024*1024)) ]]; do
     oldest=`ls -td ${ORVILLE_DATA_DIR}/images/6* | tail -n1`
     echo "Removing ${oldest}"
     rm -rf ${oldest}

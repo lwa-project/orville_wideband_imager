@@ -18,14 +18,14 @@ TimeoutStopSec=20
 ExecStartPre=/bin/bash -c '[ -d /data/orville/log ] || mkdir -p /data/orville/log'
 
 # Setup the environment
-Environment=BIFROST_INCLUDE_PATH=/home/ndp/orville3/bifrost/src/bifrost
-Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64:/home/ndp/orville3/bifrost/lib:$LD_LIBRARY_PATH
-Environment=PYTHONPATH=/home/ndp/orville3/bifrost/python:$PYTHONPATH
+Environment=BIFROST_INCLUDE_PATH=/opt/orville3/bifrost/src/bifrost
+Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64:/opt/orville3/bifrost/lib:$LD_LIBRARY_PATH
+Environment=PYTHONPATH=/opt/orville3/bifrost/python:$PYTHONPATH
 
 ExecStart=/bin/bash -ec '\
 numactl --cpunodebind=0 --membind=0 -- \
-python3 /home/ndp/orville3/orville_imager.py \
-   --flagfile   /home/ndp/orville3/bad_freq.txt \
+python3 /opt/orville3/orville_imager.py \
+   --flagfile   /opt/orville3/bad_freq.txt \
 	 --logfile    /data/orville/log/wideband-imager.log \
 	 --output-dir /data/orville'
 

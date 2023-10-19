@@ -26,7 +26,7 @@ from scipy.stats import scoreatpercentile as percentile
 from astropy.constants import c as speedOfLight
 speedOfLight = speedOfLight.to('m/s').value
 
-from lsl.common.stations import lwasv, parse_ssmif
+from lsl.common.stations import lwana, parse_ssmif
 from lsl.correlator import uvutils
 from lsl.imaging import utils
 from lsl.common.adp import fS, fC
@@ -63,7 +63,7 @@ if not os.path.exists(CAL_PATH):
     os.mkdir(CAL_PATH)
 
 
-STATION = lwasv
+STATION = lwana
 ANTENNAS = STATION.antennas
 
 
@@ -287,23 +287,23 @@ class SpectraOp(object):
         bad = numpy.where(mask == 0)[0]
         
         # Image setup
-        width = height = 16
-        im = PIL.Image.new('RGB', (width * 65 + 1, height * 65 + 21), '#FFFFFF')
+        width = height = 8
+        im = PIL.Image.new('RGB', (width * 129 + 1, height * 129 + 21), '#FFFFFF')
         draw = PIL.ImageDraw.Draw(im)
         font = PIL.ImageFont.load(os.path.join(BASE_PATH, 'fonts', 'helvB10.pil'))
         
         # Axes boxes
         for i in range(width + 1):
-            draw.line([i * 65, 0, i * 65, height * 65], fill = '#000000')
+            draw.line([i * 129, 0, i * 129, height * 129], fill = '#000000')
         for i in range(height + 1):
-            draw.line([(0, i * 65), (im.size[0], i * 65)], fill = '#000000')
+            draw.line([(0, i * 129), (im.size[0], i * 129)], fill = '#000000')
             
         # Power as a function of frequency for all antennas
         x = numpy.arange(nchan) * 64 // nchan
         for s in range(nstand):
             if s >= height * width:
                 break
-            x0, y0 = (s % width) * 65 + 1, (s // width + 1) * 65
+            x0, y0 = (s % width) * 129 + 1, (s // width + 1) * 129
             draw.text((x0 + 5, y0 - 60), str(s+1), font=font, fill='#000000')
             
             ## XX
@@ -327,7 +327,7 @@ class SpectraOp(object):
                 draw.line(list(zip((xl,xl), (y0,y0-8))), fill=c)
                 
         # Summary
-        ySummary = height * 65 + 2
+        ySummary = height * 129 + 2
         timeStr = datetime.utcfromtimestamp(time_tag / fS)
         timeStr = timeStr.strftime("%Y/%m/%d %H:%M:%S UTC")
         draw.text((5, ySummary), timeStr, font = font, fill = '#000000')
@@ -1480,7 +1480,7 @@ class UploaderOp(object):
             try:
                 ## Stage
                 p = subprocess.Popen('rsync -e ssh -av /tmp/lwatv*.png /tmp/lwatv_timestamp \
-                                        mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/',
+                                        mcsdr@lwalab.phys.unm.edu:/var/www/lwatv4/incoming/',
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     shell=True)
                 output, error = p.communicate()
@@ -1489,7 +1489,7 @@ class UploaderOp(object):
                     
                 ## Activate
                 p = subprocess.Popen("ssh mcsdr@lwalab.phys.unm.edu \
-                                        'mv -f /var/www/lwatv2/incoming/* /var/www/lwatv2/'",
+                                        'mv -f /var/www/lwatv4/incoming/* /var/www/lwatv4/'",
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     shell=True)
                 output, error = p.communicate()
@@ -1550,7 +1550,7 @@ class AnalogSettingsOp(object):
                           'asp_atten_s': -1}
             
             try:
-                uh = urlopen('https://lwalab.phys.unm.edu/OpScreen/lwasv/arx.dat',
+                uh = urlopen('https://lwalab.phys.unm.edu/OpScreen/lwana/arx.dat',
                              timeout=5)
                 config = uh.read()
                 config = config.decode()
@@ -1701,7 +1701,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description="Capture data from the ADP wideband correlator mode and image it",
+        description="Capture data from the NDP wideband correlator mode and image it",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
         )
     parser.add_argument('-a', '--address', type=str, default='192.168.40.47',

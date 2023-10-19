@@ -23,7 +23,7 @@ done
 
 # Upload the movies
 rsync -e ssh -avHL ${ORVILLE_DATA_DIR}/movies/*[0-9][0-9].mov ${ORVILLE_DATA_DIR}/movies/movielist.js \
-      mcsdr@lwalab.phys.unm.edu:/var/www/lwatv3/
+      mcsdr@lwalab.phys.unm.edu:/var/www/lwatv4/
 
 # Backup the archive
 rsync -e ssh -avH ${ORVILLE_DATA_DIR}/archive/6* \

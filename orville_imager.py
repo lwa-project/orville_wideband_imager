@@ -1659,7 +1659,7 @@ def main(args):
     isock.bind(iaddr)
     isock.timeout = 5.0
     ops.append(CaptureOp(log, capture_ring,
-                         isock, nBL*6, 1, 9000, 1, 1, core=cores.pop(0)))
+                         isock, nBL*8, 1, 6500, 1, 1, core=cores.pop(0)))
     ## The flagger
     ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring,
                          core=cores.pop(0)))

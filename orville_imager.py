@@ -29,7 +29,8 @@ speedOfLight = speedOfLight.to('m/s').value
 from lsl.common.stations import lwana, parse_ssmif
 from lsl.correlator import uvutils
 from lsl.imaging import utils
-from lsl.common.adp import fS, fC
+from lsl.common.adp import fS
+fC = fS / 8192
 from lsl.astro import MJD_OFFSET, DJD_OFFSET
 
 from bifrost.address import Address
@@ -205,9 +206,9 @@ class CaptureOp(object):
         hdr = {'time_tag': time_tag,
             'seq0':     seq0, 
             'chan0':    chan0,
-            'cfreq':    chan0*25e3,
+            'cfreq':    chan0*fC,
             'nchan':    nchan,
-            'bw':       nchan*4*25e3,
+            'bw':       nchan*4*fC,
             'navg':     navg,
             'nstand':   int(numpy.sqrt(8*nsrc+1)-1)//2,
             'npol':     2,
@@ -299,31 +300,33 @@ class SpectraOp(object):
             draw.line([(0, i * 129), (im.size[0], i * 129)], fill = '#000000')
             
         # Power as a function of frequency for all antennas
-        x = numpy.arange(nchan) * 64 // nchan
+        x = numpy.arange(nchan) * 128 // nchan
         for s in range(nstand):
             if s >= height * width:
                 break
             x0, y0 = (s % width) * 129 + 1, (s // width + 1) * 129
-            draw.text((x0 + 5, y0 - 60), str(s+1), font=font, fill='#000000')
+            draw.text((x0 + 5, y0 - 124), str(s+1), font=font, fill='#000000')
             
             ## XX
             c = '#1F77B4'
             if status[2*s+0] != 33:
                 c = '#799CB4'
-            y = ((54.0 / (maxval - minval)) * (specs[s,:,0] - minval)).clip(0, 54)
+            y = ((120.0 / (maxval - minval)) * (specs[s,:,0] - minval)).clip(0, 120)
+            y = numpy.where(numpy.isfinite(y), y, 0)
             draw.line(list(zip(x0 + x, y0 - y)), fill=c)
             
             ## YY
             c = '#FF7F0E'
             if status[2*s+1] != 33:
                 c = '#FFC28C'
-            y = ((54.0 / (maxval - minval)) * (specs[s,:,1] - minval)).clip(0, 54)
+            y = ((120.0 / (maxval - minval)) * (specs[s,:,1] - minval)).clip(0, 120)
+            y = numpy.where(numpy.isfinite(y), y, 0)
             draw.line(list(zip(x0 + x, y0 - y)), fill=c)
             
             ## Mask
             c = '#000000'
             for b in bad:
-                xl = x0 + b * 64 // nchan
+                xl = x0 + b * 128 // nchan
                 draw.line(list(zip((xl,xl), (y0,y0-8))), fill=c)
                 
         # Summary
@@ -1659,7 +1662,7 @@ def main(args):
     isock.bind(iaddr)
     isock.timeout = 5.0
     ops.append(CaptureOp(log, capture_ring,
-                         isock, nBL*8, 1, 6500, 1, 1, core=cores.pop(0)))
+                         isock, nBL*4, 1, 6500, 1, 1, core=cores.pop(0)))
     ## The flagger
     ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring,
                          core=cores.pop(0)))

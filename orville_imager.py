@@ -61,7 +61,7 @@ from OrvilleImageDB import OrvilleImageDB
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 CAL_PATH = os.path.join(BASE_PATH, 'calibration')
 if not os.path.exists(CAL_PATH):
-    os.mkdir(CAL_PATH)
+    os.makedirs(CAL_PATH, exist_ok=True)
 
 
 STATION = lwana
@@ -261,9 +261,9 @@ class SpectraOp(object):
         self.gpu = gpu
         
         if not os.path.exists(base_dir):
-            os.mkdir(base_dir)
+            os.makedirs(base_dir, exist_ok=True)
         if not os.path.exists(self.output_dir):
-            os.mkdir(self.output_dir)
+            os.makedirs(self.output_dir, exist_ok=True)
             
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.in_proclog   = ProcLog(type(self).__name__+"/in")
@@ -373,11 +373,11 @@ class SpectraOp(object):
             time_tag  = time_tag0
             igulp_size = nstand*(nstand+1)//2*nchan*npol*npol*8
             ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
-            self.iring.resize(igulp_size, igulp_size*5)
+            self.iring.resize(igulp_size, igulp_size*10)
             
             mgulp_size = nchan*1                               # uint8
             mshape = (nchan,)
-            self.mring.resize(mgulp_size, mgulp_size*5)
+            self.mring.resize(mgulp_size, mgulp_size*10)
             
             # Setup the arrays for the frequencies and auto-correlations
             freq = chan0*fC + numpy.arange(nchan)*4*fC
@@ -412,7 +412,7 @@ class SpectraOp(object):
                 ### The actual save
                 outname = os.path.join(self.output_dir, str(mjd))
                 if not os.path.exists(outname):
-                    os.mkdir(outname)
+                    os.makedirs(outname, exist_ok=True)
                 filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.png' % (mjd, h, m, s, freq.min()/1e6, freq.max()/1e6)
                 outname = os.path.join(outname, filename)
                 im.save(outname, 'PNG')
@@ -441,9 +441,9 @@ class BaselineOp(object):
         self.gpu = gpu
         
         if not os.path.exists(base_dir):
-            os.mkdir(base_dir)
+            os.makedirs(base_dir, exist_ok=True)
         if not os.path.exists(self.output_dir):
-            os.mkdir(self.output_dir)
+            os.makedirs(self.output_dir, exist_ok=True)
             
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.in_proclog   = ProcLog(type(self).__name__+"/in")
@@ -586,7 +586,7 @@ class BaselineOp(object):
                 ### The actual save
                 outname = os.path.join(self.output_dir, str(mjd))
                 if not os.path.exists(outname):
-                    os.mkdir(outname)
+                    os.makedirs(outname, exist_ok=True)
                 filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.png' % (mjd, h, m, s, freq.min()/1e6, freq.max()/1e6)
                 outname = os.path.join(outname, filename)
                 im.save(outname, 'PNG')
@@ -1055,13 +1055,13 @@ class WriterOp(object):
         self.gpu = gpu
         
         if not os.path.exists(base_dir):
-            os.mkdir(base_dir)
+            os.makedirs(base_dir, exist_ok=True)
         if not os.path.exists(self.output_dir_images):
-            os.mkdir(self.output_dir_images)
+            os.makedirs(self.output_dir_images, exist_ok=True)
         if not os.path.exists(self.output_dir_archive):
-            os.mkdir(self.output_dir_archive)  
+            os.makedirs(self.output_dir_archive, exist_ok=True)  
         if not os.path.exists(self.output_dir_lwatv):
-            os.mkdir(self.output_dir_lwatv)
+            os.makedirs(self.output_dir_lwatv, exist_ok=True)
             
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.in_proclog   = ProcLog(type(self).__name__+"/in")
@@ -1113,7 +1113,7 @@ class WriterOp(object):
         # Write the image to disk
         outname = os.path.join(self.output_dir_images, str(mjd))
         if not os.path.exists(outname):
-            os.mkdir(outname)
+            os.makedirs(outname, exist_ok=True)
         filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
         outname = os.path.join(outname, filename)
         
@@ -1160,7 +1160,7 @@ class WriterOp(object):
         # Write the image to disk
         outname = os.path.join(self.output_dir_archive, str(mjd))
         if not os.path.exists(outname):
-            os.mkdir(outname)
+            os.makedirs(outname, exist_ok=True)
         filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
         outname = os.path.join(outname, filename)
         
@@ -1364,7 +1364,7 @@ class WriterOp(object):
                     mjd, h, m, s = timetag_to_mjdatetime(time_tag)
                     outname = os.path.join(self.output_dir_lwatv, str(mjd))
                     if not os.path.exists(outname):
-                        os.mkdir(outname)
+                        os.makedirs(outname, exist_ok=True)
                     filename = '%i_%02i%02i%02i_%.3fMHz.png' % (mjd, h, m, s, freq[c]/1e6)
                     outname = os.path.join(outname, filename)
                     canvas = matplotlib.backends.backend_agg.FigureCanvasAgg(fig)
@@ -1403,7 +1403,7 @@ class UploaderOp(object):
         
         for output_dir in (self.output_dir_spectra, self.output_dir_uvdist, self.output_dir_lwatv):
             if not os.path.exists(output_dir):
-                os.mkdir(output_dir)
+                os.makedirs(output_dir, exist_ok=True)
                 
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")

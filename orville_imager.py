@@ -373,11 +373,11 @@ class SpectraOp(object):
             time_tag  = time_tag0
             igulp_size = nstand*(nstand+1)//2*nchan*npol*npol*8
             ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
-            self.iring.resize(igulp_size, igulp_size*10)
+            self.iring.resize(igulp_size, igulp_size*5)
             
             mgulp_size = nchan*1                               # uint8
             mshape = (nchan,)
-            self.mring.resize(mgulp_size, mgulp_size*10)
+            self.mring.resize(mgulp_size, mgulp_size*5)
             
             # Setup the arrays for the frequencies and auto-correlations
             freq = chan0*fC + numpy.arange(nchan)*4*fC

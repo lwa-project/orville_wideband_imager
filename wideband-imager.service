@@ -15,7 +15,7 @@ KillSignal=SIGTERM
 TimeoutStopSec=20
 
 # Run before process
-ExecStartPre=/bin/bash -c '[ -d /data/orville/log ] || mkdir -p /data/orville/log'
+ExecStartPre=/bin/bash -c '[ -d /opt/orville3/log ] || mkdir -p /opt/orville3/log'
 
 # Setup the environment
 Environment=BIFROST_INCLUDE_PATH=/opt/orville3/bifrost/src/bifrost
@@ -23,11 +23,11 @@ Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64:/opt/orville3/bifrost/lib:$LD_
 Environment=PYTHONPATH=/opt/orville3/bifrost/python:$PYTHONPATH
 
 ExecStart=/bin/bash -ec '\
-numactl --cpunodebind=0 --membind=0 -- \
 python3 /opt/orville3/orville_imager.py \
    --flagfile   /opt/orville3/bad_freq.txt \
 	 --logfile    /data/orville/log/wideband-imager.log \
-	 --output-dir /data/orville'
+	 --output-dir /data/orville \
+   --no-oims'
 
 [Install]
 WantedBy=multi-user.target

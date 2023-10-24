@@ -754,6 +754,10 @@ class ImagingOp(object):
             # Alternate phase center for Sevilleta that minimized the w RMS
             self.phase_center_ha = 1.0*ephem.hours("-0:07:59.82")
             self.phase_center_dec = 1.0*ephem.degrees("33:21:27.5")
+        elif self.station.id == 'NA':
+            # Alternate phase center for North Arm that minimized the w RMS
+            self.phase_center_ha = 1.0*ephem.hours("-0:00:43.72")
+            self.phase_center_dec = 1.0*ephem.degrees("34:00:43.8")
             
     def main(self):
         cpu_affinity.set_core(self.core)

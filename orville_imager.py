@@ -1048,13 +1048,14 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), no_oims=False, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
         self.output_dir_images = os.path.join(base_dir, 'images')
         self.output_dir_archive = os.path.join(base_dir, 'archive')
         self.output_dir_lwatv = os.path.join(base_dir, 'lwatv')
+        self.no_oims = no_oims
         self.core = core
         self.gpu = gpu
         
@@ -1115,17 +1116,18 @@ class WriterOp(object):
         info.update(ASP_CONFIG[0])
         
         # Write the image to disk
-        outname = os.path.join(self.output_dir_images, str(mjd))
-        if not os.path.exists(outname):
-            os.makedirs(outname, exist_ok=True)
-        filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
-        outname = os.path.join(outname, filename)
-        
-        db = OrvilleImageDB(outname, mode='a', station=station.name)
-        db.add_image(info, data, mask=mask)
-        db.close()
-        self.log.debug("Added integration to disk as part of '%s'", os.path.basename(outname))
-        
+        if not self.no_oims:
+            outname = os.path.join(self.output_dir_images, str(mjd))
+            if not os.path.exists(outname):
+                os.makedirs(outname, exist_ok=True)
+            filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
+            outname = os.path.join(outname, filename)
+            
+            db = OrvilleImageDB(outname, mode='a', station=station.name)
+            db.add_image(info, data, mask=mask)
+            db.close()
+            self.log.debug("Added integration to disk as part of '%s'", os.path.basename(outname))
+            
     def _save_archive_image(self, station, time_tag, hdr, freq, data):
         # Get the fill level as a fraction
         global FILL_QUEUE
@@ -1162,17 +1164,18 @@ class WriterOp(object):
         info.update(ASP_CONFIG[0])
         
         # Write the image to disk
-        outname = os.path.join(self.output_dir_archive, str(mjd))
-        if not os.path.exists(outname):
-            os.makedirs(outname, exist_ok=True)
-        filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
-        outname = os.path.join(outname, filename)
-        
-        db = OrvilleImageDB(outname, mode='a', station=station.name)
-        db.add_image(info, data)
-        db.close()
-        self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
-        
+        if not self.no_oims:
+            outname = os.path.join(self.output_dir_archive, str(mjd))
+            if not os.path.exists(outname):
+                os.makedirs(outname, exist_ok=True)
+            filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
+            outname = os.path.join(outname, filename)
+            
+            db = OrvilleImageDB(outname, mode='a', station=station.name)
+            db.add_image(info, data)
+            db.close()
+            self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
+            
     def main(self):
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
@@ -1682,7 +1685,7 @@ def main(args):
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image writer and plotter for LWA TV
     ops.append(WriterOp(log, writer_ring, rfimask_ring, base_dir=args.output_dir,
-                         core=cores.pop(0), gpu=gpus.pop(0)))
+                         no_oims=args.no_oims, core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
     ops.append(UploaderOp(log, base_dir=args.output_dir,
                           core=cores.pop(0), gpu=gpus.pop(0)))
@@ -1723,6 +1726,8 @@ if __name__ == '__main__':
                         help='base directory to write output data to')
     parser.add_argument('-f', '--flagfile', type=str,
                         help='path to flagger file that gives frequencies to flag')
+    parser.add_argument('-n', '--no-oims', action='store_true',
+                        help='do not save any .oims files')
     args = parser.parse_args()
     main(args)
     

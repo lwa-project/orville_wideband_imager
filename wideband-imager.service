@@ -24,9 +24,8 @@ Environment=PYTHONPATH=/opt/orville3/bifrost/python:$PYTHONPATH
 
 ExecStart=/bin/bash -ec '\
 python3 /opt/orville3/orville_imager.py \
-   --flagfile   /opt/orville3/bad_freq.txt \
-	 --logfile    /data/orville/log/wideband-imager.log \
-	 --output-dir /data/orville \
+   --logfile    /opt/orville3/log/wideband-imager.log \
+	 --output-dir /opt/orville3 \
    --no-oims'
 
 [Install]

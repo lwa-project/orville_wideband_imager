@@ -1258,7 +1258,7 @@ class WriterOp(object):
             arc_freq = arc_freq.mean(axis=1)
             
             # Setup the frequencies to write images for
-            ichans = [nchan//2,]   ## Only make one image at the center of the band
+            ichans = [numpy.argmin(numpy.abs(freq-38.1e6)),]   ## Only make one image at 38.1 MHz
             
             # Setup the buffer for the automatic color scale control
             vmax = [deque([], maxlen=60) for c in freq]

@@ -282,6 +282,7 @@ class SpectraOp(object):
         try:
             minval = numpy.min(specs[numpy.where(numpy.isfinite(specs))])
             maxval = numpy.max(specs[numpy.where(numpy.isfinite(specs))])
+            minval = maxval - 20
         except ValueError:
             minval = 0.0
             maxval = 1.0

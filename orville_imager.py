@@ -275,7 +275,7 @@ class SpectraOp(object):
                                 'ring0':self.iring.name,
                                 'ring1':self.mring.name})
         
-    def _plot_spectra(self, time_tag, freq, specs, status, mask):
+    def _plot_spectra(self, time_tag, freq, specs, labels, status, mask):
         # Plotting setup
         nchan = freq.size
         nstand = specs.shape[0]
@@ -306,7 +306,7 @@ class SpectraOp(object):
             if s >= height * width:
                 break
             x0, y0 = (s % width) * 129 + 1, (s // width + 1) * 129
-            draw.text((x0 + 5, y0 - 124), str(s+1), font=font, fill='#000000')
+            draw.text((x0 + 5, y0 - 124), str(labels[2*s+0]), font=font, fill='#000000')
             
             ## XX
             c = '#1F77B4'
@@ -354,6 +354,7 @@ class SpectraOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
         
+        labels = [ant.stand.id for ant in ANTENNAS]
         status = [ant.combined_status for ant in ANTENNAS]
         
         for iseq,mseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True)):
@@ -405,7 +406,7 @@ class SpectraOp(object):
                 adata = adata[:,:,[0,1],[0,1]]
                 
                 ## Plot
-                im = self._plot_spectra(time_tag, freq, 10*numpy.log10(adata), status, mdata)
+                im = self._plot_spectra(time_tag, freq, 10*numpy.log10(adata), labels, status, mdata)
                 
                 ## Save
                 ### Timetag stuff

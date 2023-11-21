@@ -68,7 +68,7 @@ STATION = lwana
 ANTENNAS = STATION.antennas
 
 
-W_STEP = 0.1
+W_STEP = 0.3
 
 
 SUPPORT_SIZE = 7

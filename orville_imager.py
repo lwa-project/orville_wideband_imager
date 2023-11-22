@@ -984,10 +984,10 @@ class ImagingOp(object):
                             BFMap("""
                                 if( j > i ) {
                                     auto k = i*(2*(%i-1)+1-i)/2 + j;
-                                    auto xx = idata(k,c,0,0).conj() * phases(c,k,0,0);
-                                    auto yx = idata(k,c,0,1).conj() * phases(c,k,0,1);
-                                    auto xy = idata(k,c,1,0).conj() * phases(c,k,1,0);
-                                    auto yy = idata(k,c,1,1).conj() * phases(c,k,1,1);
+                                    auto xx = idata(k,c,0,0) * phases(c,k,0,0);
+                                    auto yx = idata(k,c,0,1) * phases(c,k,0,1);
+                                    auto xy = idata(k,c,1,0) * phases(c,k,1,0);
+                                    auto yy = idata(k,c,1,1) * phases(c,k,1,1);
                                     
                                     odata(c,i,j,0,0) = xx + yy;
                                     odata(c,i,j,0,1) = xx - yy;

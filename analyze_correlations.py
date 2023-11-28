@@ -73,7 +73,7 @@ def _plot_matrices(matrix, title=None, mask=None, susX=None, susY=None, crossed=
     x = y = np.arange(matrix.shape[0]) + 1
     for i in range(2):
         for j in range(2):
-            avg = (np.sum(matrix[:,:,i,j], axis=0) - np.diag(matrix[:,:,i,j])) / (matrix.shape[0] - 1)
+            avg = np.nansum(matrix[:,:,i,j]-np.diag(matrix[:,:,i,j]), axis=0) / (matrix.shape[0]-1)
 
             indx = 2*i + j
             ax = axes[indx][1]
@@ -159,6 +159,7 @@ def main(args):
             d[:,:,i,j] = cmatrix[:,:,i,i] - cmatrix[:,:,j,k]
             cross_pol.append( np.nanmean(d[:,:,i,j], axis=0, where=mask[:,i]) )
 
+    cross_pol = np.array(cross_pol)
     R = np.amax(cross_pol, axis=0)
     crossed = np.where( R < 0 )[0]
 
@@ -207,8 +208,8 @@ def main(args):
     #autocorrelations and compare to the other autos.
     for i in range(cmatrix.shape[2]):
         autos = np.diag(cmatrix[:,:,i,i])
-        med = np.median(autos)
-        std = np.std(autos)
+        med = np.nanmedian(autos)
+        std = np.nanstd(autos)
         if (np.abs(autos[-1] - med) <= std):
             mask[-1,i] = True
         else:

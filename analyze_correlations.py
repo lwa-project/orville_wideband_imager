@@ -46,7 +46,7 @@ List: {crossed + 1}
 def _plot_matrices(matrix, title=None, mask=None, susX=None, susY=None, crossed=None):
     #Build the plot.
     if title is None:
-        title = 'LWA-SV Correlation Matrices' 
+        title = 'Orville Correlation Matrices' 
         mapper = {0: 'XX', 1: 'XY', 2: 'YX', 3: 'YY'}
     else:
         title = title
@@ -116,7 +116,7 @@ def main(args):
     corr = np.load(args.file)['data']
 
     #Build the full correlation matrix. 
-    nstands = 256
+    nstands = int(np.sqrt(8*corr.shape[0]+1)-1)//2
     cmatrix = np.zeros((nstands, nstands, 2, 2), dtype=np.complex64)
     count = 0
     for i in range(nstands):

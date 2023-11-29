@@ -607,6 +607,127 @@ class BaselineOp(object):
                 
         self.log.info("BaselineOp - Done")
 
+class MatrixOp(object):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
+        self.log = log
+        self.iring = iring
+        self.mring = mring
+        self.output_dir = os.path.join(base_dir, 'matrices')
+        self.core = core
+        self.gpu = gpu
+        
+        if not os.path.exists(base_dir):
+            os.mkdir(base_dir)
+        if not os.path.exists(self.output_dir):
+            os.mkdir(self.output_dir)
+            
+        self.bind_proclog = ProcLog(type(self).__name__+"/bind")
+        self.in_proclog   = ProcLog(type(self).__name__+"/in")
+        self.size_proclog = ProcLog(type(self).__name__+"/size")
+        self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
+        self.perf_proclog = ProcLog(type(self).__name__+"/perf")
+        
+        self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
+        
+        self.station = STATION
+        
+    def main(self):
+        cpu_affinity.set_core(self.core)
+        if self.gpu != -1:
+            BFSetGPU(self.gpu)
+        self.bind_proclog.update({'ncore': 1, 
+                                  'core0': cpu_affinity.get_core(),
+                                  'ngpu': 1,
+                                  'gpu0': BFGetGPU(),})
+
+        for iseq,mseq in zip(self.iring.read(guarantee=True),self.mring.read(guarantee=True)):
+            ihdr = json.loads(iseq.header.tostring())
+            mhdr = json.loads(mseq.header.tostring())
+            
+            self.sequence_proclog.update(ihdr)
+            self.log.info('MatrixOp: Config - %s', ihdr)
+            
+            # Setup the ring metadata and gulp sizes
+            chan0  = ihdr['chan0']
+            nchan  = ihdr['nchan']
+            nbl    = ihdr['nbl']
+            nstand = int(numpy.sqrt(8*nbl+1)-1)//2
+            npol   = ihdr['npol']
+            navg   = ihdr['navg']
+            time_tag0 = iseq.time_tag
+            time_tag  = time_tag0
+            igulp_size = nstand*(nstand+1)//2*nchan*npol*npol*8
+            ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
+            self.iring.resize(igulp_size, igulp_size*10)
+
+            mgulp_size = nchan*1
+            mshape = (nchan,)
+            self.mring.resize(mgulp_size, mgulp_size*10)
+
+            integrations = deque([], maxlen=2)
+            fhdr = json.dumps(ihdr)
+
+            intCount = 0
+            prev_time = time.time()
+            for ispan,mspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size)):
+                if ispan.size < igulp_size:
+                    continue #Ignore final gulp
+                if mspan.size < nchan*1:
+                    continue #Ignore final gulp
+                curr_time = time.time()
+                acquire_time = curr_time - prev_time
+                prev_time = curr_time
+
+                ##Set up and load
+                idata = ispan.data_view(numpy.complex64).reshape(ishape)
+                mdata = mspan.data_view(numpy.uint8).reshape(mshape)
+
+                ##Normalize
+                idata = numpy.array(idata)
+                idata /= numpy.abs(idata)
+
+                ##Apply the flags
+                bad = ~(mdata.astype(bool))
+                idata[:,bad,:,:] = 0
+                idata /= mdata.sum()
+
+                ##Add the flagged data to the deque and make sure we 
+                ##have 2 integrations to use. If we have 2, compute
+                ##the averaged correlation matrix appropriately.
+                integrations.append(idata)
+                if len(integrations) == 2:
+                    even, odd = integrations
+
+                    corr = even * odd.conj()
+                    corr = numpy.sum(corr, axis=1)
+                
+                    #Save
+                    ### Timetag stuff
+                    mjd, h, m, s = timetag_to_mjdatetime(time_tag)
+                    ### The actual save
+                    outname = os.path.join(self.output_dir, str(mjd))
+                    if not os.path.exists(outname):
+                        os.mkdir(outname)
+                    filename = 'CorrMatrix_%i_%02i%02i%02i.npz' % (mjd, h, m, s)
+                    outname = os.path.join(outname, filename)
+                    numpy.savez(outname, hdr=fhdr, data=corr, mask=mdata)
+                    self.log.debug("Wrote correlation matrix %i to disk as '%s'", intCount, os.path.basename(outname))
+                
+                    intCount += 1
+                else:
+                    pass
+
+                time_tag += navg * (fS / 100.0)
+
+                curr_time = time.time()
+                process_time = curr_time - prev_time
+                self.log.debug("MatrixOp processing time was %.3f s", process_time)
+                prev_time = curr_time
+                self.perf_proclog.update({'acquire_time': acquire_time,
+                                          'reserve_time': 0.0,
+                                          'process_time': process_time,})
+
+        self.log.info("MatrixOp - Done")
 
 class FlaggerOp(object):
     def __init__(self, flagfile, log, iring, oring, clip=3, core=-1, gpu=-1):
@@ -636,7 +757,7 @@ class FlaggerOp(object):
                                   'core0': cpu_affinity.get_core(),
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
-        
+ 
         with self.oring.begin_writing() as oring:
             for iseq in self.iring.read(guarantee=True):
                 ihdr = json.loads(iseq.header.tostring())
@@ -1631,7 +1752,7 @@ def main(args):
         log.info("  %s: %s", arg, getattr(args, arg))
         
     # Setup the cores and GPUs to use
-    cores = [0, 1, 2, 3, 4, 5, 6, 7]
+    cores = [0, 1, 2, 3, 4, 5, 6, 7, 7]
     gpus  = [0,]*len(cores)
     log.info("CPUs:         %s", ' '.join([str(v) for v in cores]))
     log.info("GPUs:         %s", ' '.join([str(v) for v in gpus]))
@@ -1675,6 +1796,9 @@ def main(args):
     ## The flagger
     ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring,
                          core=cores.pop(0)))
+    ## The correlation matrix
+    ops.append(MatrixOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
+                         core=cores.pop(0), gpu=gpus.pop(0)))
     ## The spectra plotter
     ops.append(SpectraOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))

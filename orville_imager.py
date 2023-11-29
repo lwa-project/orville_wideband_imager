@@ -717,7 +717,7 @@ class MatrixOp(object):
                 else:
                     pass
 
-                time_tag += navg * (fS / 100.0)
+                time_tag += navg
 
                 curr_time = time.time()
                 process_time = curr_time - prev_time

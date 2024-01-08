@@ -10,6 +10,9 @@ ORVILLE_SOFTWARE_DIR=/home/jdowell/orville3
 find ${ORVILLE_DATA_DIR}/baselines -mtime +22 -exec rm -r {} \;
 find ${ORVILLE_DATA_DIR}/spectra -mtime +22 -exec rm -r {} \;
 
+# Delete correlation matrix data more than three months old
+find ${ORVILLE_DATA_DIR}/matrices -mtime +91 -exec rm -r {} \;
+
 # Delete old logs more than 6 months old
 find ${ORVILLE_DATA_DIR}/log -mtime +181 -exec rm {} \;
 
@@ -44,6 +47,8 @@ usage=`du -hs ${ORVILLE_DATA_DIR}/baselines | tail -n1 | awk '{print $1}'`
 echo "  (u,v) radial plots: ${usage}"
 usage=`du -hs ${ORVILLE_DATA_DIR}/spectra | tail -n1 | awk '{print $1}'`
 echo "  spectra plots: ${usage}"
+usage=`du -hs ${ORVILLE_DATA_DIR}/matrices | tail -n1 | awk '{print $1}'`
+echo "  correlation matrices: ${usage}"
 usage=`du -hs ${ORVILLE_DATA_DIR}/lwatv | tail -n1 | awk '{print $1}'`
 echo "  LWATV images: ${usage}"
 usage=`du -hs ${ORVILLE_DATA_DIR}/movies | tail -n1 | awk '{print $1}'`

@@ -117,9 +117,12 @@ def main(args):
         # Collect header and data from the whole file
         hdrlist = []
         data = numpy.zeros((ints,nchan,4,ngrid,ngrid))
-        for i,(hdr,alldata) in enumerate(db):
+        foo = db.read_image()
+        for i in range(ints):
+            db.seek(i)
+            hdr,alldata = db.read_image()
             hdrlist.append(hdr)
-            data[i] = numpy.asarray(alldata.data)
+            data = numpy.asarray(alldata.data)
         hdr = hdrlist[0]
         hdulist = astrofits.HDUList()
         for chan in range(nchan):
@@ -144,7 +147,11 @@ def main(args):
             ## that to come up with a stop time
             mjd = int(hdrlist[0]['start_time'])
             mpm = int((hdrlist[0]['start_time'] - mjd)*86400.0*1000.0)
-            tInt = hdrlist[0]['int_len']*86400.0
+            # determine if header is in seconds or days
+            if round(hdrlist[0]['int_len']) > 0:
+                tInt = hdrlist[0]['int_len']
+            else:
+                tInt = hdrlist[0]['int_len']*86400.0
 
             if args.verbose:
                 print("    start time: %s" % dateObs)

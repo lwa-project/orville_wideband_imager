@@ -117,12 +117,11 @@ def main(args):
         # Collect header and data from the whole file
         hdrlist = []
         data = numpy.zeros((ints,nchan,4,ngrid,ngrid))
-        foo = db.read_image()
         for i in range(ints):
             db.seek(i)
             hdr,alldata = db.read_image()
             hdrlist.append(hdr)
-            data = numpy.asarray(alldata.data)
+            data[i] = numpy.asarray(alldata.data)
         hdr = hdrlist[0]
         hdulist = astrofits.HDUList()
         for chan in range(nchan):

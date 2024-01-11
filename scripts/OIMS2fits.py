@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 from lsl.common.mcs import mjdmpm_to_datetime
 from lsl.common.paths import DATA as dataPath
 from lsl.misc import parser as aph
@@ -16,6 +15,7 @@ import argparse
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import OrvilleImageDB
 
+badfreqs = numpy.array([20.500,21.000,21.200,21.300,21.500,22.300,23.200,24.500,24.900,28.000,28.400,29.600,29.700,32.500,35.100])
 def calcbeamprops(az,alt,header,freq):
 
     # az and alt need to be the same shape as the image we will correct
@@ -124,6 +124,11 @@ def main(args):
             data[i] = numpy.asarray(alldata.data)
         hdr = hdrlist[0]
         hdulist = astrofits.HDUList()
+        if args.diff:
+            tmpdata = numpy.copy(data)
+            data = numpy.zeros((ints-1,6,4,ngrid,ngrid))
+            for i in range(ints-1):
+                data[i] = tmpdata[i+1] - tmpdata[i]
         for chan in range(nchan):
             imdata = data[:,chan,:,:,:]
             imSize = ngrid    
@@ -138,7 +143,7 @@ def main(args):
             imdata[:,:,invalid[0], invalid[1]] = 0.0
             ext = imSize/(2*sRad)
             if args.pbcorr:
-                for i in range(ints):
+                for i in range(len(data)):
                     XX,YY = pbcorroims(hdrlist[i],imSize,chan)
                     imdata[i,0]/=((XX+YY)/2)
             
@@ -199,8 +204,10 @@ def main(args):
             
             ## Write it to disk
             hdulist.append(hdu)
-
-        outName = filename[0:12]+".fits"
+        if args.diff:
+            outName = filename[0:12]+"-diff"+".fits"
+        else: 
+            outName = filename[0:12]+".fits"
         hdulist.writeto(outName, overwrite=args.force)
         
         
@@ -213,6 +220,8 @@ if __name__ == "__main__":
         )
     parser.add_argument('filename', type=str, nargs='+',
                         help='filename to convert')
+    parser.add_argument('-d', '--diff', action='store_true',
+                        help='Generate diff images')
     parser.add_argument('-f', '--force', action='store_true',
                         help='force overwriting of FITS files')
     parser.add_argument('-p', '--pbcorr', action='store_true',

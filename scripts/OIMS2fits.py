@@ -205,9 +205,9 @@ def main(args):
             ## Write it to disk
             hdulist.append(hdu)
         if args.diff:
-            outName = filename[0:12]+"-diff"+".fits"
+            outName = filename.replace(".oims","-diff.fits")
         else: 
-            outName = filename[0:12]+".fits"
+            outName = filename.replace(".oims",".fits")
         hdulist.writeto(outName, overwrite=args.force)
         
         

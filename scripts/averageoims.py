@@ -40,7 +40,9 @@ for filename in args.filename:
         for i in range(ints):
             db.seek(i)
             hdr,alldata = db.read_image()
+            oldbw = numpy.copy(hdr['bandwidth'])
             hdr['bandwidth'] = hdr['bandwidth']*binchan
+            hdr['start_freq'] = hdr['start_freq'] - oldbw + (hdr['bandwidth']/2)
             for c1 in range(6):
                 masked = 0
                 for c2 in range(int(nchan/binchan)):

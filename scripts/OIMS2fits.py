@@ -130,7 +130,7 @@ def main(args):
                 data[i] = tmpdata[i+1] - tmpdata[i]
         for chan in range(nchan):
             hdulist = astrofits.HDUList()
-            for myint in range(ints):
+            for myint in range(len(data)):
                 hdr = hdrlist[myint]
 
                 imdata = data[myint,chan,:,:,:]

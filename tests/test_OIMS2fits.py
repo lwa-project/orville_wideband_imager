@@ -10,6 +10,7 @@ except NameError:
     pass
     
 import os
+import glob
 import numpy
 import tempfile
 import unittest
@@ -40,30 +41,34 @@ class OIMS2fits_tests(unittest.TestCase):
     def test_OIMS2fits_run(self):
         """Create fits from oims"""
         args = Namespace(filename=[oimsFile],diff=False,force=False,pbcorr=False,verbose=False)
-        fitsFile = oimsFile.replace(".oims",".fits")
-        try:
-            os.remove(fitsFile)
-        except OSError:
-            pass
+        fitsFile = glob.glob(oimsFile.replace(".oims","*.fits"))
+        if fitsFile:
+            for f in fitsFile:
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
         OIMS2fits.main(args)
-        with fits.open(fitsFile) as hdul:
-            nchan = len(hdul)
-            ints = hdul[0].data.shape[0]
-            stokes = hdul[0].data.shape[1]
-            xdata = hdul[0].data.shape[2]
-            ydata = hdul[0].data.shape[3]
+        fitsFile = glob.glob(oimsFile.replace(".oims","*.fits"))
+        for f in fitsFile:
+            with fits.open(f) as hdul:
+                nchan = len(fitsFile)
+                ints = len(hdul)
+                stokes = hdul[0].data.shape[0]
+                xdata = hdul[0].data.shape[1]
+                ydata = hdul[0].data.shape[2]
 
-        db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
-        self.assertEqual(nchan, db.header.nchan)
-        self.assertEqual(ints, db.nint)
-        self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
-        self.assertEqual(xdata, db.header.ngrid)
-        self.assertEqual(ydata, db.header.ngrid)
-        db.close()
-        try:
-            os.remove(fitsFile)
-        except OSError:
-            pass
+            db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
+            self.assertEqual(nchan, db.header.nchan)
+            self.assertEqual(ints, db.nint)
+            self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+            self.assertEqual(xdata, db.header.ngrid)
+            self.assertEqual(ydata, db.header.ngrid)
+            db.close()
+            try:
+                os.remove(f)
+            except OSError:
+                pass
         
 
 

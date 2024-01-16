@@ -203,10 +203,11 @@ def main(args):
                 ## Write it to disk
                 hdulist.append(hdu)
             filebase = filename.split('/')[-1]
+            filedir = "/".join(filename.split('/')[0:-1])+"/"
             if args.diff:
-                outName = filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz-diff.fits"
+                outName = filedir + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz-diff.fits"
             else: 
-                outName = filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz.fits"
+                outName = filedir + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz.fits"
             hdulist.writeto(outName, overwrite=args.force)
         
         

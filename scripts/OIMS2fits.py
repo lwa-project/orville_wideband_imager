@@ -202,8 +202,7 @@ def main(args):
                 
                 ## Write it to disk
                 hdulist.append(hdu)
-            filebase = filename.split('/')[-1]
-            filedir = "/".join(filename.split('/')[0:-1])+"/"
+            filedir,filebase = os.path.split(os.path.abspath(os.path.expanduser(filename)))
             if args.diff:
                 outName = filedir + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz-diff.fits"
             else: 

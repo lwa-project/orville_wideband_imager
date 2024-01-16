@@ -192,7 +192,7 @@ def main(args):
                 hdu.header['END_UTC'] = dateEnd.strftime("%Y-%m-%dT%H:%M:%S")
                 hdu.header['EXPTIME'] = tInt
                 ### LWA1 approximate beam size
-                midfreq = (hdr['start_freq']  + ((chan+1)*hdr['bandwidth']/2))
+                midfreq = (hdr['start_freq']  + ((chan+1)*hdr['bandwidth']) + (hdr['bandwidth']/2))
                 beamSize = 2.2*74e6/midfreq
                 hdu.header['BMAJ'] = beamSize/psize
                 hdu.header['BMIN'] = beamSize/psize

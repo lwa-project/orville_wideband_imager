@@ -42,11 +42,12 @@ for filename in args.filename:
             hdr,alldata = db.read_image()
             oldbw = numpy.copy(hdr['bandwidth'])
             hdr['bandwidth'] = hdr['bandwidth']*binchan
-            hdr['start_freq'] = hdr['start_freq'] - oldbw + (hdr['bandwidth']/2)
+            start_freq = hdr['start_freq'] 
             for c1 in range(6):
                 masked = 0
-                for c2 in range(int(nchan/binchan)):
-                    if round(c2*1e-6,2) in numpy.round(badfreqs,2):
+                for c2 in range(int(binchan)):
+                    thisfreq = start_freq + (c1*hdr['bandwidth']) + (c2*oldbw) + (oldbw/2)
+                    if round(thisfreq*1e-6,2) in numpy.round(badfreqs,2):
                         masked +=1 
                     else:
                         data[i,c1]+= alldata[(c1*binchan)+c2]

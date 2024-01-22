@@ -116,24 +116,49 @@ def main(args):
         nchan = db.header.nchan # number of frequency channels
         # Collect header and data from the whole file
         hdrlist = []
-        data = numpy.zeros((ints,nchan,4,ngrid,ngrid))
-        for i in range(ints):
-            db.seek(i)
-            hdr,alldata = db.read_image()
-            hdrlist.append(hdr)
-            data[i] = numpy.asarray(alldata.data)
-        hdr = hdrlist[0]
-        if args.diff:
-            tmpdata = numpy.copy(data)
-            data = numpy.zeros((ints-1,6,4,ngrid,ngrid))
-            for i in range(ints-1):
-                data[i] = tmpdata[i+1] - tmpdata[i]
+        if args.index:
+            if not args.diff:
+                data = numpy.zeros((1,nchan,4,ngrid,ngrid))
+                db.seek(args.index)
+                hdr,alldata = db.read_image()
+                hdrlist.append(hdr)
+                data[0] = numpy.asarray(alldata.data)
+            else:
+                data = numpy.zeros((1,nchan,4,ngrid,ngrid))
+                # FIRST do the next image
+                db.seek(args.index+1)
+                hdr,alldata = db.read_image()
+                data[0] = numpy.asarray(alldata.data)
+                # Next subtract our image
+                db.seek(args.index)
+                hdr,alldata = db.read_image()
+                hdrlist.append(hdr)
+                data[0] = data[0] - numpy.asarray(alldata.data)
+            hdr = hdrlist[0]
+        else:    
+            data = numpy.zeros((ints,nchan,4,ngrid,ngrid))
+            for i in range(ints):
+                db.seek(i)
+                hdr,alldata = db.read_image()
+                hdrlist.append(hdr)
+                data[i] = numpy.asarray(alldata.data)
+            hdr = hdrlist[0]
+            if args.diff:
+                tmpdata = numpy.copy(data)
+                data = numpy.zeros((len(data)-1,6,4,ngrid,ngrid))
+                for i in range(len(data)):
+                    data[i] = tmpdata[i+1] - tmpdata[i]
         for chan in range(nchan):
+            if args.channel:
+                if chan!=args.channel:
+                    continue
             hdulist = astrofits.HDUList()
             for myint in range(len(data)):
                 hdr = hdrlist[myint]
-
-                imdata = data[myint,chan,:,:,:]
+                if args.diff:
+                    imdata = args.corrfac*data[myint,chan,:,:,:]
+                else:
+                    imdata = args.corrfac*(data[myint,chan,:,:,:] - args.background)
                 imSize = ngrid    
                 
                 ## Zero outside of the horizon so avoid problems
@@ -171,6 +196,7 @@ def main(args):
                 hdu.header['TELESCOP'] = station.decode()
                 hdu.header['EXPTIME'] = tInt
                 ### Coordinates - sky
+                hdu.header['NAXIS'] = 3
                 hdu.header['CTYPE1'] = 'RA---SIN'
                 hdu.header['CRPIX1'] = imSize/2 + 1 + 0.5 * ((imSize+1)%2)
                 hdu.header['CDELT1'] = -360.0/(2*sRad)/numpy.pi
@@ -186,6 +212,7 @@ def main(args):
                 hdu.header['CRPIX3'] = 1
                 hdu.header['CDELT3'] = 1
                 hdu.header['CRVAL3'] = 1
+                hdu.header['CTYPE4'] = ' '
                 hdu.header['LONPOLE'] = 180.0
                 hdu.header['LATPOLE'] = 90.0
                 hdu.header['DATE-OBS'] = dateObs.strftime("%Y-%m-%dT%H:%M:%S")
@@ -199,14 +226,19 @@ def main(args):
                 hdu.header['BPA'] = 0.0
                 ### Frequency
                 hdu.header['RESTFREQ'] = midfreq
+                hdu.header['RESTFRQ'] = midfreq
+                hdu.header['RESTBW'] = hdr['bandwidth']
                 
                 ## Write it to disk
                 hdulist.append(hdu)
             filedir,filebase = os.path.split(os.path.abspath(os.path.expanduser(filename)))
+
             if args.diff:
                 outName = filedir + '/' + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz-diff.fits"
             else: 
                 outName = filedir + '/' + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz.fits"
+            if args.index:
+                outName = outName.replace(".fits",f"-{args.index}.fits")
             hdulist.writeto(outName, overwrite=args.force)
         
         
@@ -219,10 +251,20 @@ if __name__ == "__main__":
         )
     parser.add_argument('filename', type=str, nargs='+',
                         help='filename to convert')
+    parser.add_argument('-b', '--background',type=float,
+                        default = 0,
+                        help='Uncorrected background flux')
+    parser.add_argument('-c', '--corrfac', type=float,
+                        default=1,
+                        help="Flux correction multiplicative factor")
+    parser.add_argument('--channel', type=int,
+                        help="Only image this channel")
     parser.add_argument('-d', '--diff', action='store_true',
                         help='Generate diff images')
     parser.add_argument('-f', '--force', action='store_true',
                         help='force overwriting of FITS files')
+    parser.add_argument('-i', '--index', type=int,
+                        help='Only output this index')
     parser.add_argument('-p', '--pbcorr', action='store_true',
                         help='Perform primary beam correction on Stokes I')
     parser.add_argument('-v', '--verbose', action='store_true',

@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 # Run as the specified user
-User=ndp
+User=jdowell
 
 # Allow unlimited locked memory
 LimitMEMLOCK=infinity
@@ -15,17 +15,17 @@ KillSignal=SIGTERM
 TimeoutStopSec=20
 
 # Run before process
-ExecStartPre=/bin/bash -c '[ -d /opt/orville3/log ] || mkdir -p /opt/orville3/log'
+ExecStartPre=/bin/bash -c '[ -d /data/orville/log ] || mkdir -p /data/orville/log'
 
 # Setup the environment
-Environment=BIFROST_INCLUDE_PATH=/opt/orville3/bifrost/src/bifrost
-Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64:/opt/orville3/bifrost/lib:$LD_LIBRARY_PATH
-Environment=PYTHONPATH=/opt/orville3/bifrost/python:$PYTHONPATH
+Environment=BIFROST_INCLUDE_PATH=/home/jdowell/orville3/bifrost/src/bifrost
+Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64:/home/jdowell/orville3/bifrost/lib:$LD_LIBRARY_PATH
+Environment=PYTHONPATH=/home/jdowell/orville3/bifrost/python:$PYTHONPATH
 
 ExecStart=/bin/bash -ec '\
-python3 /opt/orville3/orville_imager.py \
-   --logfile    /opt/orville3/log/wideband-imager.log \
-	 --output-dir /opt/orville3 \
+python3 /home/jdowell/orville3/orville_imager.py \
+   --logfile    /data/orville/log/wideband-imager.log \
+	 --output-dir /data/orville \
    --no-oims'
 
 [Install]

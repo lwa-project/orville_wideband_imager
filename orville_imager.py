@@ -1224,7 +1224,7 @@ class WriterOp(object):
         lst = station.sidereal_time()
         
         # Downselect to the freq_save region
-        to_save = np.where((freq >= self.freq_save[0]) & (freq <= self.freq_save[1]))[0]
+        to_save = numpy.where((freq >= self.freq_save[0]) & (freq <= self.freq_save[1]))[0]
         freq_save = freq[to_save]
         data_save = data[to_save,...]
         mask_save = None
@@ -1280,7 +1280,7 @@ class WriterOp(object):
         lst = station.sidereal_time()
         
         # Downselect to the freq_save region
-        to_save = np.where((freq >= self.freq_save[0]) & (freq <= self.freq_save[1]))[0]
+        to_save = numpy.where((freq >= self.freq_save[0]) & (freq <= self.freq_save[1]))[0]
         freq_save = freq[to_save]
         data_save = data[to_save,...]
         mask_save = None

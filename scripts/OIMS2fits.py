@@ -6,8 +6,10 @@ from scipy.interpolate import interp1d
 from astropy.io import fits as astrofits
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord
 from astropy.wcs import WCS
+from astropy.wcs.utils import pixel_to_skycoord
 from astropy.time import Time
 from datetime import datetime, timedelta
+from tqdm import tqdm
 import os
 import sys
 import numpy
@@ -55,41 +57,29 @@ def calcbeamprops(az,alt,header,freq):
     return polarpatterns[0], polarpatterns[1]
 
 def pbcorroims(header,imSize,chan):
+    pScale = header['pixel_size']
+    sRad   = 360.0/pScale/numpy.pi / 2
+    w = WCS(naxis=2)
+    w.wcs.crpix = [imSize/2 + 1 + 0.5 * ((imSize+1)%2),imSize/2 + 1 + 0.5 * ((imSize+1)%2)]
+    w.wcs.cdelt = numpy.array([-360.0/(2*sRad)/numpy.pi, 360.0/(2*sRad)/numpy.pi])
+    w.wcs.crval = [header['center_ra'], header['center_dec']]
+    w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
+    x = numpy.arange(imSize) - 0.5
+    y = numpy.arange(imSize) - 0.5
+    x,y = numpy.meshgrid(x,y)
+    maskpix  = ((x-imSize/2.0)**2 + (y-imSize/2.0)**2) > ((0.98*sRad)**2)
+    x[maskpix] = imSize/2
+    y[maskpix] = imSize/2
+    sc = pixel_to_skycoord(x,y,wcs=w,mode='wcs')
+    # Need date and location for converting to altaz
     mjd = int(header['start_time'])
     mpm = int((header['start_time'] - mjd)*86400.0*1000.0)
     tInt = header['int_len']*86400.0
     dateObs = mjdmpm_to_datetime(mjd, mpm)
-    x = numpy.arange(imSize) - 0.5
-    y = numpy.arange(imSize) - 0.5
-    x,y = numpy.meshgrid(x,y)
-    pScale = header['pixel_size']
-    sRad   = 360.0/pScale/numpy.pi / 2
-    crval1 = header['center_ra']*numpy.pi/180
-    crpix1 = imSize/2 + 1 + 0.5 * ((imSize+1)%2) 
-    cdelt1 = numpy.pi*(-360.0/(2*sRad)/numpy.pi)/180
-    crval2 = header['center_dec']*numpy.pi/180
-    crpix2 = imSize/2 + 1 + 0.5 * ((imSize+1)%2) 
-    cdelt2 = numpy.pi*(360.0/(2*sRad)/numpy.pi)/180
-    ra = ((crval1 + (x - crpix1)*cdelt1/(numpy.cos(crval2)))*180/numpy.pi) 
-    dec = (crval2 + cdelt2*(y-crpix2))*180/numpy.pi
-    # Make dec go between -90 and 90
-    # Adjust RA accordingly
-    decover = dec>90
-    decdiff = dec[decover] - 90
-    dec[decover] = dec[decover] - decdiff
-    ra[decover] +=180
-    decoverneg = dec<-90
-    decdiffneg = dec[decoverneg] + 90
-    dec[decoverneg] = dec[decoverneg] + decdiffneg
-    ra[decoverneg] +=180
-    ra = ra % 360
-    
-    sc = SkyCoord(ra,dec,unit='deg')
     lwasv = EarthLocation.from_geodetic(-106.885664,34.348562, height=1475) 
     time = Time(dateObs.strftime("%Y-%m-%dT%H:%M:%S"),format="isot")
     aa = AltAz(location=lwasv, obstime=time)
     myaltaz = sc.transform_to(aa)
-    
     alt = myaltaz.alt.deg
     az = myaltaz.az.deg
     # Keep alt between 0 and 90, adjust az accordingly
@@ -116,7 +106,7 @@ def main(args):
         nchan = db.header.nchan # number of frequency channels
         # Collect header and data from the whole file
         hdrlist = []
-        if args.index:
+        if args.index is not None:
             if not args.diff:
                 data = numpy.zeros((1,nchan,4,ngrid,ngrid))
                 db.seek(args.index)
@@ -149,7 +139,7 @@ def main(args):
                 for i in range(len(data)):
                     data[i] = tmpdata[i+1] - tmpdata[i]
         for chan in range(nchan):
-            if args.channel:
+            if args.channel is not None:
                 if chan!=args.channel:
                     continue
             hdulist = astrofits.HDUList()
@@ -237,7 +227,7 @@ def main(args):
                 outName = filedir + '/' + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz-diff.fits"
             else: 
                 outName = filedir + '/' + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz.fits"
-            if args.index:
+            if args.index is not None:
                 outName = outName.replace(".fits",f"-{args.index}.fits")
             hdulist.writeto(outName, overwrite=args.force)
         

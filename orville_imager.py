@@ -1855,7 +1855,7 @@ if __name__ == '__main__':
         description="Capture data from the NDP wideband correlator mode and image it",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
         )
-    parser.add_argument('-a', '--address', type=str, default='192.168.40.12',
+    parser.add_argument('-a', '--address', type=str, default='192.168.40.46',
                         help='IP address to listen to')
     parser.add_argument('-p', '--port', type=int, default=11000,
                         help='UDP port to listen to')

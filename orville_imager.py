@@ -1283,10 +1283,7 @@ class WriterOp(object):
         to_save = numpy.where((freq >= self.freq_save[0]) & (freq <= self.freq_save[1]))[0]
         freq_save = freq[to_save]
         data_save = data[to_save,...]
-        mask_save = None
-        if mask is not None:
-            mask_save = mask[to_save,...]
-            
+        
         # Fill the info dictionary that describes this image
         info = {'start_time':    mjd_f,
                 'int_len':       hdr['navg'] / fS,

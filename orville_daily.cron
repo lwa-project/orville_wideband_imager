@@ -6,9 +6,9 @@ ORVILLE_DATA_DIR=/data/orville
 # Where the software is stored
 ORVILLE_SOFTWARE_DIR=/home/jdowell/orville3
 
-# Delete (u,v) radial and spectra plots more than three days old
-find ${ORVILLE_DATA_DIR}/baselines -mtime +4 -exec rm -r {} \;
-find ${ORVILLE_DATA_DIR}/spectra -mtime +4 -exec rm -r {} \;
+# Delete (u,v) radial and spectra plots more than one week old
+find ${ORVILLE_DATA_DIR}/baselines -mtime +8 -exec rm -r {} \;
+find ${ORVILLE_DATA_DIR}/spectra -mtime +8 -exec rm -r {} \;
 
 # Delete correlation matrix data more than three weeks old
 find ${ORVILLE_DATA_DIR}/matrices -mtime +22 -exec rm -r {} \;
@@ -32,9 +32,9 @@ rsync -e ssh -avHL ${ORVILLE_DATA_DIR}/movies/*[0-9][0-9].mov ${ORVILLE_DATA_DIR
 rsync -e ssh -avH ${ORVILLE_DATA_DIR}/archive/6* \
       pasi@lda10g.alliance.unm.edu:/FileStore/Orville2/
 
-# Delete events as needed to keep us below 0.5 TB
+# Delete events as needed to keep us below 12 TB
 rawsize=`du -b ${ORVILLE_DATA_DIR}/images | tail -n1 | awk '{print $1}'`
-while [[ "${rawsize}" -ge $((512*1024*1024*1024)) ]]; do
+while [[ "${rawsize}" -ge $((12*1024*1024*1024*1024)) ]]; do
     oldest=`ls -td ${ORVILLE_DATA_DIR}/images/6* | tail -n1`
     echo "Removing ${oldest}"
     rm -rf ${oldest}

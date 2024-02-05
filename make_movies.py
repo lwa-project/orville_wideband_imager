@@ -14,15 +14,7 @@ import argparse
 from tempfile import mkdtemp
 
 
-OLD_LWATV2_MOVIES = [[51544, 51545], [57513, 57573], [57576, 57577], [57579, 57580],
-                     [57584, 57584], [57589, 57666], [57668, 57698], [57700, 57717],
-                     [57719, 57724], [57726, 57732], [57734, 57734], [57736, 57738],
-                     [57741, 57743], [57766, 57770], [57772, 57773], [57776, 57792],
-                     [57797, 57798], [57801, 57855], [57859, 57888], [57891, 57903],
-                     [57905, 58110], [58112, 58121], [58127, 58148], [58150, 58402],
-                     [58410, 58789], [58792, 58867], [58869, 58897], [58899, 59005],
-                     [59010, 59078], [59082, 59101], [59137, 59187], [59189, 59380],
-                     [59382, 59387], [59389, 59407]]
+OLD_LWATV4_MOVIES = []
 
 
 def main(args):
@@ -90,13 +82,13 @@ def main(args):
         
     # Update the movielist.js file
     movie_mjds = []
-    for span in OLD_LWATV2_MOVIES:
+    for span in OLD_LWATV4_MOVIES:
         movie_mjds.extend(list(range(span[0], span[1]+1)))
     all_movies = glob.glob(os.path.join(args.output_dir, '*[0-9][0-9][0-9].mov'))
     for moviename in all_movies:
         mjd = os.path.splitext(os.path.basename(moviename))[0]
         mjd = int(mjd, 10)
-        if mjd <= OLD_LWATV2_MOVIES[-1][1]:
+        if mjd <= OLD_LWATV4_MOVIES[-1][1]:
             continue
         movie_mjds.append(mjd)
     movie_mjds.sort()

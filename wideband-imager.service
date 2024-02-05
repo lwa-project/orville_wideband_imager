@@ -24,9 +24,8 @@ Environment=PYTHONPATH=/home/jdowell/orville3/bifrost/python:$PYTHONPATH
 
 ExecStart=/bin/bash -ec '\
 python3 /home/jdowell/orville3/orville_imager.py \
-   --logfile    /data/orville/log/wideband-imager.log \
-	 --output-dir /data/orville \
-   --no-oims'
+	 --logfile    /data/orville/log/wideband-imager.log \
+	 --output-dir /data/orville'
 
 [Install]
 WantedBy=multi-user.target

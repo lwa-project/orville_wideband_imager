@@ -1171,13 +1171,14 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), no_oims=False, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), freq_save=(0,100e6), no_oims=False, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
         self.output_dir_images = os.path.join(base_dir, 'images')
         self.output_dir_archive = os.path.join(base_dir, 'archive')
         self.output_dir_lwatv = os.path.join(base_dir, 'lwatv')
+        self.freq_save = freq_save
         self.no_oims = no_oims
         self.core = core
         self.gpu = gpu
@@ -1222,14 +1223,22 @@ class WriterOp(object):
         station.date = mjd_f + (MJD_OFFSET - DJD_OFFSET)
         lst = station.sidereal_time()
         
+        # Downselect to the freq_save region
+        to_save = np.where((freq >= self.freq_save[0]) & (freq <= self.freq_save[1]))[0]
+        freq_save = freq[to_save]
+        data_save = data[to_save,...]
+        mask_save = None
+        if mask is not None:
+            mask_save = mask[to_save,...]
+            
         # Fill the info dictionary that describes this image
         info = {'start_time':    mjd_f,
                 'int_len':       hdr['navg'] / fS,
                 'fill':          fill,
                 'lst':           lst * 0.5/numpy.pi,
-                'start_freq':    freq[0],
-                'stop_freq':     freq[-1],
-                'bandwidth':     freq[1]-freq[0],
+                'start_freq':    freq_save[0],
+                'stop_freq':     freq_save[-1],
+                'bandwidth':     freq_save[1]-freq_save[0],
                 'center_ra':     (lst - hdr['phase_center_ha']) * 180/numpy.pi,
                 'center_dec':    hdr['phase_center_dec'] * 180/numpy.pi,
                 'center_az':     hdr['phase_center_az'] * 180/numpy.pi,
@@ -1243,11 +1252,11 @@ class WriterOp(object):
             outname = os.path.join(self.output_dir_images, str(mjd))
             if not os.path.exists(outname):
                 os.makedirs(outname, exist_ok=True)
-            filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
+            filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq_save.min()/1e6, freq_save.max()/1e6)
             outname = os.path.join(outname, filename)
             
             db = OrvilleImageDB(outname, mode='a', station=station.name)
-            db.add_image(info, data, mask=mask)
+            db.add_image(info, data_save, mask=mask_save)
             db.close()
             self.log.debug("Added integration to disk as part of '%s'", os.path.basename(outname))
             
@@ -1270,14 +1279,22 @@ class WriterOp(object):
         station.date = mjd_f + (MJD_OFFSET - DJD_OFFSET)
         lst = station.sidereal_time()
         
+        # Downselect to the freq_save region
+        to_save = np.where((freq >= self.freq_save[0]) & (freq <= self.freq_save[1]))[0]
+        freq_save = freq[to_save]
+        data_save = data[to_save,...]
+        mask_save = None
+        if mask is not None:
+            mask_save = mask[to_save,...]
+            
         # Fill the info dictionary that describes this image
         info = {'start_time':    mjd_f,
                 'int_len':       hdr['navg'] / fS,
                 'fill':          fill,
                 'lst':           lst * 0.5/numpy.pi,
-                'start_freq':    freq[0],
-                'stop_freq':     freq[-1],
-                'bandwidth':     freq[1]-freq[0],
+                'start_freq':    freq_save[0],
+                'stop_freq':     freq_save[-1],
+                'bandwidth':     freq_save[1]-freq_save[0],
                 'center_ra':     (lst - hdr['phase_center_ha']) * 180/numpy.pi,
                 'center_dec':    hdr['phase_center_dec'] * 180/numpy.pi,
                 'center_az':     hdr['phase_center_az'] * 180/numpy.pi,
@@ -1291,11 +1308,11 @@ class WriterOp(object):
             outname = os.path.join(self.output_dir_archive, str(mjd))
             if not os.path.exists(outname):
                 os.makedirs(outname, exist_ok=True)
-            filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
+            filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq_save.min()/1e6, freq_save.max()/1e6)
             outname = os.path.join(outname, filename)
             
             db = OrvilleImageDB(outname, mode='a', station=station.name)
-            db.add_image(info, data)
+            db.add_image(info, data_save)
             db.close()
             self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
             
@@ -1811,7 +1828,8 @@ def main(args):
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image writer and plotter for LWA TV
     ops.append(WriterOp(log, writer_ring, rfimask_ring, base_dir=args.output_dir,
-                         no_oims=args.no_oims, core=cores.pop(0), gpu=gpus.pop(0)))
+                         freq_save=args.freq_save, no_oims=args.no_oims,
+                         core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
     ops.append(UploaderOp(log, base_dir=args.output_dir,
                           core=cores.pop(0), gpu=gpus.pop(0)))
@@ -1854,6 +1872,17 @@ if __name__ == '__main__':
                         help='path to flagger file that gives frequencies to flag')
     parser.add_argument('-n', '--no-oims', action='store_true',
                         help='do not save any .oims files')
+    parser.add_argument('-s', '--freq-save', type=str, default='',
+                        help='frequency range in MHz to save as "start~stop", blank is everything')
     args = parser.parse_args()
+    
+    if args.freq_save == '':
+        args.freq_save = (0, 100e6)
+    else:
+        start, stop = args.freq_save.split('~')
+        start = float(start)*1e6
+        stop = float(stop)*1e6
+        args.freq_save = (start, stop)
+        
     main(args)
     

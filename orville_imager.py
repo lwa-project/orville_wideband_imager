@@ -251,6 +251,115 @@ class CaptureOp(object):
                     
         del capture
 
+class DownselectOp(object):
+    def __init__(self, log, iring, oring, start_freq=0.0, stop_freq=100e6, archive_bandwidth=3.3e6, core=-1):
+        self.log = log
+        self.iring = iring
+        self.oring = oring
+        self.start_freq = start_freq
+        self.stop_freq = stop_freq
+        self.archive_bandwidth = archive_bandwidth
+        self.core = core
+        
+        self.bind_proclog = ProcLog(type(self).__name__+"/bind")
+        self.in_proclog   = ProcLog(type(self).__name__+"/in")
+        self.out_proclog  = ProcLog(type(self).__name__+"/out")
+        self.size_proclog = ProcLog(type(self).__name__+"/size")
+        self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
+        self.perf_proclog = ProcLog(type(self).__name__+"/perf")
+        
+        self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
+        self.out_proclog.update({'nring':1, 'ring0':self.oring.name})
+        
+    def main(self):
+        cpu_affinity.set_core(self.core)
+        self.bind_proclog.update({'ncore': 1, 
+                                  'core0': cpu_affinity.get_core(),})
+        
+        with self.oring.begin_writing() as oring:
+            for iseq in self.iring.read(guarantee=True):
+                ihdr = json.loads(iseq.header.tostring())
+                
+                self.sequence_proclog.update(ihdr)
+                self.log.info('DownselectOp: Config - %s', ihdr)
+                
+                # Setup the ring metadata and gulp sizes
+                chan0  = ihdr['chan0']
+                nchan  = ihdr['nchan']
+                nbl    = ihdr['nbl']
+                npol   = ihdr['npol']
+                navg   = ihdr['navg']
+                time_tag0 = iseq.time_tag
+                time_tag  = time_tag0*1
+                
+                freq = chan0*fC + numpy.arange(nchan)*4*fC
+                valid = numpy.where((freq >= self.start_freq) & (freq <= self.stop_freq))[0]
+                ochan = len(valid)
+                
+                archive_chan = int(round(self.archive_bandwidth/(4*fC)))
+                side = 0
+                while ochan % archive_chan != 0:
+                    if side:
+                        valid = valid[1:]
+                    else:
+                        valid = valid[:-1]
+                    ochan = len(valid)
+                    side ^= 1
+                    
+                igulp_size = nbl*nchan*npol*npol*8      # complex64
+                ishape = (nbl,nchan,npol,npol)
+                ogulp_size = nbl*ochan*npol*npol*8      # complex64
+                oshape = (nbl,ochan,npol,npol)
+                self.iring.resize(igulp_size, igulp_size*10)
+                self.oring.resize(ogulp_size, ogulp_size*10)
+                
+                ohdr = ihdr.copy()
+                ohdr['chan0'] = chan0 + 4*valid[1]
+                ohdr['cfreq'] = (chan0 + 4*valid[1])*fC
+                ohdr['nchan'] = ochan
+                ohdr['bw']    = ochan*4*fC,
+                ohdr['achan'] = ochan // archive_chan
+                ohdr['abw']   = ochan // archive_chan * 4*fC
+                ohdr_str = json.dumps(ohdr)
+                
+                ## Report
+                self.log.info("Downselecting to %i channels, %.3f MHz to %.3fMHz", ochan, freq[valid[0]]/1e6, freq[valid[-1]]/1e6)
+                self.log.info("Archival decimation factor is %i", archive_chan)
+                self.log.info("Archival channel bandwidth is %.3f MHz", archive_chan*4*fC)
+                
+                prev_time = time.time()
+                with oring.begin_sequence(time_tag=iseq.time_tag, header=ohdr_str) as oseq:
+                    for ispan in iseq.read(igulp_size):
+                        if ispan.size < igulp_size:
+                            continue # Ignore final gulp
+                        curr_time = time.time()
+                        acquire_time = curr_time - prev_time
+                        prev_time = curr_time
+                        
+                        with oseq.reserve(ogulp_size) as ospan:
+                            curr_time = time.time()
+                            reserve_time = curr_time - prev_time
+                            prev_time = curr_time
+                            
+                            ## Setup and load
+                            idata = ispan.data_view(numpy.complex64).reshape(ishape)
+                            odata = ospan.data_view(numpy.complex64).reshape(oshape)
+                            
+                            ## Save
+                            odata[...] = idata[:,valid,:,:]
+                            
+                            time_tag += navg
+                            
+                            curr_time = time.time()
+                            process_time = curr_time - prev_time
+                            self.log.debug('Downselect processing time was %.3f s', process_time)
+                            prev_time = curr_time
+                            self.perf_proclog.update({'acquire_time': acquire_time, 
+                                                      'reserve_time': reserve_time, 
+                                                      'process_time': process_time,})
+                            
+        self.log.info("DownselectOp - Done")            
+    
 class SpectraOp(object):
     def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
         self.log = log
@@ -432,7 +541,6 @@ class SpectraOp(object):
                                           'process_time': process_time,})
                 
         self.log.info("SpectraOp - Done")
-
 
 class BaselineOp(object):
     def __init__(self, log, iring, base_dir=os.getcwd(), core=-1, gpu=-1):
@@ -847,8 +955,7 @@ class FlaggerOp(object):
                                                       'reserve_time': reserve_time, 
                                                       'process_time': process_time,})
                             
-        self.log.info("FlaggerOp - Done")            
-
+        self.log.info("FlaggerOp - Done")
 
 class ImagingOp(object):
     def __init__(self, log, iring, oring, decimation=1, core=-1, gpu=-1):
@@ -1169,16 +1276,14 @@ class ImagingOp(object):
                     
         self.log.info("ImagingOp - Done")
 
-
 class WriterOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), freq_save=(0,100e6), no_oims=False, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), no_oims=False, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
         self.output_dir_images = os.path.join(base_dir, 'images')
         self.output_dir_archive = os.path.join(base_dir, 'archive')
         self.output_dir_lwatv = os.path.join(base_dir, 'lwatv')
-        self.freq_save = freq_save
         self.no_oims = no_oims
         self.core = core
         self.gpu = gpu
@@ -1223,22 +1328,14 @@ class WriterOp(object):
         station.date = mjd_f + (MJD_OFFSET - DJD_OFFSET)
         lst = station.sidereal_time()
         
-        # Downselect to the freq_save region
-        to_save = numpy.where((freq >= self.freq_save[0]) & (freq <= self.freq_save[1]))[0]
-        freq_save = freq[to_save]
-        data_save = data[to_save,...]
-        mask_save = None
-        if mask is not None:
-            mask_save = mask[to_save,...]
-            
         # Fill the info dictionary that describes this image
         info = {'start_time':    mjd_f,
                 'int_len':       hdr['navg'] / fS,
                 'fill':          fill,
                 'lst':           lst * 0.5/numpy.pi,
-                'start_freq':    freq_save[0],
-                'stop_freq':     freq_save[-1],
-                'bandwidth':     freq_save[1]-freq_save[0],
+                'start_freq':    freq[0],
+                'stop_freq':     freq[-1],
+                'bandwidth':     freq[1]-freq[0],
                 'center_ra':     (lst - hdr['phase_center_ha']) * 180/numpy.pi,
                 'center_dec':    hdr['phase_center_dec'] * 180/numpy.pi,
                 'center_az':     hdr['phase_center_az'] * 180/numpy.pi,
@@ -1256,7 +1353,7 @@ class WriterOp(object):
             outname = os.path.join(outname, filename)
             
             db = OrvilleImageDB(outname, mode='a', station=station.name)
-            db.add_image(info, data_save, mask=mask_save)
+            db.add_image(info, data, mask=mask)
             db.close()
             self.log.debug("Added integration to disk as part of '%s'", os.path.basename(outname))
             
@@ -1279,19 +1376,14 @@ class WriterOp(object):
         station.date = mjd_f + (MJD_OFFSET - DJD_OFFSET)
         lst = station.sidereal_time()
         
-        # Downselect to the freq_save region
-        to_save = numpy.where((freq >= self.freq_save[0]) & (freq <= self.freq_save[1]))[0]
-        freq_save = freq[to_save]
-        data_save = data[to_save,...]
-        
         # Fill the info dictionary that describes this image
         info = {'start_time':    mjd_f,
                 'int_len':       hdr['navg'] / fS,
                 'fill':          fill,
                 'lst':           lst * 0.5/numpy.pi,
-                'start_freq':    freq_save[0],
-                'stop_freq':     freq_save[-1],
-                'bandwidth':     freq_save[1]-freq_save[0],
+                'start_freq':    freq[0],
+                'stop_freq':     freq[-1],
+                'bandwidth':     freq[1]-freq[0],
                 'center_ra':     (lst - hdr['phase_center_ha']) * 180/numpy.pi,
                 'center_dec':    hdr['phase_center_dec'] * 180/numpy.pi,
                 'center_az':     hdr['phase_center_az'] * 180/numpy.pi,
@@ -1309,7 +1401,7 @@ class WriterOp(object):
             outname = os.path.join(outname, filename)
             
             db = OrvilleImageDB(outname, mode='a', station=station.name)
-            db.add_image(info, data_save)
+            db.add_image(info, data)
             db.close()
             self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
             
@@ -1375,6 +1467,7 @@ class WriterOp(object):
             navg       = ihdr['navg']
             ngrid      = ihdr['ngrid']
             res        = ihdr['res']
+            achan      = ihdr['achan']
             time_tag0  = iseq.time_tag
             time_tag   = time_tag0
             igulp_size = nchan*npol*npol*ngrid*ngrid*4        # float32
@@ -1391,7 +1484,7 @@ class WriterOp(object):
             t0 = time.time()
             freq = chan0*fC + numpy.arange(nchan)*4*fC
             arc_freq = freq*1.0
-            arc_freq = arc_freq.reshape(6, -1)
+            arc_freq = arc_freq.reshape(achan, -1)
             arc_freq = arc_freq.mean(axis=1)
             
             # Setup the frequencies to write images for
@@ -1534,7 +1627,6 @@ class WriterOp(object):
                 
         self.log.info("WriterOp - Done")
 
-
 class UploaderOp(object):
     def __init__(self, log, base_dir=os.getcwd(), core=-1, gpu=-1):
         self.log = log
@@ -1655,7 +1747,6 @@ class UploaderOp(object):
             
             time.sleep(max([10-process_time, 0]))
 
-
 class AnalogSettingsOp(object):
     def __init__(self, log, core=-1, gpu=-1):
         self.log = log
@@ -1731,7 +1822,6 @@ class AnalogSettingsOp(object):
             while time.time() < t_sleep:
                 time.sleep(1)
 
-
 class LogFileHandler(TimedRotatingFileHandler):
     def __init__(self, filename, rollover_callback=None):
         days_per_file =  1
@@ -1766,7 +1856,7 @@ def main(args):
         log.info("  %s: %s", arg, getattr(args, arg))
         
     # Setup the cores and GPUs to use
-    cores = [0, 1, 2, 3, 4, 5, 6, 7, 7]
+    cores = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9]
     gpus  = [0,]*len(cores)
     log.info("CPUs:         %s", ' '.join([str(v) for v in cores]))
     log.info("GPUs:         %s", ' '.join([str(v) for v in gpus]))
@@ -1796,6 +1886,8 @@ def main(args):
     # Create the rings that we need
     capture_ring = Ring(name="capture", space='system')
     rfimask_ring = Ring(name="rfimask", space='system')
+    downsel_ring = Ring(name="downselect", space='system')
+    dwnmask_ring = Ring(name="downselect_rfimask", space='system')
     writer_ring = Ring(name="writer", space='system')
     
     # Setup the processing blocks
@@ -1819,14 +1911,21 @@ def main(args):
     ## The radial (u,v) plotter
     ops.append(BaselineOp(log, capture_ring, base_dir=args.output_dir,
                           core=cores.pop(0), gpu=gpus.pop(0)))
+    ## Downselection for imaging
+    ops.append(DownselectOp(log, capture_ring, downsel_ring,
+                            start_freq=args.freq_save[0], stop_freq=args.freq_save[1],
+                            archive_bandwidth=args.archive_chan_bw,
+                            core=cores.pop(0)))
+    ## Downselection flagger
+    ops.append(FlaggerOp(args.flagfile, log, downsel_ring, dwnmask_ring,
+                         core=cores.pop(0)))
     ## The imager
-    ops.append(ImagingOp(log, capture_ring, writer_ring,
+    ops.append(ImagingOp(log, downsel_ring, writer_ring,
                          decimation=args.decimation,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image writer and plotter for LWA TV
-    ops.append(WriterOp(log, writer_ring, rfimask_ring, base_dir=args.output_dir,
-                         freq_save=args.freq_save, no_oims=args.no_oims,
-                         core=cores.pop(0), gpu=gpus.pop(0)))
+    ops.append(WriterOp(log, writer_ring, dwnmask_ring, base_dir=args.output_dir,
+                        core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
     ops.append(UploaderOp(log, base_dir=args.output_dir,
                           core=cores.pop(0), gpu=gpus.pop(0)))
@@ -1871,6 +1970,8 @@ if __name__ == '__main__':
                         help='do not save any .oims files')
     parser.add_argument('-s', '--freq-save', type=str, default='',
                         help='frequency range in MHz to save as "start~stop", blank is everything')
+    parser.add_argument('-c', '--archive-chan-bw', type=float, default=3.3,
+                        help='archive channel bandwidth in MHz')
     args = parser.parse_args()
     
     if args.freq_save == '':
@@ -1880,6 +1981,7 @@ if __name__ == '__main__':
         start = float(start)*1e6
         stop = float(stop)*1e6
         args.freq_save = (start, stop)
-        
+    args.archive_chan_bw *= 1e6
+    
     main(args)
     

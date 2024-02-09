@@ -9,7 +9,6 @@ from astropy.wcs import WCS
 from astropy.wcs.utils import pixel_to_skycoord
 from astropy.time import Time
 from datetime import datetime, timedelta
-from tqdm import tqdm
 import os
 import sys
 import numpy

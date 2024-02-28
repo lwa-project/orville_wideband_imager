@@ -1666,28 +1666,21 @@ class AnalogSettingsOp(object):
             acquire_time = curr_time - prev_time
             prev_time = curr_time
             
-            new_config = {'asp_filter': -1,
+            new_config = {'asp_filter':  -1,
                           'asp_atten_1': -1,
                           'asp_atten_2': -1,
                           'asp_atten_s': -1}
             
             try:
-                uh = urlopen('https://lwalab.phys.unm.edu/OpScreen/lwasv/arx.dat',
-                             timeout=5)
-                config = uh.read()
-                config = config.decode()
-                config = config.split('\n')
-                for line in config:
-                    line = line.strip().rstrip()
-                    if len(line) < 3:
-                        continue
-                        
+                with urlopen('https://lwalab.phys.unm.edu/OpScreen/lwasv/arx.json', timeout=5) as uh:
+                    config = json.load(uh)
+                    
+                for entry in config:
+                    setting = entry['setting']
                     try:
-                        key, value, yymmdd, hhmmss = line.split(';;;', 3)
-                        value = int(value, 10)
-                        new_config[mapping[key]] = value
-                    except (IndexError, ValueError) as err:
-                        self.log.warn("Failed to parse ASP configuration line '%s': %s", line, str(err))
+                        new_config[mapping[setting]] = entry['value']
+                    except KeyError as err:
+                        self.log.warn("Failed to load ASP configuration setting '%s': %s", setting, str(err))
             except Exception as err:
                 self.log.warn('Failed to download ASP configuration: %s', str(err))
                 

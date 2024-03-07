@@ -34,7 +34,7 @@ jobs:
             numpy \
             matplotlib \
             scipy \
-            h5py 
+            h5py
           python -m pip install git+https://github.com/lwa-project/lsl.git
           python -m pip install pylint
       - name: Test

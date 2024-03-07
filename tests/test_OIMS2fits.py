@@ -40,7 +40,7 @@ class OIMS2fits_tests(unittest.TestCase):
         self.testPath = tempfile.mkdtemp(prefix='test-OIMS2fits-', suffix='.tmp')
     def test_OIMS2fits_run(self):
         """Create fits from oims"""
-        args = Namespace(filename=[oimsFile],diff=False,force=False,pbcorr=False,verbose=False)
+        args = Namespace(filename=[oimsFile],background=0,corrfac=1,channel=None,diff=False,force=False,index=None,pbcorr=False,verbose=False)
         fitsFile = glob.glob(oimsFile.replace(".oims","*.fits"))
         if fitsFile:
             for f in fitsFile:

@@ -6,6 +6,7 @@ from scipy.interpolate import interp1d
 from astropy.io import fits as astrofits
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord
 from astropy.wcs import WCS
+from astropy.wcs.utils import pixel_to_skycoord
 from astropy.time import Time
 from datetime import datetime, timedelta
 import os
@@ -55,41 +56,29 @@ def calcbeamprops(az,alt,header,freq):
     return polarpatterns[0], polarpatterns[1]
 
 def pbcorroims(header,imSize,chan):
+    pScale = header['pixel_size']
+    sRad   = 360.0/pScale/numpy.pi / 2
+    w = WCS(naxis=2)
+    w.wcs.crpix = [imSize/2 + 1 + 0.5 * ((imSize+1)%2),imSize/2 + 1 + 0.5 * ((imSize+1)%2)]
+    w.wcs.cdelt = numpy.array([-360.0/(2*sRad)/numpy.pi, 360.0/(2*sRad)/numpy.pi])
+    w.wcs.crval = [header['center_ra'], header['center_dec']]
+    w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
+    x = numpy.arange(imSize) - 0.5
+    y = numpy.arange(imSize) - 0.5
+    x,y = numpy.meshgrid(x,y)
+    maskpix  = ((x-imSize/2.0)**2 + (y-imSize/2.0)**2) > ((0.98*sRad)**2)
+    x[maskpix] = imSize/2
+    y[maskpix] = imSize/2
+    sc = pixel_to_skycoord(x,y,wcs=w,mode='wcs')
+    # Need date and location for converting to altaz
     mjd = int(header['start_time'])
     mpm = int((header['start_time'] - mjd)*86400.0*1000.0)
     tInt = header['int_len']*86400.0
     dateObs = mjdmpm_to_datetime(mjd, mpm)
-    x = numpy.arange(imSize) - 0.5
-    y = numpy.arange(imSize) - 0.5
-    x,y = numpy.meshgrid(x,y)
-    pScale = header['pixel_size']
-    sRad   = 360.0/pScale/numpy.pi / 2
-    crval1 = header['center_ra']*numpy.pi/180
-    crpix1 = imSize/2 + 1 + 0.5 * ((imSize+1)%2) 
-    cdelt1 = numpy.pi*(-360.0/(2*sRad)/numpy.pi)/180
-    crval2 = header['center_dec']*numpy.pi/180
-    crpix2 = imSize/2 + 1 + 0.5 * ((imSize+1)%2) 
-    cdelt2 = numpy.pi*(360.0/(2*sRad)/numpy.pi)/180
-    ra = ((crval1 + (x - crpix1)*cdelt1/(numpy.cos(crval2)))*180/numpy.pi) 
-    dec = (crval2 + cdelt2*(y-crpix2))*180/numpy.pi
-    # Make dec go between -90 and 90
-    # Adjust RA accordingly
-    decover = dec>90
-    decdiff = dec[decover] - 90
-    dec[decover] = dec[decover] - decdiff
-    ra[decover] +=180
-    decoverneg = dec<-90
-    decdiffneg = dec[decoverneg] + 90
-    dec[decoverneg] = dec[decoverneg] + decdiffneg
-    ra[decoverneg] +=180
-    ra = ra % 360
-    
-    sc = SkyCoord(ra,dec,unit='deg')
     lwasv = EarthLocation.from_geodetic(-106.885664,34.348562, height=1475) 
     time = Time(dateObs.strftime("%Y-%m-%dT%H:%M:%S"),format="isot")
     aa = AltAz(location=lwasv, obstime=time)
     myaltaz = sc.transform_to(aa)
-    
     alt = myaltaz.alt.deg
     az = myaltaz.az.deg
     # Keep alt between 0 and 90, adjust az accordingly
@@ -116,24 +105,49 @@ def main(args):
         nchan = db.header.nchan # number of frequency channels
         # Collect header and data from the whole file
         hdrlist = []
-        data = numpy.zeros((ints,nchan,4,ngrid,ngrid))
-        for i in range(ints):
-            db.seek(i)
-            hdr,alldata = db.read_image()
-            hdrlist.append(hdr)
-            data[i] = numpy.asarray(alldata.data)
-        hdr = hdrlist[0]
-        if args.diff:
-            tmpdata = numpy.copy(data)
-            data = numpy.zeros((ints-1,6,4,ngrid,ngrid))
-            for i in range(ints-1):
-                data[i] = tmpdata[i+1] - tmpdata[i]
+        if args.index is not None:
+            if not args.diff:
+                data = numpy.zeros((1,nchan,4,ngrid,ngrid))
+                db.seek(args.index)
+                hdr,alldata = db.read_image()
+                hdrlist.append(hdr)
+                data[0] = numpy.asarray(alldata.data)
+            else:
+                data = numpy.zeros((1,nchan,4,ngrid,ngrid))
+                # FIRST do the next image
+                db.seek(args.index+1)
+                hdr,alldata = db.read_image()
+                data[0] = numpy.asarray(alldata.data)
+                # Next subtract our image
+                db.seek(args.index)
+                hdr,alldata = db.read_image()
+                hdrlist.append(hdr)
+                data[0] = data[0] - numpy.asarray(alldata.data)
+            hdr = hdrlist[0]
+        else:    
+            data = numpy.zeros((ints,nchan,4,ngrid,ngrid))
+            for i in range(ints):
+                db.seek(i)
+                hdr,alldata = db.read_image()
+                hdrlist.append(hdr)
+                data[i] = numpy.asarray(alldata.data)
+            hdr = hdrlist[0]
+            if args.diff:
+                tmpdata = numpy.copy(data)
+                data = numpy.zeros((len(data)-1,6,4,ngrid,ngrid))
+                for i in range(len(data)):
+                    data[i] = tmpdata[i+1] - tmpdata[i]
         for chan in range(nchan):
+            if args.channel is not None:
+                if chan!=args.channel:
+                    continue
             hdulist = astrofits.HDUList()
             for myint in range(len(data)):
                 hdr = hdrlist[myint]
-
-                imdata = data[myint,chan,:,:,:]
+                if args.diff:
+                    imdata = args.corrfac*data[myint,chan,:,:,:]
+                else:
+                    imdata = args.corrfac*(data[myint,chan,:,:,:] - args.background)
                 imSize = ngrid    
                 
                 ## Zero outside of the horizon so avoid problems
@@ -171,6 +185,7 @@ def main(args):
                 hdu.header['TELESCOP'] = station.decode()
                 hdu.header['EXPTIME'] = tInt
                 ### Coordinates - sky
+                hdu.header['NAXIS'] = 3
                 hdu.header['CTYPE1'] = 'RA---SIN'
                 hdu.header['CRPIX1'] = imSize/2 + 1 + 0.5 * ((imSize+1)%2)
                 hdu.header['CDELT1'] = -360.0/(2*sRad)/numpy.pi
@@ -186,6 +201,7 @@ def main(args):
                 hdu.header['CRPIX3'] = 1
                 hdu.header['CDELT3'] = 1
                 hdu.header['CRVAL3'] = 1
+                hdu.header['CTYPE4'] = ' '
                 hdu.header['LONPOLE'] = 180.0
                 hdu.header['LATPOLE'] = 90.0
                 hdu.header['DATE-OBS'] = dateObs.strftime("%Y-%m-%dT%H:%M:%S")
@@ -199,14 +215,19 @@ def main(args):
                 hdu.header['BPA'] = 0.0
                 ### Frequency
                 hdu.header['RESTFREQ'] = midfreq
+                hdu.header['RESTFRQ'] = midfreq
+                hdu.header['RESTBW'] = hdr['bandwidth']
                 
                 ## Write it to disk
                 hdulist.append(hdu)
             filedir,filebase = os.path.split(os.path.abspath(os.path.expanduser(filename)))
+
             if args.diff:
                 outName = filedir + '/' + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz-diff.fits"
             else: 
                 outName = filedir + '/' + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz.fits"
+            if args.index is not None:
+                outName = outName.replace(".fits",f"-{args.index}.fits")
             hdulist.writeto(outName, overwrite=args.force)
         
         
@@ -219,10 +240,20 @@ if __name__ == "__main__":
         )
     parser.add_argument('filename', type=str, nargs='+',
                         help='filename to convert')
+    parser.add_argument('-b', '--background',type=float,
+                        default = 0,
+                        help='Uncorrected background flux')
+    parser.add_argument('-c', '--corrfac', type=float,
+                        default=1,
+                        help="Flux correction multiplicative factor")
+    parser.add_argument('--channel', type=int,
+                        help="Only image this channel")
     parser.add_argument('-d', '--diff', action='store_true',
                         help='Generate diff images')
     parser.add_argument('-f', '--force', action='store_true',
                         help='force overwriting of FITS files')
+    parser.add_argument('-i', '--index', type=int,
+                        help='Only output this index')
     parser.add_argument('-p', '--pbcorr', action='store_true',
                         help='Perform primary beam correction on Stokes I')
     parser.add_argument('-v', '--verbose', action='store_true',

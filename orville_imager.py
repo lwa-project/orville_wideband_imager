@@ -1233,7 +1233,7 @@ class WriterOp(object):
             
         # Fill the info dictionary that describes this image
         info = {'start_time':    mjd_f,
-                'int_len':       hdr['navg'] / fS,
+                'int_len':       hdr['navg'] / fS / 86400.0,
                 'fill':          fill,
                 'lst':           lst * 0.5/numpy.pi,
                 'start_freq':    freq_save[0],
@@ -1286,7 +1286,7 @@ class WriterOp(object):
         
         # Fill the info dictionary that describes this image
         info = {'start_time':    mjd_f,
-                'int_len':       hdr['navg'] / fS,
+                'int_len':       hdr['navg'] / fS / 86400.0,
                 'fill':          fill,
                 'lst':           lst * 0.5/numpy.pi,
                 'start_freq':    freq_save[0],

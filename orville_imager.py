@@ -1678,7 +1678,8 @@ class AnalogSettingsOp(object):
                 for entry in config:
                     setting = entry['setting']
                     try:
-                        new_config[mapping[setting]] = entry['value']
+                        if entry['value'] is not None:
+                            new_config[mapping[setting]] = entry['value']
                     except KeyError as err:
                         self.log.warn("Failed to load ASP configuration setting '%s': %s", setting, str(err))
             except Exception as err:

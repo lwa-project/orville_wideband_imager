@@ -582,6 +582,12 @@ class OrvilleImageDB(object):
             shutil.copy(outFile.name, filename)
             
     # Implement some built-ins to make reading images more "Pythonic" ...
+    def __enter__(self):
+        return self
+        
+    def __exit__(self, type, value, tb):
+        self.close()
+        
     def __len__(self):
         return self.nint
         

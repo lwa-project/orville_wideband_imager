@@ -14,7 +14,7 @@ import numpy
 import tempfile
 import unittest
 
-from OrvilleImager import OrvilleImageDB
+from lsl_toolkits.OrvilleImager import OrvilleImageDB
 
 
 __version__  = "0.2"
@@ -39,7 +39,7 @@ class oims_tests(unittest.TestCase):
     def test_oims_read(self):
         """Test reading in an image from a OrvilleImage file."""
 
-        db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
+        db = OrvilleImageDB(oimsFile, 'r')
         
         # Read in the first image with the correct number of elements
         hdr, data = db.read_image()
@@ -54,7 +54,7 @@ class oims_tests(unittest.TestCase):
     def test_oims_loop(self):
         """Test reading in a collection of images in a loop."""
         
-        db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
+        db = OrvilleImageDB(oimsFile, 'r')
         
         # Go
         for i,(hdr,data) in enumerate(db):
@@ -68,9 +68,9 @@ class oims_tests(unittest.TestCase):
         # Setup the file names
         testFile = os.path.join(self.testPath, 'test.oims')
         
-        db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
-        nf = OrvilleImageDB.OrvilleImageDB(testFile, 'w', imager_version=db.header.imager_version, 
-                                                          station=db.header.station)
+        db = OrvilleImageDB(oimsFile, 'r')
+        nf = OrvilleImageDB(testFile, 'w', imager_version=db.header.imager_version, 
+                            station=db.header.station)
                                             
         # Fill it
         for rec in db:
@@ -81,8 +81,8 @@ class oims_tests(unittest.TestCase):
         nf.close()
         
         # Re-open
-        db0 = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
-        db1 = OrvilleImageDB.OrvilleImageDB(testFile, 'r')
+        db0 = OrvilleImageDB(oimsFile, 'r')
+        db1 = OrvilleImageDB(testFile, 'r')
         
         # Validate
         ## File header

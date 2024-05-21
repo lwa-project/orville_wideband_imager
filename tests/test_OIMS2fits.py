@@ -15,9 +15,11 @@ import numpy
 import tempfile
 import unittest
 from argparse import Namespace
+
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from OrvilleImager import OrvilleImageDB
+
+from lsl_toolkits.OrvilleImager import OrvilleImageDB
 from scripts import OIMS2fits
 from astropy.io import fits
 
@@ -58,7 +60,7 @@ class OIMS2fits_tests(unittest.TestCase):
                 xdata = hdul[0].data.shape[1]
                 ydata = hdul[0].data.shape[2]
 
-            db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
+            db = OrvilleImageDB(oimsFile, 'r')
             self.assertEqual(nchan, db.header.nchan)
             self.assertEqual(ints, db.nint)
             self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))

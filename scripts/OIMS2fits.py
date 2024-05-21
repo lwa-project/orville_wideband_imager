@@ -13,7 +13,7 @@ import os
 import sys
 import numpy
 import argparse
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from lsl_toolkits.OrvilleImager import OrvilleImageDB
 
 badfreqs = numpy.array([20.500,21.000,21.200,21.300,21.500,22.300,23.200,24.500,24.900,28.000,28.400,29.600,29.700,32.500,35.100])

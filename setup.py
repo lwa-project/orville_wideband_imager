@@ -3,7 +3,7 @@ import glob
 from setuptools import setup, Extension, Distribution, find_packages
 
 setup(name                 = "lsl-toolkits-orvilleimage",
-      version              = "0.2.0",
+      version              = "0.4.0",
       description          = "LSL Toolkit for Orville Image Database Files",
       long_description     = "LWA Software Library reader for PASI Image Database files",
       author               = "J. Dowell, S. Varghese, and G. B. Taylor",

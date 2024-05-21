@@ -7,21 +7,28 @@ import glob
 import numpy
 import tempfile
 import unittest
-from argparse import Namespace
-
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import subprocess
 
 from lsl_toolkits.OrvilleImager import OrvilleImageDB
-from scripts import OIMS2fits
 from astropy.io import fits
 
-__version__  = "0.2"
+currentDir = os.path.abspath(os.getcwd())
+if os.path.exists(os.path.join(currentDir, 'test_OIMS2fits.py')):
+    MODULE_BUILD = currentDir
+else:
+    MODULE_BUILD = None
+    
+run_scripts_tests = False
+if MODULE_BUILD is not None:
+    run_scripts_tests = True
+
+__version__  = "0.3"
 __author__    = "Jayce Dowell"
 
 
 oimsFile = os.path.join(os.path.dirname(__file__), 'data', 'test.oims')
 
+@unittest.skipUnless(run_scripts_tests, "cannot determine correct script path to use")
 class OIMS2fits_tests(unittest.TestCase):
     """A unittest.TestCase collection of unit tests for the OrvilleImageDB
     module."""
@@ -35,16 +42,28 @@ class OIMS2fits_tests(unittest.TestCase):
         self.testPath = tempfile.mkdtemp(prefix='test-OIMS2fits-', suffix='.tmp')
     def test_OIMS2fits_run(self):
         """Create fits from oims"""
-        args = Namespace(filename=[oimsFile],background=0,corrfac=1,channel=None,diff=False,force=False,index=None,pbcorr=False,verbose=False)
-        fitsFile = glob.glob(oimsFile.replace(".oims","*.fits"))
+        
+        fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))
         if fitsFile:
             for f in fitsFile:
                 try:
                     os.remove(f)
                 except OSError:
                     pass
-        OIMS2fits.main(args)
-        fitsFile = glob.glob(oimsFile.replace(".oims","*.fits"))
+                    
+        with open('OIMS2fits.log', 'w') as logfile:
+            try:
+                cmd = [sys.executable, '../scripts/OIMS2fits.py', oimsFile]
+                status = subprocess.check_call(cmd, stdout=logfile)
+            except subprocess.CalledProcessError:
+                status = 1
+                
+        if status == 1:
+            with open('OIMS2fits.log', 'r') as logfile:
+                print(logfile.read())
+        self.assertEqual(status, 0)
+        
+        fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))
         for f in fitsFile:
             with fits.open(f) as hdul:
                 nchan = len(fitsFile)
@@ -64,7 +83,6 @@ class OIMS2fits_tests(unittest.TestCase):
                 os.remove(f)
             except OSError:
                 pass
-        
 
 
 class OIMS2fits_test_suite(unittest.TestSuite):

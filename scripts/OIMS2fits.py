@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+
 from lsl.common.mcs import mjdmpm_to_datetime
 from lsl.common.paths import DATA as dataPath
 from lsl.misc import parser as aph
@@ -17,6 +18,7 @@ import argparse
 from lsl_toolkits.OrvilleImager import OrvilleImageDB
 
 badfreqs = numpy.array([20.500,21.000,21.200,21.300,21.500,22.300,23.200,24.500,24.900,28.000,28.400,29.600,29.700,32.500,35.100])
+
 def calcbeamprops(az,alt,header,freq):
 
     # az and alt need to be the same shape as the image we will correct
@@ -88,6 +90,7 @@ def pbcorroims(header,imSize,chan):
     freq = (int(header['start_freq'])  + ((int(chan)+1)*int(header['bandwidth'])/2))
     XX,YY = calcbeamprops(az,alt,header,freq)
     return XX,YY
+
 def main(args):
     for filename in args.filename:
         db = OrvilleImageDB(filename, 'r')

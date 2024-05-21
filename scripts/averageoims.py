@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+
 from lsl.common.mcs import mjdmpm_to_datetime
 from lsl.common.paths import DATA as dataPath
 from lsl.common.stations import lwasv
@@ -13,48 +14,54 @@ import os
 import sys
 import numpy
 import argparse
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from lsl_toolkits.OrvilleImager import OrvilleImageDB
+
 badfreqs = numpy.array([20.500,21.000,21.200,21.300,21.500,22.300,23.200,24.500,24.900,28.000,28.400,29.600,29.700,32.500,35.100])
-parser = argparse.ArgumentParser()
-parser.add_argument('filename',type=str, nargs='+')
-args = parser.parse_args()
-station = lwasv
-for filename in args.filename:
-    db = OrvilleImageDB(filename, 'r')
-    outname = filename.replace(".oims","-avg.oims")
-    ints = db.nint 
-    nchan = db.header.nchan # number of frequency channels
-    ngrid = db.header.ngrid # image size
-    if nchan > 6: # Data needs averaging
+
+def main(args):
+    station = lwasv
+    for filename in args.filename:
+        db = OrvilleImageDB(filename, 'r')
         outname = filename.replace(".oims","-avg.oims")
-        if os.path.isfile(outname):
-            raise FileExistsError
-        newdb = OrvilleImageDB(outname, mode='w', station=station.name)
         ints = db.nint 
         nchan = db.header.nchan # number of frequency channels
         ngrid = db.header.ngrid # image size
-        data = numpy.zeros((ints,6,4,ngrid,ngrid))
+        if nchan > 6: # Data needs averaging
+            outname = filename.replace(".oims","-avg.oims")
+            if os.path.isfile(outname):
+                raise FileExistsError
+            newdb = OrvilleImageDB(outname, mode='w', station=station.name)
+            ints = db.nint 
+            nchan = db.header.nchan # number of frequency channels
+            ngrid = db.header.ngrid # image size
+            data = numpy.zeros((ints,6,4,ngrid,ngrid))
 
-        binchan = int(nchan/6)
-        for i in range(ints):
-            db.seek(i)
-            hdr,alldata = db.read_image()
-            oldbw = numpy.copy(hdr['bandwidth'])
-            hdr['bandwidth'] = hdr['bandwidth']*binchan
-            start_freq = hdr['start_freq'] 
-            for c1 in range(6):
-                masked = 0
-                for c2 in range(int(binchan)):
-                    thisfreq = start_freq + (c1*hdr['bandwidth']) + (c2*oldbw) + (oldbw/2)
-                    if round(thisfreq*1e-6,2) in numpy.round(badfreqs,2):
-                        masked +=1 
-                    else:
-                        data[i,c1]+= alldata[(c1*binchan)+c2]
-                data[i,c1]/=(binchan-masked)
-            newdb.add_image(hdr, data[i])
-        newdb.close()
-        db.close()
-    else:
-        print("already averaged")
-        db.close()
+            binchan = int(nchan/6)
+            for i in range(ints):
+                db.seek(i)
+                hdr,alldata = db.read_image()
+                oldbw = numpy.copy(hdr['bandwidth'])
+                hdr['bandwidth'] = hdr['bandwidth']*binchan
+                start_freq = hdr['start_freq'] 
+                for c1 in range(6):
+                    masked = 0
+                    for c2 in range(int(binchan)):
+                        thisfreq = start_freq + (c1*hdr['bandwidth']) + (c2*oldbw) + (oldbw/2)
+                        if round(thisfreq*1e-6,2) in numpy.round(badfreqs,2):
+                            masked +=1 
+                        else:
+                            data[i,c1]+= alldata[(c1*binchan)+c2]
+                    data[i,c1]/=(binchan-masked)
+                newdb.add_image(hdr, data[i])
+            newdb.close()
+            db.close()
+        else:
+            print("already averaged")
+            db.close()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('filename',type=str, nargs='+')
+    args = parser.parse_args()
+    main(args)

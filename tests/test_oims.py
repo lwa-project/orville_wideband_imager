@@ -7,7 +7,7 @@ import numpy
 import tempfile
 import unittest
 
-from lsl_toolkits.OrvilleImager import OrvilleImageDB
+from lsl_toolkits.OrvilleImager import OrvilleImageDB, BAD_FREQ_LIST
 
 
 __version__  = "0.2"
@@ -112,6 +112,11 @@ class oims_tests(unittest.TestCase):
                         
         db0.close()
         db1.close()
+        
+    def test_bad_freq_list(self):
+        """Test the list of bad frequencies that should be flagged/removed."""
+        
+        self.assertTrue(BAD_FREQ_LIST.size > 0)
         
     def tearDown(self):
         """Remove the test path directory and its contents"""

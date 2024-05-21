@@ -2,13 +2,6 @@
 Unit test for OrvilleImageDB module.
 """
 
-# Python2 compatibility
-from __future__ import print_function, division, absolute_import
-try:
-    range = xrange
-except NameError:
-    pass
-    
 import os
 import glob
 import numpy

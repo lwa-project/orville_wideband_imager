@@ -6,7 +6,7 @@ __version__ = '0.4'
 from .OrvilleImageDB import OrvilleImageDB
 
 _BAD_FREQ_PATH = os.path.dirname(os.path.abspath(__file__))
-_BAD_FREQ_PATH = os.path.join(_BAD_FREQ_PATH, 'data', 'bad_freq.txt')
+_BAD_FREQ_PATH = os.path.join(_BAD_FREQ_PATH, '_bad_freq.py')
 
 BAD_FREQ_LIST = np.array([], dtype=np.float32)
 if os.path.exists(_BAD_FREQ_PATH):

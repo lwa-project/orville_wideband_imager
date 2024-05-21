@@ -25,9 +25,9 @@ Orville data with reduced spectral resolution (six 3.3 MHz channels) are availab
 ## Reading OIMS Files
 You can use the `OrvilleImageDB.py` Python module to read the data stored in an OIMS file:
 ```
-from OrvilleImager import OrvilleImageDB
+from lsl_toolkits.OrvilleImager import OrvilleImageDB
 
-db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
+db = OrvilleImageDB(oimsFile, 'r')
 
 # Get parameters from the input file
 

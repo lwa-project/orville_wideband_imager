@@ -14,14 +14,14 @@ import sys
 import numpy
 import argparse
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import OrvilleImageDB
+from lsl_toolkits.OrvilleImager import OrvilleImageDB
 badfreqs = numpy.array([20.500,21.000,21.200,21.300,21.500,22.300,23.200,24.500,24.900,28.000,28.400,29.600,29.700,32.500,35.100])
 parser = argparse.ArgumentParser()
 parser.add_argument('filename',type=str, nargs='+')
 args = parser.parse_args()
 station = lwasv
 for filename in args.filename:
-    db = OrvilleImageDB.OrvilleImageDB(filename, 'r')
+    db = OrvilleImageDB(filename, 'r')
     outname = filename.replace(".oims","-avg.oims")
     ints = db.nint 
     nchan = db.header.nchan # number of frequency channels
@@ -30,7 +30,7 @@ for filename in args.filename:
         outname = filename.replace(".oims","-avg.oims")
         if os.path.isfile(outname):
             raise FileExistsError
-        newdb = OrvilleImageDB.OrvilleImageDB(outname, mode='w', station=station.name)
+        newdb = OrvilleImageDB(outname, mode='w', station=station.name)
         ints = db.nint 
         nchan = db.header.nchan # number of frequency channels
         ngrid = db.header.ngrid # image size

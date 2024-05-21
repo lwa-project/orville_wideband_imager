@@ -8,9 +8,11 @@ def update_bad_freq():
     setup_script_path = os.path.dirname(os.path.abspath(__file__))
     bad_freq = os.path.join(setup_script_path, 'bad_freq.txt')
     if os.path.exists(bad_freq):
-        bad_freq_toolkit_path = os.path.join(setup_script_path, 'lsl_toolkits', 'OrvilleImager', 'data')
-        os.mkdir(bad_freq_toolkit_path)
-        shutil.copy(bad_freq, bad_freq_toolkit_path)
+        bad_freq_toolkit_path = os.path.join(setup_script_path, 'lsl_toolkits', 'OrvilleImager')
+        shutil.copy(bad_freq, os.path.join(bad_freq_toolkit_path, '_bad_freq.py'))
+
+print('cat')
+update_bad_freq()
 
 setup(name                 = "lsl-toolkits-orvilleimage",
       version              = "0.4.0",
@@ -24,6 +26,5 @@ setup(name                 = "lsl-toolkits-orvilleimage",
       scripts              = glob.glob('scripts/*.py'),
       python_requires      = '>=3.6',
       install_requires     = ['numpy', 'scipy', 'astropy', 'lsl'],
-      include_package_data = True,
       zip_safe             = False,
       test_suite           = "tests")

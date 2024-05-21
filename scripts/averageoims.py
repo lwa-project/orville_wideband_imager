@@ -15,9 +15,7 @@ import sys
 import numpy
 import argparse
 
-from lsl_toolkits.OrvilleImager import OrvilleImageDB
-
-badfreqs = numpy.array([20.500,21.000,21.200,21.300,21.500,22.300,23.200,24.500,24.900,28.000,28.400,29.600,29.700,32.500,35.100])
+from lsl_toolkits.OrvilleImager import OrvilleImageDB, BAD_FREQ_LIST as badfreqs
 
 def main(args):
     station = lwasv

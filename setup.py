@@ -1,6 +1,16 @@
+import os
 import glob
+import shutil
 
 from setuptools import setup, Extension, Distribution, find_packages
+
+def update_bad_freq():
+    setup_script_path = os.path.dirname(os.path.abspath(__file__))
+    bad_freq = os.path.join(setup_script_path, 'bad_freq.txt')
+    if os.path.exists(bad_freq):
+        bad_freq_toolkit_path = os.path.join(setup_script_path, 'lsl_toolkits', 'OrvilleImager')
+        os.mkdir(bad_freq_toolkit_path)
+        shutil.copy(bad_freq, bad_freq_toolkit_path)
 
 setup(name                 = "lsl-toolkits-orvilleimage",
       version              = "0.4.0",

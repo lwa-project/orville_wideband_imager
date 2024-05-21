@@ -13,7 +13,7 @@ from lsl_toolkits.OrvilleImager import OrvilleImageDB
 from astropy.io import fits
 
 currentDir = os.path.abspath(os.getcwd())
-if os.path.exists(os.path.join(currentDir, 'test_OIMS2fits.py')):
+if os.path.exists(os.path.join(currentDir, 'tests', 'test_OIMS2fits.py')):
     MODULE_BUILD = currentDir
 else:
     MODULE_BUILD = None
@@ -53,7 +53,7 @@ class OIMS2fits_tests(unittest.TestCase):
                     
         with open('OIMS2fits.log', 'w') as logfile:
             try:
-                cmd = [sys.executable, '../scripts/OIMS2fits.py', oimsFile]
+                cmd = [sys.executable, 'scripts/OIMS2fits.py', oimsFile]
                 status = subprocess.check_call(cmd, stdout=logfile)
             except subprocess.CalledProcessError:
                 status = 1

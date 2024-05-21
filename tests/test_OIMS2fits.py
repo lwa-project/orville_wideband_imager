@@ -3,6 +3,7 @@ Unit test for OrvilleImageDB module.
 """
 
 import os
+import sys
 import glob
 import numpy
 import tempfile

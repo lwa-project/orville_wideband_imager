@@ -72,13 +72,13 @@ class OIMS2fits_tests(unittest.TestCase):
                 xdata = hdul[0].data.shape[1]
                 ydata = hdul[0].data.shape[2]
 
-            db = OrvilleImageDB(oimsFile, 'r')
-            self.assertEqual(nchan, db.header.nchan)
-            self.assertEqual(ints, db.nint)
-            self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
-            self.assertEqual(xdata, db.header.ngrid)
-            self.assertEqual(ydata, db.header.ngrid)
-            db.close()
+            with OrvilleImageDB(oimsFile, 'r') as db:
+                self.assertEqual(nchan, db.header.nchan)
+                self.assertEqual(ints, db.nint)
+                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                self.assertEqual(xdata, db.header.ngrid)
+                self.assertEqual(ydata, db.header.ngrid)
+                
             try:
                 os.remove(f)
             except OSError:

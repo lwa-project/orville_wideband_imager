@@ -17,7 +17,7 @@ import unittest
 from argparse import Namespace
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import OrvilleImageDB
+from OrvilleImager import OrvilleImageDB
 from scripts import OIMS2fits
 from astropy.io import fits
 

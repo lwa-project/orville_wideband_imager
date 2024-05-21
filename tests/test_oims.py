@@ -14,7 +14,7 @@ import numpy
 import tempfile
 import unittest
 
-import OrvilleImageDB
+from OrvilleImager import OrvilleImageDB
 
 
 __version__  = "0.2"

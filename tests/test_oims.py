@@ -44,6 +44,18 @@ class oims_tests(unittest.TestCase):
         
         db.close()
         
+    def test_oims_context_manager(self):
+        """Test reading in an image from a OrvilleImage file using the context manager."""
+
+        with OrvilleImageDB(oimsFile, 'r') as db:
+            # Read in the first image with the correct number of elements
+            hdr, data = db.read_image()
+            ## Image
+            self.assertEqual(data.shape[0], db.header.nchan)
+            self.assertEqual(data.shape[1], len(db.header.stokes_params.split(b',')))
+            self.assertEqual(data.shape[2], db.header.ngrid)
+            self.assertEqual(data.shape[3], db.header.ngrid)
+            
     def test_oims_loop(self):
         """Test reading in a collection of images in a loop."""
         

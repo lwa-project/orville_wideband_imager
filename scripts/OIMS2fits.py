@@ -15,7 +15,7 @@ import sys
 import numpy
 import argparse
 
-from lsl_toolkits.OrvilleImager import OrvilleImageDB
+from lsl_toolkits.OrvilleImage import OrvilleImageDB
 
 def calcbeamprops(az,alt,header,freq):
 

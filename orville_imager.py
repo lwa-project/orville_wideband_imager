@@ -55,7 +55,7 @@ BFNoSpinZone()
 
 import PIL.Image, PIL.ImageDraw, PIL.ImageFont
 
-from lsl_toolkits.OrvilleImager import OrvilleImageDB
+from lsl_toolkits.OrvilleImage import OrvilleImageDB
 
 
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))

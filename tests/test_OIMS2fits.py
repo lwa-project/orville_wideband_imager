@@ -10,7 +10,7 @@ import tempfile
 import unittest
 import subprocess
 
-from lsl_toolkits.OrvilleImager import OrvilleImageDB
+from lsl_toolkits.OrvilleImage import OrvilleImageDB
 from astropy.io import fits
 
 currentDir = os.path.abspath(os.getcwd())

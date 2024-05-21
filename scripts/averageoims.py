@@ -61,7 +61,10 @@ def main(args):
             db.close()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description='convert full frequency resolution .oims files from LWA-SV six channel archival style .oims files',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
     parser.add_argument('filename',type=str, nargs='+')
     args = parser.parse_args()
     main(args)

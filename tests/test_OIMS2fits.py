@@ -62,6 +62,7 @@ class OIMS2fits_tests(unittest.TestCase):
         if status == 1:
             with open('OIMS2fits.log', 'r') as logfile:
                 print(logfile.read())
+        os.unlink('OIMS2fits.log')
         self.assertEqual(status, 0)
         
         fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))

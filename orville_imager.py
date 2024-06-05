@@ -1593,6 +1593,9 @@ class UploaderOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
         
+        if not os.path.exists('/dev/shm/uploader'):
+            os.mkdir('/dev/shm/uploader')
+            
         prev_time = time.time()
         while not self.shutdown_event.is_set():
             curr_time = time.time()

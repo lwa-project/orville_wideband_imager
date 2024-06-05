@@ -1564,6 +1564,9 @@ class UploaderOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
         
+        if not os.path.exists('/dev/shm/uploader'):
+            os.mkdir('/dev/shm/uploader')
+            
         prev_time = time.time()
         while not self.shutdown_event.is_set():
             curr_time = time.time()
@@ -1574,7 +1577,7 @@ class UploaderOp(object):
             ## Spectra
             try:
                 latest_spectra = SPEC_QUEUE.get_nowait()
-                shutil.copy2(latest_spectra, '/tmp/lwatv_spec.png')
+                shutil.copy2(latest_spectra, '/dev/shm/uploader/lwatv_spec.png')
                 SPEC_QUEUE.task_done()
             except queue.Empty:
                 pass
@@ -1582,7 +1585,7 @@ class UploaderOp(object):
             ## (u,v) radial distribution
             try:
                 latest_uvdist = DIST_QUEUE.get_nowait()
-                shutil.copy2(latest_uvdist, '/tmp/lwatv_uvdist.png')
+                shutil.copy2(latest_uvdist, '/dev/shm/uploader/lwatv_uvdist.png')
                 DIST_QUEUE.task_done()
             except queue.Empty:
                 pass
@@ -1590,8 +1593,8 @@ class UploaderOp(object):
             ## LWATV image
             try:
                 latest_lwatv = LWATV_QUEUE.get_nowait()
-                shutil.copy2(latest_lwatv, '/tmp/lwatv.png')
-                shutil.copy2(os.path.join(self.output_dir_lwatv, 'lwatv_timestamp'), '/tmp/lwatv_timestamp')
+                shutil.copy2(latest_lwatv, '/dev/shm/uploader/lwatv.png')
+                shutil.copy2(os.path.join(self.output_dir_lwatv, 'lwatv_timestamp'), '/dev/shm/uploader/lwatv_timestamp')
             except queue.Empty:
                 pass
                 
@@ -1599,29 +1602,31 @@ class UploaderOp(object):
             try:
                 ## Stage
                 p = subprocess.Popen(['rsync', '-e', 'ssh', '-av',
-                                      '/tmp/lwatv.png', '/tmp/lwatv_timestamp',
-                                      '/tmp/lwatv_spec.png', '/tmp/lwatv_uvdist.png',
+                                      '/dev/shm/uploader/lwatv.png', '/dev/shm/uploader/lwatv_timestamp',
+                                      '/dev/shm/uploader/lwatv_spec.png', '/dev/shm/uploader/lwatv_uvdist.png',
                                       'mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/'],
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                 _, error = p.communicate()
                 if p.returncode != 0:
                     self.log.warning('Error uploading: %s', error.decode())
                     
-                time.sleep(1)
+            except subprocess.CalledProcessError:
+                pass
                 
+            time.sleep(3)
+            
+            try:
                 ## Activate
                 p = subprocess.Popen(['ssh', 'mcsdr@lwalab.phys.unm.edu',
                                       'mv -f /var/www/lwatv2/incoming/* /var/www/lwatv2/'],
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-                output, error = p.communicate()
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                _, error = p.communicate()
                 if p.returncode != 0:
                     self.log.warning('Error making active: %s', error.decode())
                     
             except subprocess.CalledProcessError:
                 pass
                 
-            time.sleep(1)
-            
             curr_time = time.time()
             process_time = curr_time - prev_time
             self.log.debug('Uploader processing time was %.3f s', process_time)

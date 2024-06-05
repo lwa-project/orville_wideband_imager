@@ -171,6 +171,10 @@ class MultiQueue(object):
 
 FILL_QUEUE = queue.Queue(maxsize=4)
 
+SPEC_QUEUE = queue.Queue(maxsize=4)
+DIST_QUEUE = queue.Queue(maxsize=4)
+LWATV_QUEUE = queue.Queue(maxsize=4)
+
 
 def get_good_and_missing_rx():
     pid = os.getpid()
@@ -342,6 +346,7 @@ class SpectraOp(object):
         return im
         
     def main(self):
+        global SPEC_QUEUE
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
             BFSetGPU(self.gpu)
@@ -414,6 +419,10 @@ class SpectraOp(object):
                 filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.png' % (mjd, h, m, s, freq.min()/1e6, freq.max()/1e6)
                 outname = os.path.join(outname, filename)
                 im.save(outname, 'PNG')
+                try:
+                    SPEC_QUEUE.put_nowait(outname)
+                except queue.Full:
+                    pass
                 self.log.debug("Wrote spectra %i to disk as '%s'", intCount, os.path.basename(outname))
                 
                 time_tag += navg * (fS / 100.0)
@@ -518,6 +527,7 @@ class BaselineOp(object):
         return im
         
     def main(self):
+        global DIST_QUEUE
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
             BFSetGPU(self.gpu)
@@ -588,6 +598,10 @@ class BaselineOp(object):
                 filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.png' % (mjd, h, m, s, freq.min()/1e6, freq.max()/1e6)
                 outname = os.path.join(outname, filename)
                 im.save(outname, 'PNG')
+                try:
+                    DIST_QUEUE.put_nowait(outname)
+                except queue.Full:
+                    pass
                 self.log.debug("Wrote baselines %i to disk as '%s'", intCount, os.path.basename(outname))
                 
                 time_tag += navg * (fS / 100.0)
@@ -1289,6 +1303,7 @@ class WriterOp(object):
         self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
         
     def main(self):
+        global LWATV_QUEUE
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
             BFSetGPU(self.gpu)
@@ -1494,6 +1509,11 @@ class WriterOp(object):
                     with open(outname_ts, 'w') as fh:
                         fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
                         
+                    try:
+                        LWATV_QUEUE.put_nowait(outname)
+                    except queue.Full:
+                        pass
+                        
                     self.log.debug("Wrote LWATV %i, %i to disk as '%s'", intCount, c, os.path.basename(outname))
                     
                 time_tag += navg * (int(fS) // 100)
@@ -1533,6 +1553,9 @@ class UploaderOp(object):
         self.shutdown_event.set()
         
     def main(self):
+        global SPEC_QUEUE
+        global DIST_QUEUE
+        global LWATV_QUEUE
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
             BFSetGPU(self.gpu)
@@ -1548,78 +1571,57 @@ class UploaderOp(object):
             prev_time = curr_time
             
             # Find the latest version of the files
-            ## MJD
-            try:
-                p = subprocess.Popen('ls -td %s/* | head -n1' % self.output_dir_spectra,
-                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                     shell=True)
-                output, error = p.communicate()
-                output = output.decode()
-                mjd = os.path.basename(output.split('\n')[0])
-            except subprocess.CalledProcessError:
-                mjd = '*'
-            ## Approximate time as an hour
-            utc_hour = int((time.time() % 86400) / 3600)
-            
             ## Spectra
             try:
-                p = subprocess.Popen('ls -t %s/%s/*.png | head -n1' % (self.output_dir_spectra, mjd),
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    shell=True)
-                output, error = p.communicate()
-                output = output.decode()
-                latest_spectra = output.split('\n')[0]
+                latest_spectra = SPEC_QUEUE.get_nowait()
                 shutil.copy2(latest_spectra, '/tmp/lwatv_spec.png')
-            except (subprocess.CalledProcessError, OSError, IOError):
+                SPEC_QUEUE.task_done()
+            except queue.Empty:
                 pass
                 
             ## (u,v) radial distribution
             try:
-                p = subprocess.Popen('ls -t %s/%s/*.png | head -n1' % (self.output_dir_uvdist, mjd),
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    shell=True)
-                output, error = p.communicate()
-                output = output.decode()
-                latest_uvdist = output.split('\n')[0]
+                latest_uvdist = DIST_QUEUE.get_nowait()
                 shutil.copy2(latest_uvdist, '/tmp/lwatv_uvdist.png')
-            except (subprocess.CalledProcessError, OSError, IOError):
+                DIST_QUEUE.task_done()
+            except queue.Empty:
                 pass
                 
             ## LWATV image
             try:
-                p = subprocess.Popen('ls -t %s/%s/*_%02i*.png | head -n1' % (self.output_dir_lwatv, mjd, utc_hour),
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    shell=True)
-                output, error = p.communicate()
-                output = output.decode()
-                latest_lwatv = output.split('\n')[0]
+                latest_lwatv = LWATV_QUEUE.get_nowait()
                 shutil.copy2(latest_lwatv, '/tmp/lwatv.png')
                 shutil.copy2(os.path.join(self.output_dir_lwatv, 'lwatv_timestamp'), '/tmp/lwatv_timestamp')
-            except (subprocess.CalledProcessError, OSError, IOError) as e:
+            except queue.Empty:
                 pass
                 
             # Upload and make active
             try:
                 ## Stage
-                p = subprocess.Popen('rsync -e ssh -av /tmp/lwatv*.png /tmp/lwatv_timestamp \
-                                        mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/',
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    shell=True)
-                output, error = p.communicate()
+                p = subprocess.Popen(['rsync', '-e', 'ssh', '-av',
+                                      '/tmp/lwatv.png', '/tmp/lwatv_timestamp',
+                                      '/tmp/lwatv_spec.png', '/tmp/lwatv_uvdist.png',
+                                      'mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/'],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                _, error = p.communicate()
                 if p.returncode != 0:
-                    self.log.warning('Error uploading: %s', error)
+                    self.log.warning('Error uploading: %s', error.decode())
                     
+                time.sleep(1)
+                
                 ## Activate
-                p = subprocess.Popen("ssh mcsdr@lwalab.phys.unm.edu \
-                                        'mv -f /var/www/lwatv2/incoming/* /var/www/lwatv2/'",
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    shell=True)
+                p = subprocess.Popen(['ssh', 'mcsdr@lwalab.phys.unm.edu',
+                                      'mv -f /var/www/lwatv2/incoming/* /var/www/lwatv2/'],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                 output, error = p.communicate()
                 if p.returncode != 0:
-                    self.log.warning('Error making active: %s', error)
+                    self.log.warning('Error making active: %s', error.decode())
+                    
             except subprocess.CalledProcessError:
                 pass
                 
+            time.sleep(1)
+            
             curr_time = time.time()
             process_time = curr_time - prev_time
             self.log.debug('Uploader processing time was %.3f s', process_time)
@@ -1628,7 +1630,7 @@ class UploaderOp(object):
                                       'reserve_time': -1, 
                                       'process_time': process_time,})
             
-            time.sleep(max([10-process_time, 0]))
+            time.sleep(max([5-process_time, 0]))
 
 
 class AnalogSettingsOp(object):

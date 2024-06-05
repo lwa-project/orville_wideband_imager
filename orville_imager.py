@@ -1653,7 +1653,7 @@ class UploaderOp(object):
                                       'reserve_time': -1, 
                                       'process_time': process_time,})
             
-            time.sleep(max([5-process_time, 0]))
+            time.sleep(max([10-process_time, 0]))
 
 
 class AnalogSettingsOp(object):

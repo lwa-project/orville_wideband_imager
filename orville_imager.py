@@ -346,7 +346,6 @@ class SpectraOp(object):
         return im
         
     def main(self):
-        global SPEC_QUEUE
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
             BFSetGPU(self.gpu)
@@ -529,7 +528,6 @@ class BaselineOp(object):
         return im
         
     def main(self):
-        global DIST_QUEUE
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
             BFSetGPU(self.gpu)
@@ -1307,7 +1305,6 @@ class WriterOp(object):
         self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
         
     def main(self):
-        global LWATV_QUEUE
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
             BFSetGPU(self.gpu)
@@ -1553,9 +1550,6 @@ class UploaderOp(object):
         self.shutdown_event.set()
         
     def main(self):
-        global SPEC_QUEUE
-        global DIST_QUEUE
-        global LWATV_QUEUE
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
             BFSetGPU(self.gpu)

@@ -1575,9 +1575,7 @@ class UploaderOp(object):
                 if os.listdir(self.uploader_dir):
                     try:
                         ## Upload and stage
-                        p = subprocess.Popen(['timeout', '2', 'rsync', '-e', 'ssh', '-a',
-                                              '/dev/shm/uploader/lwatv.png', '/dev/shm/uploader/lwatv_timestamp',
-                                              '/dev/shm/uploader/lwatv_spec.png', '/dev/shm/uploader/lwatv_uvdist.png',
+                        p = subprocess.Popen(['timeout', '2', 'rsync', '-e', 'ssh', '-a', self.upload_dir+os.path.sep,
                                               'mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/'],
                                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                         _, error = p.communicate()

@@ -171,10 +171,6 @@ class MultiQueue(object):
 
 FILL_QUEUE = queue.Queue(maxsize=4)
 
-SPEC_QUEUE = queue.Queue(maxsize=4)
-DIST_QUEUE = queue.Queue(maxsize=4)
-LWATV_QUEUE = queue.Queue(maxsize=4)
-
 
 def get_good_and_missing_rx():
     pid = os.getpid()
@@ -255,11 +251,12 @@ class CaptureOp(object):
         del capture
 
 class SpectraOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
         self.output_dir = os.path.join(base_dir, 'spectra')
+        self.uploader_dir = uploader_dir
         self.core = core
         self.gpu = gpu
         
@@ -267,7 +264,10 @@ class SpectraOp(object):
             os.mkdir(base_dir)
         if not os.path.exists(self.output_dir):
             os.mkdir(self.output_dir)
-            
+        if self.uploader_dir is not None:
+            if not os.path.exists(self.uploader_dir):
+                os.mkdir(self.uploader_dir)
+                
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.in_proclog   = ProcLog(type(self).__name__+"/in")
         self.size_proclog = ProcLog(type(self).__name__+"/size")
@@ -419,10 +419,8 @@ class SpectraOp(object):
                 filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.png' % (mjd, h, m, s, freq.min()/1e6, freq.max()/1e6)
                 outname = os.path.join(outname, filename)
                 im.save(outname, 'PNG')
-                try:
-                    SPEC_QUEUE.put_nowait(outname)
-                except queue.Full:
-                    pass
+                if self.uploader_dir is not None:
+                    shutil.copy2(filename, os.path.join(self.uploader_dir, 'lwatv_spec.png'))
                 self.log.debug("Wrote spectra %i to disk as '%s'", intCount, os.path.basename(outname))
                 
                 time_tag += navg * (fS / 100.0)
@@ -440,10 +438,11 @@ class SpectraOp(object):
 
 
 class BaselineOp(object):
-    def __init__(self, log, iring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.output_dir = os.path.join(base_dir, 'baselines')
+        self.uploader_dir = uploader_dir
         self.core = core
         self.gpu = gpu
         
@@ -451,7 +450,10 @@ class BaselineOp(object):
             os.mkdir(base_dir)
         if not os.path.exists(self.output_dir):
             os.mkdir(self.output_dir)
-            
+        if self.uploader_dir is not None:
+            if not os.path.exists(self.uploader_dir):
+                os.mkdir(self.uploader_dir)
+                
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.in_proclog   = ProcLog(type(self).__name__+"/in")
         self.size_proclog = ProcLog(type(self).__name__+"/size")
@@ -598,10 +600,8 @@ class BaselineOp(object):
                 filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.png' % (mjd, h, m, s, freq.min()/1e6, freq.max()/1e6)
                 outname = os.path.join(outname, filename)
                 im.save(outname, 'PNG')
-                try:
-                    DIST_QUEUE.put_nowait(outname)
-                except queue.Full:
-                    pass
+                if self.uploader_dir is not None:
+                    shutil.copy2(outname, os.path.join(self.uploader_dir, 'lwatv_uvdist.png'))
                 self.log.debug("Wrote baselines %i to disk as '%s'", intCount, os.path.basename(outname))
                 
                 time_tag += navg * (fS / 100.0)
@@ -1177,13 +1177,14 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
         self.output_dir_images = os.path.join(base_dir, 'images')
         self.output_dir_archive = os.path.join(base_dir, 'archive')
         self.output_dir_lwatv = os.path.join(base_dir, 'lwatv')
+        self.uploader_dir = uploader_dir
         self.core = core
         self.gpu = gpu
         
@@ -1195,7 +1196,10 @@ class WriterOp(object):
             os.mkdir(self.output_dir_archive)  
         if not os.path.exists(self.output_dir_lwatv):
             os.mkdir(self.output_dir_lwatv)
-            
+        if self.uploader_dir is not None:
+            if not os.path.exists(self.uploader_dir):
+                os.mkdir(self.uploader_dir)
+                
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.in_proclog   = ProcLog(type(self).__name__+"/in")
         self.size_proclog = ProcLog(type(self).__name__+"/size")
@@ -1508,11 +1512,10 @@ class WriterOp(object):
                     outname_ts = os.path.join(self.output_dir_lwatv, 'lwatv_timestamp')
                     with open(outname_ts, 'w') as fh:
                         fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
-                        
-                    try:
-                        LWATV_QUEUE.put_nowait(outname)
-                    except queue.Full:
-                        pass
+                    
+                    if self.uploader_dir is not None:
+                        shutil.copy2(outname, os.path.join(self.uploader_dir, 'lwatv.png'))
+                        shutil.copy2(outname_ts, os.path.join(self.uploader_dir, 'lwatv_timestamp'))    
                         
                     self.log.debug("Wrote LWATV %i, %i to disk as '%s'", intCount, c, os.path.basename(outname))
                     
@@ -1531,18 +1534,15 @@ class WriterOp(object):
 
 
 class UploaderOp(object):
-    def __init__(self, log, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, uploader_dir=None, core=-1, gpu=-1):
         self.log = log
-        self.output_dir_spectra = os.path.join(base_dir, 'spectra')
-        self.output_dir_uvdist  = os.path.join(base_dir, 'baselines')
-        self.output_dir_lwatv   = os.path.join(base_dir, 'lwatv')
-        
+        self.uploader_dir = uploader_dir
         self.core = core
         self.gpu = gpu
         
-        for output_dir in (self.output_dir_spectra, self.output_dir_uvdist, self.output_dir_lwatv):
-            if not os.path.exists(output_dir):
-                os.mkdir(output_dir)
+        if self.uploader_dir is not None:
+            if not os.path.exists(self.uploader_dir):
+                os.mkdir(self.uploader_dir)
                 
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
@@ -1573,64 +1573,35 @@ class UploaderOp(object):
             acquire_time = curr_time - prev_time
             prev_time = curr_time
             
-            # Find the latest version of the files
-            updates = False
-            ## Spectra
-            try:
-                latest_spectra = SPEC_QUEUE.get_nowait()
-                shutil.copy2(latest_spectra, '/dev/shm/uploader/lwatv_spec.png')
-                SPEC_QUEUE.task_done()
-                updates = True
-            except queue.Empty:
-                pass
-                
-            ## (u,v) radial distribution
-            try:
-                latest_uvdist = DIST_QUEUE.get_nowait()
-                shutil.copy2(latest_uvdist, '/dev/shm/uploader/lwatv_uvdist.png')
-                DIST_QUEUE.task_done()
-                updates = True
-            except queue.Empty:
-                pass
-                
-            ## LWATV image
-            try:
-                latest_lwatv = LWATV_QUEUE.get_nowait()
-                shutil.copy2(latest_lwatv, '/dev/shm/uploader/lwatv.png')
-                shutil.copy2(os.path.join(self.output_dir_lwatv, 'lwatv_timestamp'), '/dev/shm/uploader/lwatv_timestamp')
-                LWATV_QUEUE.task_done()
-                updates = True
-            except queue.Empty:
-                pass
-                
             # Upload and make active
-            if updates:
-                try:
-                    ## Stage
-                    p = subprocess.Popen(['timeout', '3', 'rsync', '-e', 'ssh', '-a',
-                                          '/dev/shm/uploader/lwatv.png', '/dev/shm/uploader/lwatv_timestamp',
-                                          '/dev/shm/uploader/lwatv_spec.png', '/dev/shm/uploader/lwatv_uvdist.png',
-                                          'mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/'],
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-                    _, error = p.communicate()
-                    if p.returncode != 0:
-                        self.log.warning('Error uploading: %s', error.decode())
+            if self.uploader_dir is not None:
+                if os.listdir(self.uploader_dir):
+                    try:
+                        ## Stage
+                        p = subprocess.Popen(['timeout', '3', 'rsync', '-e', 'ssh', '-a',
+                                              '/dev/shm/uploader/lwatv.png', '/dev/shm/uploader/lwatv_timestamp',
+                                              '/dev/shm/uploader/lwatv_spec.png', '/dev/shm/uploader/lwatv_uvdist.png',
+                                              'mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/'],
+                                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                        _, error = p.communicate()
+                        if p.returncode != 0:
+                            self.log.warning('Error uploading: %s', error.decode())
+                            
+                    except subprocess.CalledProcessError:
+                        pass
                         
-                except subprocess.CalledProcessError:
-                    pass
-                    
-                try:
-                    ## Activate
-                    p = subprocess.Popen(['timeout', '3', 'ssh', 'mcsdr@lwalab.phys.unm.edu',
-                                          'mv -f /var/www/lwatv2/incoming/* /var/www/lwatv2/'],
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-                    _, error = p.communicate()
-                    if p.returncode != 0:
-                        self.log.warning('Error making active: %s', error.decode())
+                    try:
+                        ## Activate
+                        p = subprocess.Popen(['timeout', '3', 'ssh', 'mcsdr@lwalab.phys.unm.edu',
+                                              'mv -f /var/www/lwatv2/incoming/* /var/www/lwatv2/'],
+                                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                        _, error = p.communicate()
+                        if p.returncode != 0:
+                            self.log.warning('Error making active: %s', error.decode())
+                            
+                    except subprocess.CalledProcessError:
+                        pass
                         
-                except subprocess.CalledProcessError:
-                    pass
-                    
             curr_time = time.time()
             process_time = curr_time - prev_time
             self.log.debug('Uploader processing time was %.3f s', process_time)
@@ -1645,7 +1616,6 @@ class UploaderOp(object):
 class AnalogSettingsOp(object):
     def __init__(self, log, core=-1, gpu=-1):
         self.log = log
-        
         self.core = core
         self.gpu = gpu
         
@@ -1778,6 +1748,9 @@ def main(args):
     rfimask_ring = Ring(name="rfimask", space='system')
     writer_ring = Ring(name="writer", space='system')
     
+    # Setup the uploader's staging location
+    uploader_dir = '/dev/shm/orville_uploader'
+    
     # Setup the processing blocks
     ## A reader
     nBL = len(ANTENNAS)//2*(len(ANTENNAS)//2+1)//2
@@ -1792,12 +1765,14 @@ def main(args):
                          core=cores.pop(0)))
     ## The correlation matrix
     ops.append(MatrixOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
-                         core=cores.pop(0), gpu=gpus.pop(0)))
+                        core=cores.pop(0), gpu=gpus.pop(0)))
     ## The spectra plotter
     ops.append(SpectraOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
+                         uploader_dir=uploader_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The radial (u,v) plotter
     ops.append(BaselineOp(log, capture_ring, base_dir=args.output_dir,
+                          uploader_dir=uploader_dir,
                           core=cores.pop(0), gpu=gpus.pop(0)))
     ## The imager
     ops.append(ImagingOp(log, capture_ring, writer_ring,
@@ -1805,9 +1780,10 @@ def main(args):
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image writer and plotter for LWA TV
     ops.append(WriterOp(log, writer_ring, rfimask_ring, base_dir=args.output_dir,
+                         uploader_dir=uploader_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
-    ops.append(UploaderOp(log, base_dir=args.output_dir,
+    ops.append(UploaderOp(log, uploader_dir=uploader_dir,
                           core=cores.pop(0), gpu=gpus.pop(0)))
     ## The ASP settings getter
     ops.append(AnalogSettingsOp(log,

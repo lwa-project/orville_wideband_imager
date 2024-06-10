@@ -1578,7 +1578,7 @@ class UploaderOp(object):
             ## Spectra
             try:
                 latest_spectra = SPEC_QUEUE.get_nowait()
-                shutil.copy(latest_spectra, '/dev/shm/uploader/lwatv_spec.png')
+                shutil.copy2(latest_spectra, '/dev/shm/uploader/lwatv_spec.png')
                 SPEC_QUEUE.task_done()
                 updates = True
             except queue.Empty:
@@ -1587,7 +1587,7 @@ class UploaderOp(object):
             ## (u,v) radial distribution
             try:
                 latest_uvdist = DIST_QUEUE.get_nowait()
-                shutil.copy(latest_uvdist, '/dev/shm/uploader/lwatv_uvdist.png')
+                shutil.copy2(latest_uvdist, '/dev/shm/uploader/lwatv_uvdist.png')
                 DIST_QUEUE.task_done()
                 updates = True
             except queue.Empty:
@@ -1596,8 +1596,8 @@ class UploaderOp(object):
             ## LWATV image
             try:
                 latest_lwatv = LWATV_QUEUE.get_nowait()
-                shutil.copy(latest_lwatv, '/dev/shm/uploader/lwatv.png')
-                shutil.copy(os.path.join(self.output_dir_lwatv, 'lwatv_timestamp'), '/dev/shm/uploader/lwatv_timestamp')
+                shutil.copy2(latest_lwatv, '/dev/shm/uploader/lwatv.png')
+                shutil.copy2(os.path.join(self.output_dir_lwatv, 'lwatv_timestamp'), '/dev/shm/uploader/lwatv_timestamp')
                 LWATV_QUEUE.task_done()
                 updates = True
             except queue.Empty:
@@ -1611,10 +1611,10 @@ class UploaderOp(object):
                                           '/dev/shm/uploader/lwatv.png', '/dev/shm/uploader/lwatv_timestamp',
                                           '/dev/shm/uploader/lwatv_spec.png', '/dev/shm/uploader/lwatv_uvdist.png',
                                           'mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/'],
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    p.wait()
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                    _, error = p.communicate()
                     if p.returncode != 0:
-                        self.log.warning('Error uploading: %s', '???')
+                        self.log.warning('Error uploading: %s', error.decode())
                         
                 except subprocess.CalledProcessError:
                     pass
@@ -1623,10 +1623,10 @@ class UploaderOp(object):
                     ## Activate
                     p = subprocess.Popen(['timeout', '3', 'ssh', 'mcsdr@lwalab.phys.unm.edu',
                                           'mv -f /var/www/lwatv2/incoming/* /var/www/lwatv2/'],
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    p.wait()
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                    _, error = p.communicate()
                     if p.returncode != 0:
-                        self.log.warning('Error making active: %s', '???')
+                        self.log.warning('Error making active: %s', error.decode())
                         
                 except subprocess.CalledProcessError:
                     pass

@@ -1564,9 +1564,6 @@ class UploaderOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
         
-        if not os.path.exists('/dev/shm/uploader'):
-            os.mkdir('/dev/shm/uploader')
-            
         prev_time = time.time()
         while not self.shutdown_event.is_set():
             curr_time = time.time()
@@ -1577,8 +1574,8 @@ class UploaderOp(object):
             if self.uploader_dir is not None:
                 if os.listdir(self.uploader_dir):
                     try:
-                        ## Stage
-                        p = subprocess.Popen(['timeout', '3', 'rsync', '-e', 'ssh', '-a',
+                        ## Upload and stage
+                        p = subprocess.Popen(['timeout', '2', 'rsync', '-e', 'ssh', '-a',
                                               '/dev/shm/uploader/lwatv.png', '/dev/shm/uploader/lwatv_timestamp',
                                               '/dev/shm/uploader/lwatv_spec.png', '/dev/shm/uploader/lwatv_uvdist.png',
                                               'mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/'],
@@ -1592,7 +1589,7 @@ class UploaderOp(object):
                         
                     try:
                         ## Activate
-                        p = subprocess.Popen(['timeout', '3', 'ssh', 'mcsdr@lwalab.phys.unm.edu',
+                        p = subprocess.Popen(['timeout', '2', 'ssh', 'mcsdr@lwalab.phys.unm.edu',
                                               'mv -f /var/www/lwatv2/incoming/* /var/www/lwatv2/'],
                                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                         _, error = p.communicate()
@@ -1750,7 +1747,9 @@ def main(args):
     
     # Setup the uploader's staging location
     uploader_dir = '/dev/shm/orville_uploader'
-    
+    if not os.path.exists(uploader_dir):
+        os.mkdir(uploader_dir)
+        
     # Setup the processing blocks
     ## A reader
     nBL = len(ANTENNAS)//2*(len(ANTENNAS)//2+1)//2

@@ -172,10 +172,6 @@ class MultiQueue(object):
 
 FILL_QUEUE = queue.Queue(maxsize=4)
 
-SPEC_QUEUE = queue.Queue(maxsize=4)
-DIST_QUEUE = queue.Queue(maxsize=4)
-LWATV_QUEUE = queue.Queue(maxsize=4)
-
 
 def get_good_and_missing_rx():
     pid = os.getpid()

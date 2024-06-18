@@ -43,7 +43,7 @@ List: {crossed + 1}
     """
     return message
 
-def _plot_matrices(matrix, title=None, mask=None, susX=None, susY=None, crossed=None):
+def _plot_matrices(matrix, mjd, time, title=None, mask=None, susX=None, susY=None, crossed=None, save=False):
     #Build the plot.
     if title is None:
         title = 'Orville Correlation Matrices' 
@@ -53,7 +53,7 @@ def _plot_matrices(matrix, title=None, mask=None, susX=None, susY=None, crossed=
         mapper = {0: 'XX - XY', 1: 'XX - YX', 2: 'YY - XY', 3: 'YY - YX'}
 
     fig = plt.figure(1)
-    fig.suptitle(title, fontsize=16)
+    fig.suptitle(title, fontsize=14)
     axes = []
     gs = gridspec.GridSpec(2,2)
     for i in range(4):
@@ -65,7 +65,7 @@ def _plot_matrices(matrix, title=None, mask=None, susX=None, susY=None, crossed=
         axes[-1].append(fig.add_subplot(gsp[1], sharex=axes[-1][-1]))
 
     fig.canvas.draw()
-
+    
     #Set the color scale.
     vmin, vmax = np.nanpercentile(np.abs(matrix), q=[1,99])
 
@@ -88,22 +88,40 @@ def _plot_matrices(matrix, title=None, mask=None, susX=None, susY=None, crossed=
             if crossed is not None:
                 ax.plot(x[crossed], avg[crossed], 'mo')
  
+            #if indx <= 1:
+            #    ax.set_xticks([])
+
             if indx > 1:
-                ax.set_xlabel('Antenna Number', fontsize=12)
+                ax.set_xlabel(r'$N_{antenna}$', fontsize=11)
                 ax.set_xlim((x.min(), x.max()))
-            ax.set_ylabel('Mean', fontsize=12)
-            ax.tick_params(which='both', direction='in', length=8, labelsize=12)
+            if indx % 2 == 0:
+                ax.set_ylabel('Mean', fontsize=11)
+            ax.tick_params(which='both', direction='in', length=6, labelsize=10)
 
             ax = axes[indx][0]
-            ax.set_title(mapper[indx],fontsize=14)
+            ax.set_title(mapper[indx],fontsize=12)
             c=ax.imshow(matrix[:,:,i,j], aspect='auto', origin='lower', interpolation='nearest', vmin=vmin, vmax=vmax, extent=(x.min(),x.max(),y.min(),y.max()))
-            ax.set_ylabel('Antenna Number', fontsize=12)
-            ax.tick_params(which='both', direction='in', length=8, labelsize=12)
+            if indx % 2 == 0:
+                ax.set_ylabel(r'$N_{antenna}$', fontsize=11)
+            ax.set_xticks([])
+            ax.tick_params(which='both', direction='in', length=6, labelsize=10)
 
     cb = fig.colorbar(c, ax=[s for a in axes for s in a])
     cb.set_label(r'$|C_{ij}|$', fontsize=12)
-
-    plt.show()  
+    
+    fig.canvas.draw()
+    if save:
+        #Set up the output directory
+        cwd = os.getcwd()
+        try:
+            os.mkdir('Summaries')
+        except FileExistsError:
+            pass
+        path = os.path.join(cwd,'Summaries')
+        
+        fig.savefig(os.path.join(path, f"figure_{mjd}_{time}.png"))
+    else:
+        plt.show()  
 
 def main(args):
 
@@ -114,6 +132,10 @@ def main(args):
     except KeyError:
         header = None
     corr = np.load(args.file)['data']
+
+    #Timetag info from the name of the input file.
+    mjd = args.file.split('/')[-1].split('.')[0].split('_')[1]
+    time = args.file.split('/')[-1].split('.')[0].split('_')[2]
 
     #Build the full correlation matrix. 
     nstands = int(np.sqrt(8*corr.shape[0]+1)-1)//2
@@ -165,7 +187,7 @@ def main(args):
 
     #Plot the cross-correlation matrices, if requested.
     if args.plot:
-        _plot_matrices(d, title='Cross-Correlation Matrices', mask=~mask, crossed=crossed)
+        _plot_matrices(d, mjd, time, title='Cross-Correlation Matrices', mask=~mask, crossed=crossed)
 
     del d
 
@@ -223,8 +245,8 @@ def main(args):
     print(f'Found {crossed.size} potentially cross-polarized antennas')
 
     #Plot, if requested.
-    if args.plot:
-        _plot_matrices(cmatrix, mask=~mask, susX=suspectX, susY=suspectY, crossed=crossed)
+    if args.plot or args.save_plots:
+        _plot_matrices(cmatrix, mjd, time, mask=~mask, susX=suspectX, susY=suspectY, crossed=crossed, save=args.save_plots)
 
     #Write out a summary file, if requested.
     if args.write:
@@ -236,17 +258,13 @@ def main(args):
             pass
         path = os.path.join(cwd,'Summaries')
 
-        #Timetag info from the name of the input file.
-        mjd = args.file.split('/')[-1].split('.')[0].split('_')[1]
-        time = args.file.split('/')[-1].split('.')[0].split('_')[2]
-
         #Set up the filename to be written.
         filename = os.path.join(path, 'Summary_'+mjd+'_'+time+'.txt')
         
         #Write the file.
-        outfile = open(filename, 'w')
-        outfile.write(summary_text(args.file.split('/')[-1], mjd, time, ~mask, suspectX, suspectY, crossed, header=header))
-        outfile.close()
+        with open(filename, 'w') as outfile: 
+            outfile.write(summary_text(args.file.split('/')[-1], mjd, time, ~mask, suspectX, suspectY, crossed, header=header))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Analyze the correlation matrices output by the Orville Wideband Imager',
@@ -258,5 +276,7 @@ if __name__ == '__main__':
             help='Plot the correlation matrices')
     parser.add_argument('-w', '--write', action='store_true',
             help='Write summary results to disk as a .txt file')
+    parser.add_argument('-s', '--save-plots', action='store_true',
+            help='Save plots to files rather than displaying them')
     args = parser.parse_args()
     main(args)

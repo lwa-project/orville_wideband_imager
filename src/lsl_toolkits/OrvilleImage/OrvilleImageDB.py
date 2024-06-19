@@ -513,7 +513,7 @@ class OrvilleImageDB(object):
             mask = numpy.fromfile(self.file, 'u1', nchan)
             reshaped_mask = numpy.full(data.shape, False, dtype=bool) # Create Bool array filled with False values
             reshaped_mask[numpy.argwhere(mask),...] = True # Propagate True across rows of flagged channels
-            data = numpy.ma.masked_array(data, reshaped_mask) # Create masked array
+            data = numpy.ma.masked_array(data, reshaped_mask, dtype=numpy.float32) # Create masked array
             
         self.curr_int += 1
         return info, data
@@ -521,7 +521,7 @@ class OrvilleImageDB(object):
     def read_all(self):
         self.seek(0)
         nchan, nstokes, ngrid = self.header.nchan, self.nstokes, self.header.ngrid
-        data_all = numpy.ma.zeros((self.nint, nchan, nstokes, ngrid, ngrid))
+        data_all = numpy.ma.zeros((self.nint, nchan, nstokes, ngrid, ngrid), dtype=numpy.float32)
         hdr_list = []
         while self.curr_int < self.nint:
             hdr, data = self.read_image()

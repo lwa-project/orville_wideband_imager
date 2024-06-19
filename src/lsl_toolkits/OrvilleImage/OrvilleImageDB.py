@@ -518,6 +518,17 @@ class OrvilleImageDB(object):
         self.curr_int += 1
         return info, data
         
+    def read_all(self):
+        self.seek(0)
+        nchan, nstokes, ngrid = self.header.nchan, self.nstokes, self.header.ngrid
+        data_all = numpy.ma.zeros((self.nint, nchan, nstokes, ngrid, ngrid))
+        hdr_list = []
+        while self.curr_int < self.nint:
+            hdr, data = self.read_image()
+            hdr_list.append(hdr)
+            data_all[self.curr_int-1] = data
+        return hdr_list, data_all
+        
     @staticmethod
     def sort(filename):
         """

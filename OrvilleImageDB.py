@@ -519,6 +519,32 @@ class OrvilleImageDB(object):
         return info, data
         
     def read_all(self):
+        """
+        Reads all integrations from the database.
+        
+        Returns a 2-tuple containing:
+        hdr_list -- a list of dictionaries with the following keys defined:
+            start_time -- MJD UTC at which this integration began
+            int_len -- integration length, in days
+            fill -- packet fill fraction, if available
+            lst -- mean local sidereal time of the observation, in days
+            start_freq -- frequency of first channel in the integration, in Hz
+            stop_freq -- frequency of last channel in the integration, in Hz
+            bandwidth -- bandwidth of each channel in the integrated data, in Hz
+            center_ra -- RA of the image phase center, in degrees
+            center_dec -- Declination of image phase center, in degrees
+            center_az -- azimuth of the image phase center, in degrees
+            center_alt -- altitude of image phase center, in degrees
+            asp_filter -- ASP filter code (0=split, 1=full, ...)
+            asp_atten_1 -- ASP first attenuator setting
+            asp_atten_2 -- ASP second attenuator setting
+            asp_atten_s -- ASP split attenuator setting
+            pixel_size -- Real-world size of a pixel, in degrees
+            stokes_params -- a list or comma-delimited string of Stokes params
+        data_all -- a 5D masked float32 array of image data indexed as 
+            [integration, chan, stokes, x, y]
+        """
+        
         self.seek(0)
         nchan, nstokes, ngrid = self.header.nchan, self.nstokes, self.header.ngrid
         data_all = numpy.ma.zeros((self.nint, nchan, nstokes, ngrid, ngrid), dtype=numpy.float32)

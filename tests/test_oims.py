@@ -51,6 +51,25 @@ class oims_tests(unittest.TestCase):
         
         db.close()
         
+    def test_oims_read_all(self):
+        """Test reading in all images from a OrvilleImage file."""
+
+        db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
+        
+        # Read in the first image with the correct number of elements
+        hdrs, data = db.read_all()
+        ## Count
+        self.assertEqual(len(hdrs), 13)
+        self.assertEqual(len(hdrs), len(data))
+        ## Image
+        for d in data:
+            self.assertEqual(d.shape[0], db.header.nchan)
+            self.assertEqual(d.shape[1], len(db.header.stokes_params.split(b',')))
+            self.assertEqual(d.shape[2], db.header.ngrid)
+            self.assertEqual(d.shape[3], db.header.ngrid)
+        
+        db.close()
+        
     def test_oims_loop(self):
         """Test reading in a collection of images in a loop."""
         

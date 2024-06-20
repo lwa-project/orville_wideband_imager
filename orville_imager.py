@@ -1590,7 +1590,7 @@ class UploaderOp(object):
             prev_time = curr_time
             
             if self.uploader_dir is not None:
-                if os.listdist(self.uploader_dir):
+                if os.listdir(self.uploader_dir):
                     try:
                         ## Upload and stage
                         p = subprocess.Popen(['timeout', '2', 'rsync', '-e', 'ssh', '-a', self.uploader_dir+os.path.sep,

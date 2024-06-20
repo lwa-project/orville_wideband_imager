@@ -59,7 +59,7 @@ class oims_tests(unittest.TestCase):
     def test_oims_read_all(self):
         """Test reading in all images from a OrvilleImage file."""
 
-        db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
+        db = OrvilleImageDB(oimsFile, 'r')
         
         # Read in the first image with the correct number of elements
         hdrs, data = db.read_all()

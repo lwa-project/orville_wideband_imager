@@ -53,7 +53,7 @@ def _plot_matrices(matrix, mjd, time, title=None, mask=None, susX=None, susY=Non
         mapper = {0: 'XX - XY', 1: 'XX - YX', 2: 'YY - XY', 3: 'YY - YX'}
 
     fig = plt.figure(1)
-    fig.suptitle(title, fontsize=16)
+    fig.suptitle(title, fontsize=14)
     axes = []
     gs = gridspec.GridSpec(2,2)
     for i in range(4):
@@ -88,17 +88,23 @@ def _plot_matrices(matrix, mjd, time, title=None, mask=None, susX=None, susY=Non
             if crossed is not None:
                 ax.plot(x[crossed], avg[crossed], 'mo')
  
+            #if indx <= 1:
+            #    ax.set_xticks([])
+
             if indx > 1:
-                ax.set_xlabel('Antenna Number', fontsize=12)
+                ax.set_xlabel(r'$N_{antenna}$', fontsize=11)
                 ax.set_xlim((x.min(), x.max()))
-            ax.set_ylabel('Mean', fontsize=12)
-            ax.tick_params(which='both', direction='in', length=8, labelsize=12)
+            if indx % 2 == 0:
+                ax.set_ylabel('Mean', fontsize=11)
+            ax.tick_params(which='both', direction='in', length=6, labelsize=10)
 
             ax = axes[indx][0]
-            ax.set_title(mapper[indx],fontsize=14)
+            ax.set_title(mapper[indx],fontsize=12)
             c=ax.imshow(matrix[:,:,i,j], aspect='auto', origin='lower', interpolation='nearest', vmin=vmin, vmax=vmax, extent=(x.min(),x.max(),y.min(),y.max()))
-            ax.set_ylabel('Antenna Number', fontsize=12)
-            ax.tick_params(which='both', direction='in', length=8, labelsize=12)
+            if indx % 2 == 0:
+                ax.set_ylabel(r'$N_{antenna}$', fontsize=11)
+            ax.set_xticks([])
+            ax.tick_params(which='both', direction='in', length=6, labelsize=10)
 
     cb = fig.colorbar(c, ax=[s for a in axes for s in a])
     cb.set_label(r'$|C_{ij}|$', fontsize=12)

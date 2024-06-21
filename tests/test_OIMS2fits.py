@@ -2,31 +2,34 @@
 Unit test for OrvilleImageDB module.
 """
 
-# Python2 compatibility
-from __future__ import print_function, division, absolute_import
-try:
-    range = xrange
-except NameError:
-    pass
-    
 import os
+import sys
 import glob
 import numpy
 import tempfile
 import unittest
-from argparse import Namespace
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import OrvilleImageDB
-from scripts import OIMS2fits
+import subprocess
+
+from lsl_toolkits.OrvilleImage import OrvilleImageDB
 from astropy.io import fits
 
-__version__  = "0.2"
+currentDir = os.path.abspath(os.getcwd())
+if os.path.exists(os.path.join(currentDir, 'tests', 'test_OIMS2fits.py')):
+    MODULE_BUILD = currentDir
+else:
+    MODULE_BUILD = None
+    
+run_scripts_tests = False
+if MODULE_BUILD is not None:
+    run_scripts_tests = True
+
+__version__  = "0.3"
 __author__    = "Jayce Dowell"
 
 
 oimsFile = os.path.join(os.path.dirname(__file__), 'data', 'test.oims')
 
+@unittest.skipUnless(run_scripts_tests, "cannot determine correct script path to use")
 class OIMS2fits_tests(unittest.TestCase):
     """A unittest.TestCase collection of unit tests for the OrvilleImageDB
     module."""
@@ -40,16 +43,29 @@ class OIMS2fits_tests(unittest.TestCase):
         self.testPath = tempfile.mkdtemp(prefix='test-OIMS2fits-', suffix='.tmp')
     def test_OIMS2fits_run(self):
         """Create fits from oims"""
-        args = Namespace(filename=[oimsFile],diff=False,force=False,pbcorr=False,verbose=False)
-        fitsFile = glob.glob(oimsFile.replace(".oims","*.fits"))
+        
+        fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))
         if fitsFile:
             for f in fitsFile:
                 try:
                     os.remove(f)
                 except OSError:
                     pass
-        OIMS2fits.main(args)
-        fitsFile = glob.glob(oimsFile.replace(".oims","*.fits"))
+                    
+        with open('OIMS2fits.log', 'w') as logfile:
+            try:
+                cmd = [sys.executable, 'scripts/OIMS2fits.py', oimsFile]
+                status = subprocess.check_call(cmd, stdout=logfile)
+            except subprocess.CalledProcessError:
+                status = 1
+                
+        if status == 1:
+            with open('OIMS2fits.log', 'r') as logfile:
+                print(logfile.read())
+        os.unlink('OIMS2fits.log')
+        self.assertEqual(status, 0)
+        
+        fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))
         for f in fitsFile:
             with fits.open(f) as hdul:
                 nchan = len(fitsFile)
@@ -58,18 +74,17 @@ class OIMS2fits_tests(unittest.TestCase):
                 xdata = hdul[0].data.shape[1]
                 ydata = hdul[0].data.shape[2]
 
-            db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
-            self.assertEqual(nchan, db.header.nchan)
-            self.assertEqual(ints, db.nint)
-            self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
-            self.assertEqual(xdata, db.header.ngrid)
-            self.assertEqual(ydata, db.header.ngrid)
-            db.close()
+            with OrvilleImageDB(oimsFile, 'r') as db:
+                self.assertEqual(nchan, db.header.nchan)
+                self.assertEqual(ints, db.nint)
+                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                self.assertEqual(xdata, db.header.ngrid)
+                self.assertEqual(ydata, db.header.ngrid)
+                
             try:
                 os.remove(f)
             except OSError:
                 pass
-        
 
 
 class OIMS2fits_test_suite(unittest.TestSuite):

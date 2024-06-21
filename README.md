@@ -25,9 +25,9 @@ Orville data with reduced spectral resolution (six 3.3 MHz channels) are availab
 ## Reading OIMS Files
 You can use the `OrvilleImageDB.py` Python module to read the data stored in an OIMS file:
 ```
-import OrvilleImageDB
+from lsl_toolkits.OrvilleImager import OrvilleImageDB
 
-db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
+db = OrvilleImageDB(oimsFile, 'r')
 
 # Get parameters from the input file
 
@@ -41,15 +41,22 @@ ngrid = db.header.ngrid # image size (x-axis)
 psize = db.header.pixel_size # angular size of a pixel (at zenith)
 nchan = db.header.nchan # number of frequency channels
 
-# Collect header and data from the whole file
+# There are two main ways to read data from the OIMS file:
+#  - From a single integration
+#  - From all integrations at once
 
-for i,(hdr,data) in enumerate(db):
-    print(i, hdr)
-
-# Below will give more info on the headers and data array
-# Collecting data and header from a particular image integration (Usually 720 integrations (each 5 seconds) in an hour) 
+# 1. Reading a particular image integration
+#    (Usually 720 integrations (each 5 seconds) in an hour) 
 
 hdr, dat = db.__getitem__(710) # collecting header and data from the 710 th integration
+
+# The dat array contains the image data in a four dimensional array of the form [nchan,stokes,xgrid,ygrid]
+# where nchan = 198 frequency channels, stokes = 4 [stokes (I, Q, U,V)], xgrid = grid size in the x direction,
+# ygrid = grid size in the y direction (typically xgrid = ygrid = ngrid)
+# Copy over to numpy arrays for further processing (e.g. image subtraction and transient searches).
+
+# Individual header items can be accessed from the hdr dictionary:
+
 t = hdr['start_time'] # starting time in MJD
 int_len = hdr['int_len'] # length of each integration
 lst = hdr['lst'] # starting LST time of observation
@@ -61,10 +68,19 @@ cent_dec = hdr['center_dec'] # phase center Dec
 cent_az = hdr['center_az']   # phase center coordinates, azimuth, Ideally towards zenith, changed due to w-projection 
 cent_alt = hdr['center_alt'] # phase center coordinates, elevation, Ideally towards zenith, changed due to w-projection 
 
-# The dat array contains the image data in a four dimensional array of the form [nchan,stokes,xgrid,ygrid]
-# where nchan = 198 frequency channels, stokes = 4 [stokes (I, Q, U,V)], xgrid = grid size in the x direction,
-# ygrid = grid size in the y direction and mostly xgrid = ygrid = ngrid
-# Copy over to numpy arrays for further processing such as image subtraction and transient searches.
 
+# 2. Reading all integrations at once
+
+hdr_list, data_all = db.read_all()
+
+# data_all contains the image data in a 5d masked array of the form [integration,nchan,stokes,xgrid,ygrid]
+# where integration is the number of integrations (typically 720 per hour) and the other axes are the same
+# as above. hdr_list is a list of dictionaries, one per integration. This can easily be converted to a 
+# pandas dataframe object by doing:
+
+import pandas as pd
+hdr_df = pd.DataFrame(hdr_list)
+
+# Close the database file
 db.close()
 ```

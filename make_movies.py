@@ -14,7 +14,7 @@ import argparse
 from tempfile import mkdtemp
 
 
-OLD_LWATV4_MOVIES = []
+OLD_LWATV4_MOVIES = [[60330,60330]]
 
 
 def main(args):

@@ -512,12 +512,48 @@ class OrvilleImageDB(object):
         if self.include_mask:
             mask = numpy.fromfile(self.file, 'u1', nchan)
             reshaped_mask = numpy.full(data.shape, False, dtype=bool) # Create Bool array filled with False values
-            reshaped_mask[numpy.argwhere(mask),...] = True # Propogate True across rows of flagged channels
-            data = numpy.ma.array(data) # Create masked array the same way
-            data.mask = reshaped_mask # Append new mask            
+            reshaped_mask[numpy.argwhere(mask),...] = True # Propagate True across rows of flagged channels
+            data = numpy.ma.masked_array(data, reshaped_mask, dtype=data.dtype) # Create masked array
             
         self.curr_int += 1
         return info, data
+        
+    def read_all(self):
+        """
+        Reads all integrations from the database.
+        
+        Returns a 2-tuple containing:
+        hdr_list -- a list of dictionaries with the following keys defined:
+            start_time -- MJD UTC at which this integration began
+            int_len -- integration length, in days
+            fill -- packet fill fraction, if available
+            lst -- mean local sidereal time of the observation, in days
+            start_freq -- frequency of first channel in the integration, in Hz
+            stop_freq -- frequency of last channel in the integration, in Hz
+            bandwidth -- bandwidth of each channel in the integrated data, in Hz
+            center_ra -- RA of the image phase center, in degrees
+            center_dec -- Declination of image phase center, in degrees
+            center_az -- azimuth of the image phase center, in degrees
+            center_alt -- altitude of image phase center, in degrees
+            asp_filter -- ASP filter code (0=split, 1=full, ...)
+            asp_atten_1 -- ASP first attenuator setting
+            asp_atten_2 -- ASP second attenuator setting
+            asp_atten_s -- ASP split attenuator setting
+            pixel_size -- Real-world size of a pixel, in degrees
+            stokes_params -- a list or comma-delimited string of Stokes params
+        data_all -- a 5D masked float32 array of image data indexed as 
+            [integration, chan, stokes, x, y]
+        """
+        
+        self.seek(0)
+        nchan, nstokes, ngrid = self.header.nchan, self.nstokes, self.header.ngrid
+        data_all = numpy.ma.zeros((self.nint, nchan, nstokes, ngrid, ngrid), dtype=numpy.float32)
+        hdr_list = []
+        while self.curr_int < self.nint:
+            hdr, data = self.read_image()
+            hdr_list.append(hdr)
+            data_all[self.curr_int-1] = data
+        return hdr_list, data_all
         
     @staticmethod
     def sort(filename):
@@ -582,6 +618,12 @@ class OrvilleImageDB(object):
             shutil.copy(outFile.name, filename)
             
     # Implement some built-ins to make reading images more "Pythonic" ...
+    def __enter__(self):
+        return self
+        
+    def __exit__(self, type, value, tb):
+        self.close()
+        
     def __len__(self):
         return self.nint
         

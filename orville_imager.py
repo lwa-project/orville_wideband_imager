@@ -54,7 +54,7 @@ BFNoSpinZone()
 
 import PIL.Image, PIL.ImageDraw, PIL.ImageFont
 
-from OrvilleImageDB import OrvilleImageDB
+from lsl_toolkits.OrvilleImage import OrvilleImageDB
 
 
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -251,11 +251,12 @@ class CaptureOp(object):
         del capture
 
 class SpectraOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
         self.output_dir = os.path.join(base_dir, 'spectra')
+        self.uploader_dir = uploader_dir
         self.core = core
         self.gpu = gpu
         
@@ -263,7 +264,10 @@ class SpectraOp(object):
             os.mkdir(base_dir)
         if not os.path.exists(self.output_dir):
             os.mkdir(self.output_dir)
-            
+        if self.uploader_dir is not None:
+            if not os.path.exists(self.uploader_dir):
+                os.mkdir(self.uploader_dir)
+                
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.in_proclog   = ProcLog(type(self).__name__+"/in")
         self.size_proclog = ProcLog(type(self).__name__+"/size")
@@ -274,7 +278,7 @@ class SpectraOp(object):
                                 'ring0':self.iring.name,
                                 'ring1':self.mring.name})
         
-    def _plot_spectra(self, time_tag, freq, specs, status, mask):
+    def _plot_spectra(self, time_tag, freq, specs, labels, status, mask):
         # Plotting setup
         nchan = freq.size
         nstand = specs.shape[0]
@@ -304,7 +308,7 @@ class SpectraOp(object):
             if s >= height * width:
                 break
             x0, y0 = (s % width) * 65 + 1, (s // width + 1) * 65
-            draw.text((x0 + 5, y0 - 60), str(s+1), font=font, fill='#000000')
+            draw.text((x0 + 5, y0 - 60), str(labels[2*s+0]), font=font, fill='#000000')
             
             ## XX
             c = '#1F77B4'
@@ -350,6 +354,7 @@ class SpectraOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
         
+        labels = [ant.stand.id for ant in ANTENNAS]
         status = [ant.combined_status for ant in ANTENNAS]
         
         for iseq,mseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True)):
@@ -401,7 +406,7 @@ class SpectraOp(object):
                 adata = adata[:,:,[0,1],[0,1]]
                 
                 ## Plot
-                im = self._plot_spectra(time_tag, freq, 10*numpy.log10(adata), status, mdata)
+                im = self._plot_spectra(time_tag, freq, 10*numpy.log10(adata), labels, status, mdata)
                 
                 ## Save
                 ### Timetag stuff
@@ -413,6 +418,8 @@ class SpectraOp(object):
                 filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.png' % (mjd, h, m, s, freq.min()/1e6, freq.max()/1e6)
                 outname = os.path.join(outname, filename)
                 im.save(outname, 'PNG')
+                if self.uploader_dir is not None:
+                    shutil.copy2(filename, os.path.join(self.uploader_dir, 'lwatv_spec.png'))
                 self.log.debug("Wrote spectra %i to disk as '%s'", intCount, os.path.basename(outname))
                 
                 time_tag += navg * (fS / 100.0)
@@ -430,10 +437,11 @@ class SpectraOp(object):
 
 
 class BaselineOp(object):
-    def __init__(self, log, iring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.output_dir = os.path.join(base_dir, 'baselines')
+        self.uploader_dir = uploader_dir
         self.core = core
         self.gpu = gpu
         
@@ -441,7 +449,10 @@ class BaselineOp(object):
             os.mkdir(base_dir)
         if not os.path.exists(self.output_dir):
             os.mkdir(self.output_dir)
-            
+        if self.uploader_dir is not None:
+            if not os.path.exists(self.uploader_dir):
+                os.mkdir(self.uploader_dir)
+                
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.in_proclog   = ProcLog(type(self).__name__+"/in")
         self.size_proclog = ProcLog(type(self).__name__+"/size")
@@ -587,6 +598,8 @@ class BaselineOp(object):
                 filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.png' % (mjd, h, m, s, freq.min()/1e6, freq.max()/1e6)
                 outname = os.path.join(outname, filename)
                 im.save(outname, 'PNG')
+                if self.uploader_dir is not None:
+                    shutil.copy2(outname, os.path.join(self.uploader_dir, 'lwatv_uvdist.png'))
                 self.log.debug("Wrote baselines %i to disk as '%s'", intCount, os.path.basename(outname))
                 
                 time_tag += navg * (fS / 100.0)
@@ -602,6 +615,127 @@ class BaselineOp(object):
                 
         self.log.info("BaselineOp - Done")
 
+class MatrixOp(object):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
+        self.log = log
+        self.iring = iring
+        self.mring = mring
+        self.output_dir = os.path.join(base_dir, 'matrices')
+        self.core = core
+        self.gpu = gpu
+        
+        if not os.path.exists(base_dir):
+            os.mkdir(base_dir)
+        if not os.path.exists(self.output_dir):
+            os.mkdir(self.output_dir)
+            
+        self.bind_proclog = ProcLog(type(self).__name__+"/bind")
+        self.in_proclog   = ProcLog(type(self).__name__+"/in")
+        self.size_proclog = ProcLog(type(self).__name__+"/size")
+        self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
+        self.perf_proclog = ProcLog(type(self).__name__+"/perf")
+        
+        self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
+        
+        self.station = STATION
+        
+    def main(self):
+        cpu_affinity.set_core(self.core)
+        if self.gpu != -1:
+            BFSetGPU(self.gpu)
+        self.bind_proclog.update({'ncore': 1, 
+                                  'core0': cpu_affinity.get_core(),
+                                  'ngpu': 1,
+                                  'gpu0': BFGetGPU(),})
+
+        for iseq,mseq in zip(self.iring.read(guarantee=True),self.mring.read(guarantee=True)):
+            ihdr = json.loads(iseq.header.tostring())
+            mhdr = json.loads(mseq.header.tostring())
+            
+            self.sequence_proclog.update(ihdr)
+            self.log.info('MatrixOp: Config - %s', ihdr)
+            
+            # Setup the ring metadata and gulp sizes
+            chan0  = ihdr['chan0']
+            nchan  = ihdr['nchan']
+            nbl    = ihdr['nbl']
+            nstand = int(numpy.sqrt(8*nbl+1)-1)//2
+            npol   = ihdr['npol']
+            navg   = ihdr['navg']
+            time_tag0 = iseq.time_tag
+            time_tag  = time_tag0
+            igulp_size = nstand*(nstand+1)//2*nchan*npol*npol*8
+            ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
+            self.iring.resize(igulp_size, igulp_size*10)
+
+            mgulp_size = nchan*1
+            mshape = (nchan,)
+            self.mring.resize(mgulp_size, mgulp_size*10)
+
+            integrations = deque([], maxlen=2)
+            fhdr = json.dumps(ihdr)
+
+            intCount = 0
+            prev_time = time.time()
+            for ispan,mspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size)):
+                if ispan.size < igulp_size:
+                    continue #Ignore final gulp
+                if mspan.size < nchan*1:
+                    continue #Ignore final gulp
+                curr_time = time.time()
+                acquire_time = curr_time - prev_time
+                prev_time = curr_time
+
+                ##Set up and load
+                idata = ispan.data_view(numpy.complex64).reshape(ishape)
+                mdata = mspan.data_view(numpy.uint8).reshape(mshape)
+
+                ##Normalize
+                idata = numpy.array(idata)
+                idata /= numpy.abs(idata)
+
+                ##Apply the flags
+                bad = ~(mdata.astype(bool))
+                idata[:,bad,:,:] = 0
+                idata /= mdata.sum()
+
+                ##Add the flagged data to the deque and make sure we 
+                ##have 2 integrations to use. If we have 2, compute
+                ##the averaged correlation matrix appropriately.
+                integrations.append(idata)
+                if len(integrations) == 2:
+                    even, odd = integrations
+
+                    corr = even * odd.conj()
+                    corr = numpy.sum(corr, axis=1)
+                
+                    #Save
+                    ### Timetag stuff
+                    mjd, h, m, s = timetag_to_mjdatetime(time_tag)
+                    ### The actual save
+                    outname = os.path.join(self.output_dir, str(mjd))
+                    if not os.path.exists(outname):
+                        os.mkdir(outname)
+                    filename = 'CorrMatrix_%i_%02i%02i%02i.npz' % (mjd, h, m, s)
+                    outname = os.path.join(outname, filename)
+                    numpy.savez(outname, hdr=fhdr, data=corr, mask=mdata)
+                    self.log.debug("Wrote correlation matrix %i to disk as '%s'", intCount, os.path.basename(outname))
+                
+                    intCount += 1
+                else:
+                    pass
+
+                time_tag += navg * (fS / 100.0)
+
+                curr_time = time.time()
+                process_time = curr_time - prev_time
+                self.log.debug("MatrixOp processing time was %.3f s", process_time)
+                prev_time = curr_time
+                self.perf_proclog.update({'acquire_time': acquire_time,
+                                          'reserve_time': 0.0,
+                                          'process_time': process_time,})
+
+        self.log.info("MatrixOp - Done")
 
 class FlaggerOp(object):
     def __init__(self, flagfile, log, iring, oring, clip=3, core=-1, gpu=-1):
@@ -631,7 +765,7 @@ class FlaggerOp(object):
                                   'core0': cpu_affinity.get_core(),
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
-        
+ 
         with self.oring.begin_writing() as oring:
             for iseq in self.iring.read(guarantee=True):
                 ihdr = json.loads(iseq.header.tostring())
@@ -1041,13 +1175,14 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
         self.output_dir_images = os.path.join(base_dir, 'images')
         self.output_dir_archive = os.path.join(base_dir, 'archive')
         self.output_dir_lwatv = os.path.join(base_dir, 'lwatv')
+        self.uploader_dir = uploader_dir
         self.core = core
         self.gpu = gpu
         
@@ -1059,7 +1194,10 @@ class WriterOp(object):
             os.mkdir(self.output_dir_archive)  
         if not os.path.exists(self.output_dir_lwatv):
             os.mkdir(self.output_dir_lwatv)
-            
+        if self.uploader_dir is not None:
+            if not os.path.exists(self.uploader_dir):
+                os.mkdir(self.uploader_dir)
+                
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.in_proclog   = ProcLog(type(self).__name__+"/in")
         self.size_proclog = ProcLog(type(self).__name__+"/size")
@@ -1371,6 +1509,10 @@ class WriterOp(object):
                     outname_ts = os.path.join(self.output_dir_lwatv, 'lwatv_timestamp')
                     with open(outname_ts, 'w') as fh:
                         fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
+                    
+                    if self.uploader_dir is not None:
+                        shutil.copy2(outname, os.path.join(self.uploader_dir, 'lwatv.png'))
+                        shutil.copy2(outname_ts, os.path.join(self.uploader_dir, 'lwatv_timestamp'))    
                         
                     self.log.debug("Wrote LWATV %i, %i to disk as '%s'", intCount, c, os.path.basename(outname))
                     
@@ -1389,18 +1531,15 @@ class WriterOp(object):
 
 
 class UploaderOp(object):
-    def __init__(self, log, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, uploader_dir=None, core=-1, gpu=-1):
         self.log = log
-        self.output_dir_spectra = os.path.join(base_dir, 'spectra')
-        self.output_dir_uvdist  = os.path.join(base_dir, 'baselines')
-        self.output_dir_lwatv   = os.path.join(base_dir, 'lwatv')
-        
+        self.uploader_dir = uploader_dir
         self.core = core
         self.gpu = gpu
         
-        for output_dir in (self.output_dir_spectra, self.output_dir_uvdist, self.output_dir_lwatv):
-            if not os.path.exists(output_dir):
-                os.mkdir(output_dir)
+        if self.uploader_dir is not None:
+            if not os.path.exists(self.uploader_dir):
+                os.mkdir(self.uploader_dir)
                 
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
@@ -1425,79 +1564,33 @@ class UploaderOp(object):
             acquire_time = curr_time - prev_time
             prev_time = curr_time
             
-            # Find the latest version of the files
-            ## MJD
-            try:
-                p = subprocess.Popen('ls -td %s/* | head -n1' % self.output_dir_spectra,
-                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                     shell=True)
-                output, error = p.communicate()
-                output = output.decode()
-                mjd = os.path.basename(output.split('\n')[0])
-            except subprocess.CalledProcessError:
-                mjd = '*'
-            ## Approximate time as an hour
-            utc_hour = int((time.time() % 86400) / 3600)
-            
-            ## Spectra
-            try:
-                p = subprocess.Popen('ls -t %s/%s/*.png | head -n1' % (self.output_dir_spectra, mjd),
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    shell=True)
-                output, error = p.communicate()
-                output = output.decode()
-                latest_spectra = output.split('\n')[0]
-                shutil.copy2(latest_spectra, '/tmp/lwatv_spec.png')
-            except (subprocess.CalledProcessError, OSError, IOError):
-                pass
-                
-            ## (u,v) radial distribution
-            try:
-                p = subprocess.Popen('ls -t %s/%s/*.png | head -n1' % (self.output_dir_uvdist, mjd),
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    shell=True)
-                output, error = p.communicate()
-                output = output.decode()
-                latest_uvdist = output.split('\n')[0]
-                shutil.copy2(latest_uvdist, '/tmp/lwatv_uvdist.png')
-            except (subprocess.CalledProcessError, OSError, IOError):
-                pass
-                
-            ## LWATV image
-            try:
-                p = subprocess.Popen('ls -t %s/%s/*_%02i*.png | head -n1' % (self.output_dir_lwatv, mjd, utc_hour),
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    shell=True)
-                output, error = p.communicate()
-                output = output.decode()
-                latest_lwatv = output.split('\n')[0]
-                shutil.copy2(latest_lwatv, '/tmp/lwatv.png')
-                shutil.copy2(os.path.join(self.output_dir_lwatv, 'lwatv_timestamp'), '/tmp/lwatv_timestamp')
-            except (subprocess.CalledProcessError, OSError, IOError) as e:
-                pass
-                
             # Upload and make active
-            try:
-                ## Stage
-                p = subprocess.Popen('rsync -e ssh -av /tmp/lwatv*.png /tmp/lwatv_timestamp \
-                                        mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/',
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    shell=True)
-                output, error = p.communicate()
-                if p.returncode != 0:
-                    self.log.warning('Error uploading: %s', error)
-                    
-                ## Activate
-                p = subprocess.Popen("ssh mcsdr@lwalab.phys.unm.edu \
-                                        'mv -f /var/www/lwatv2/incoming/* /var/www/lwatv2/'",
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    shell=True)
-                output, error = p.communicate()
-                if p.returncode != 0:
-                    self.log.warning('Error making active: %s', error)
-            except subprocess.CalledProcessError:
-                pass
-                
+            if self.uploader_dir is not None:
+                if os.listdir(self.uploader_dir):
+                    try:
+                        ## Upload and stage
+                        p = subprocess.Popen(['timeout', '2', 'rsync', '-e', 'ssh', '-a', self.upload_dir+os.path.sep,
+                                              'mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/'],
+                                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                        _, error = p.communicate()
+                        if p.returncode != 0:
+                            self.log.warning('Error uploading: %s', error.decode())
+                            
+                    except subprocess.CalledProcessError:
+                        pass
+                        
+                    try:
+                        ## Activate
+                        p = subprocess.Popen(['timeout', '2', 'ssh', 'mcsdr@lwalab.phys.unm.edu',
+                                              'mv -f /var/www/lwatv2/incoming/* /var/www/lwatv2/'],
+                                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                        _, error = p.communicate()
+                        if p.returncode != 0:
+                            self.log.warning('Error making active: %s', error.decode())
+                            
+                    except subprocess.CalledProcessError:
+                        pass
+                        
             curr_time = time.time()
             process_time = curr_time - prev_time
             self.log.debug('Uploader processing time was %.3f s', process_time)
@@ -1506,13 +1599,12 @@ class UploaderOp(object):
                                       'reserve_time': -1, 
                                       'process_time': process_time,})
             
-            time.sleep(max([10-process_time, 0]))
+            time.sleep(max([5-process_time, 0]))
 
 
 class AnalogSettingsOp(object):
     def __init__(self, log, core=-1, gpu=-1):
         self.log = log
-        
         self.core = core
         self.gpu = gpu
         
@@ -1544,28 +1636,22 @@ class AnalogSettingsOp(object):
             acquire_time = curr_time - prev_time
             prev_time = curr_time
             
-            new_config = {'asp_filter': -1,
+            new_config = {'asp_filter':  -1,
                           'asp_atten_1': -1,
                           'asp_atten_2': -1,
                           'asp_atten_s': -1}
             
             try:
-                uh = urlopen('https://lwalab.phys.unm.edu/OpScreen/lwasv/arx.dat',
-                             timeout=5)
-                config = uh.read()
-                config = config.decode()
-                config = config.split('\n')
-                for line in config:
-                    line = line.strip().rstrip()
-                    if len(line) < 3:
-                        continue
-                        
+                with urlopen('https://lwalab.phys.unm.edu/OpScreen/lwasv/arx.json', timeout=5) as uh:
+                    config = json.load(uh)
+                    
+                for entry in config:
+                    setting = entry['setting']
                     try:
-                        key, value, yymmdd, hhmmss = line.split(';;;', 3)
-                        value = int(value, 10)
-                        new_config[mapping[key]] = value
-                    except (IndexError, ValueError) as err:
-                        self.log.warn("Failed to parse ASP configuration line '%s': %s", line, str(err))
+                        if entry['value'] is not None:
+                            new_config[mapping[setting]] = entry['value']
+                    except KeyError as err:
+                        self.log.warn("Failed to load ASP configuration setting '%s': %s", setting, str(err))
             except Exception as err:
                 self.log.warn('Failed to download ASP configuration: %s', str(err))
                 
@@ -1619,7 +1705,7 @@ def main(args):
         log.info("  %s: %s", arg, getattr(args, arg))
         
     # Setup the cores and GPUs to use
-    cores = [0, 1, 2, 3, 4, 5, 6, 7]
+    cores = [0, 1, 2, 3, 4, 5, 6, 7, 7]
     gpus  = [0,]*len(cores)
     log.info("CPUs:         %s", ' '.join([str(v) for v in cores]))
     log.info("GPUs:         %s", ' '.join([str(v) for v in gpus]))
@@ -1651,6 +1737,11 @@ def main(args):
     rfimask_ring = Ring(name="rfimask", space='system')
     writer_ring = Ring(name="writer", space='system')
     
+    # Setup the uploader's staging location
+    uploader_dir = '/dev/shm/orville_uploader'
+    if not os.path.exists(uploader_dir):
+        os.mkdir(uploader_dir)
+        
     # Setup the processing blocks
     ## A reader
     nBL = len(ANTENNAS)//2*(len(ANTENNAS)//2+1)//2
@@ -1663,11 +1754,16 @@ def main(args):
     ## The flagger
     ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring,
                          core=cores.pop(0)))
+    ## The correlation matrix
+    ops.append(MatrixOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
+                        core=cores.pop(0), gpu=gpus.pop(0)))
     ## The spectra plotter
     ops.append(SpectraOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
+                         uploader_dir=uploader_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The radial (u,v) plotter
     ops.append(BaselineOp(log, capture_ring, base_dir=args.output_dir,
+                          uploader_dir=uploader_dir,
                           core=cores.pop(0), gpu=gpus.pop(0)))
     ## The imager
     ops.append(ImagingOp(log, capture_ring, writer_ring,
@@ -1675,9 +1771,10 @@ def main(args):
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image writer and plotter for LWA TV
     ops.append(WriterOp(log, writer_ring, rfimask_ring, base_dir=args.output_dir,
+                         uploader_dir=uploader_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
-    ops.append(UploaderOp(log, base_dir=args.output_dir,
+    ops.append(UploaderOp(log, uploader_dir=uploader_dir,
                           core=cores.pop(0), gpu=gpus.pop(0)))
     ## The ASP settings getter
     ops.append(AnalogSettingsOp(log,

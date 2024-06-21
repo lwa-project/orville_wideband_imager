@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.6', '3.8']
+        python-version: ['3.8', '3.10', '3.12']
       fail-fast: false
     steps:
       - name: "Software Install - Ubuntu"
@@ -31,12 +31,14 @@ jobs:
         run: |
           python -m pip install \
             setuptools \
-            numpy \
+            "numpy<2" \
             matplotlib \
             scipy \
-            h5py 
+            h5py
           python -m pip install git+https://github.com/lwa-project/lsl.git
           python -m pip install pylint
+      - name: "Build and Install"
+        run: python -m pip install .
       - name: Test
         run: |
           python -m unittest discover

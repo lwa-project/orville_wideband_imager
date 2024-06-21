@@ -37,6 +37,8 @@ jobs:
             h5py
           python -m pip install git+https://github.com/lwa-project/lsl.git
           python -m pip install pylint
+      - name: "Build and Install"
+        run: python -m pip install .
       - name: Test
         run: |
           python -m unittest discover

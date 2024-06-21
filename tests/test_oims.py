@@ -2,19 +2,12 @@
 Unit test for OrvilleImageDB module.
 """
 
-# Python2 compatibility
-from __future__ import print_function, division, absolute_import
-try:
-    range = xrange
-except NameError:
-    pass
-    
 import os
 import numpy
 import tempfile
 import unittest
 
-import OrvilleImageDB
+from lsl_toolkits.OrvilleImage import OrvilleImageDB, BAD_FREQ_LIST
 
 
 __version__  = "0.2"
@@ -39,7 +32,7 @@ class oims_tests(unittest.TestCase):
     def test_oims_read(self):
         """Test reading in an image from a OrvilleImage file."""
 
-        db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
+        db = OrvilleImageDB(oimsFile, 'r')
         
         # Read in the first image with the correct number of elements
         hdr, data = db.read_image()
@@ -51,10 +44,41 @@ class oims_tests(unittest.TestCase):
         
         db.close()
         
+    def test_oims_context_manager(self):
+        """Test reading in an image from a OrvilleImage file using the context manager."""
+
+        with OrvilleImageDB(oimsFile, 'r') as db:
+            # Read in the first image with the correct number of elements
+            hdr, data = db.read_image()
+            ## Image
+            self.assertEqual(data.shape[0], db.header.nchan)
+            self.assertEqual(data.shape[1], len(db.header.stokes_params.split(b',')))
+            self.assertEqual(data.shape[2], db.header.ngrid)
+            self.assertEqual(data.shape[3], db.header.ngrid)
+            
+    def test_oims_read_all(self):
+        """Test reading in all images from a OrvilleImage file."""
+
+        db = OrvilleImageDB(oimsFile, 'r')
+        
+        # Read in the first image with the correct number of elements
+        hdrs, data = db.read_all()
+        ## Count
+        self.assertEqual(len(hdrs), 13)
+        self.assertEqual(len(hdrs), len(data))
+        ## Image
+        for d in data:
+            self.assertEqual(d.shape[0], db.header.nchan)
+            self.assertEqual(d.shape[1], len(db.header.stokes_params.split(b',')))
+            self.assertEqual(d.shape[2], db.header.ngrid)
+            self.assertEqual(d.shape[3], db.header.ngrid)
+        
+        db.close()
+        
     def test_oims_loop(self):
         """Test reading in a collection of images in a loop."""
         
-        db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
+        db = OrvilleImageDB(oimsFile, 'r')
         
         # Go
         for i,(hdr,data) in enumerate(db):
@@ -68,9 +92,9 @@ class oims_tests(unittest.TestCase):
         # Setup the file names
         testFile = os.path.join(self.testPath, 'test.oims')
         
-        db = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
-        nf = OrvilleImageDB.OrvilleImageDB(testFile, 'w', imager_version=db.header.imager_version, 
-                                                          station=db.header.station)
+        db = OrvilleImageDB(oimsFile, 'r')
+        nf = OrvilleImageDB(testFile, 'w', imager_version=db.header.imager_version, 
+                            station=db.header.station)
                                             
         # Fill it
         for rec in db:
@@ -81,8 +105,8 @@ class oims_tests(unittest.TestCase):
         nf.close()
         
         # Re-open
-        db0 = OrvilleImageDB.OrvilleImageDB(oimsFile, 'r')
-        db1 = OrvilleImageDB.OrvilleImageDB(testFile, 'r')
+        db0 = OrvilleImageDB(oimsFile, 'r')
+        db1 = OrvilleImageDB(testFile, 'r')
         
         # Validate
         ## File header
@@ -107,6 +131,11 @@ class oims_tests(unittest.TestCase):
                         
         db0.close()
         db1.close()
+        
+    def test_bad_freq_list(self):
+        """Test the list of bad frequencies that should be flagged/removed."""
+        
+        self.assertTrue(BAD_FREQ_LIST.size > 0)
         
     def tearDown(self):
         """Remove the test path directory and its contents"""

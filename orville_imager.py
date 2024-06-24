@@ -1406,8 +1406,8 @@ class WriterOp(object):
             # Setup the frequencies
             t0 = time.time()
             freq = chan0*fC + numpy.arange(nchan)*4*fC
-            arc_freq = freq*1.0
-            arc_freq = arc_freq.reshape(6, -1)
+            arc_freq = freq[:748]*1.0
+            arc_freq = arc_freq.reshape(22, -1)
             arc_freq = arc_freq.mean(axis=1)
             
             # Setup the frequencies to write images for
@@ -1439,8 +1439,10 @@ class WriterOp(object):
                 
                 ## Write the archive image set to disk
                 tArchive = time.time()
-                arc_data = idata.reshape(arc_freq.size,-1,npol*npol,ngrid,ngrid)
-                arc_mask = mdata.reshape(arc_freq.size,-1,1,1,1)
+                arc_data = idata[:arc_freq.size,...]
+                arc_data = arc_data.reshape(arc_freq.size,-1,npol*npol,ngrid,ngrid)
+                arc_mask = mdata[:arc_freq.size,...]
+                arc_mask = arc_mask.reshape(arc_freq.size,-1,1,1,1)
                 mask_mean = arc_mask.sum(axis=1) / arc_mask.shape[1]
                 for band in range(mask_mean.shape[0]):
                     if mask_mean[band,0,0,0] < 0.5:

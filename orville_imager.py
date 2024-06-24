@@ -934,12 +934,12 @@ class ImagingOp(object):
                 time_tag  = time_tag0*1
                 
                 # Figure out the grid size and resolution - assumes a station size of 
-                # 100 m and maximum angular extent for the sky of 130 degrees
+                # 50 m and maximum angular extent for the sky of 130 degrees
                 min_lambda = 299792458.0 / ((chan0 + 4*nchan-1)*fC)     # m
-                rayleigh_res = 1.22 * min_lambda / 100.0 * 180/numpy.pi # deg
+                rayleigh_res = 1.22 * min_lambda / 50.0 * 180/numpy.pi # deg
                 res = rayleigh_res / 4.0    # deg
                 grid_size = int(numpy.ceil(130.0 / res))    # px
-                grid_size = max([grid_size, 128])           # px
+                grid_size = max([grid_size, 64])            # px
                 grid_size = round_up_to_even(grid_size)     # px
                 grid_res = 130.0 / grid_size                # deg/px
                 

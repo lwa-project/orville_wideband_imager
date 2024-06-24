@@ -26,7 +26,7 @@ ExecStart=/bin/bash -ec '\
 python3 /home/jdowell/orville3/orville_imager.py \
 	 --logfile    /data/orville/log/wideband-imager.log \
 	 --output-dir /data/orville \
-	 --freq-save  30~50'
+	 --freq-save  29~47'
 
 [Install]
 WantedBy=multi-user.target

@@ -9,7 +9,7 @@
 The Orville Wideband Imager is a realtime GPU-based all-sky imager for the output
 of the Advanced Digitial Processor (ADP) broadband correlator that runs at LWA-SV.
 Orville receives visibility data from ADP for 32,896 baselines, images the data,
-and writes the images to the disk in a [binary frame-based format called "OIMS"](https://github.com/lwa-project/orville_wideband_imager/blob/master/OrvilleImageDB.py).
+and writes the images to the disk in a [binary frame-based format called "OIMS"](https://github.com/lwa-project/orville_wideband_imager/blob/main/src/lsl_toolkits/OrvilleImage/OrvilleImageDB.py).
 The imaging is performed using a _w_-stacking algorithm for the non-coplanarity of
 the array.  For each image, the sky is projected onto the two dimensional plane using
 orthographic sine projection.  To reduce the number of _w_-planes needed during _w_-stacking,

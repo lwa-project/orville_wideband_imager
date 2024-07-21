@@ -135,7 +135,7 @@ def main(args):
                 hdr = hdrlist[0]
                 if args.diff:
                     tmpdata = numpy.copy(data)
-                    data = numpy.zeros((len(data)-1,6,4,ngrid,ngrid))
+                    data = numpy.zeros((len(data)-1,nchan,4,ngrid,ngrid))
                     for i in range(len(data)):
                         data[i] = tmpdata[i+1] - tmpdata[i]
             for chan in range(nchan):

@@ -1439,9 +1439,9 @@ class WriterOp(object):
                 
                 ## Write the archive image set to disk
                 tArchive = time.time()
-                arc_data = idata[:arc_freq.size,...]
+                arc_data = idata[:748,...]
                 arc_data = arc_data.reshape(arc_freq.size,-1,npol*npol,ngrid,ngrid)
-                arc_mask = mdata[:arc_freq.size,...]
+                arc_mask = mdata[:748,...]
                 arc_mask = arc_mask.reshape(arc_freq.size,-1,1,1,1)
                 mask_mean = arc_mask.sum(axis=1) / arc_mask.shape[1]
                 for band in range(mask_mean.shape[0]):

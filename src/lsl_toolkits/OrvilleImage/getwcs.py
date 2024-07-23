@@ -1,5 +1,5 @@
 import numpy as np 
-from astropy.wcs importWCS
+from astropy.wcs import WCS
 from astropy.time import Time
 import astropy.units as u
 

@@ -13,12 +13,13 @@ def getSVwcs(header, imSize):
     Dec = 33.507121493107995*u.deg 
     
     SV = EarthLocation(lat=34.348358*u.deg, lon=-106.885783*u.deg, height=1477.8*u.m)
-    t_obs = Time(header['start_time'], format='mjd') #time of observation
+    t_obs = Time(header['start_time'], format='mjd',location=SV) #time of observation
     
     # assume the HA/Dec are measured in the epoch-of-date
-    hadec = SkyCoord(ha=HA, dec=Dec, frame='hadec', obstime=t_obs, location=SV)
-    radec = hadec.transform_to('fk5')
-    w.wcs.crval = [radec.ra.deg, radec.dec.deg]
+    LST = t_obs.sidereal_time("apparent").degree
+    RA = Angle(LST-HA, u.deg).wrap_at(360*u.deg).degree
+
+    w.wcs.crval = [RA, Dec]
 
     theta_c = (89.17548407142988)*np.pi/180
     phi_c = (55.292881400599846)*np.pi/180

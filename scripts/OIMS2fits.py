@@ -61,7 +61,7 @@ def pbcorroims(header,imSize,chan):
     pScale = header['pixel_size']
     sRad   = 360.0/pScale/numpy.pi / 2
     if station==b'LWASV':
-        # SV has special correction factors to improve positions
+        # SV has special correction factors to improve positionsQ
         w = getSVwcs(header, imSize)
     else:
         w = getGENERICwcs(header, imSize)
@@ -183,21 +183,18 @@ def main(args):
                         print("    integration time: %.3f s" % tInt)
                         print("    frequency: %.3f MHz" % header['freq'])
                     
+                    if station==b'LWASV':
+                        # SV has special correction factors to improve positionsQ
+                        w = getSVwcs(hdr, imSize)
+                    else:
+                        w = getGENERICwcs(hdr, imSize)
                     ## Create the FITS HDU and fill in the header information
-                    hdu = astrofits.ImageHDU(data=imdata)
+                    hdu = astrofits.ImageHDU(data=imdata,header=w.to_header())
                     hdu.header['TELESCOP'] = station.decode()
                     hdu.header['EXPTIME'] = tInt
                     ### Coordinates - sky
                     hdu.header['NAXIS'] = 3
-                    hdu.header['CTYPE1'] = 'RA---SIN'
-                    hdu.header['CRPIX1'] = imSize/2 + 1 + 0.5 * ((imSize+1)%2)
-                    hdu.header['CDELT1'] = -360.0/(2*sRad)/numpy.pi
-                    hdu.header['CRVAL1'] = hdr['center_ra']
                     hdu.header['CUNIT1'] = 'deg'
-                    hdu.header['CTYPE2'] = 'DEC--SIN'
-                    hdu.header['CRPIX2'] = imSize/2 + 1 + 0.5 * ((imSize+1)%2)
-                    hdu.header['CDELT2'] = 360.0/(2*sRad)/numpy.pi
-                    hdu.header['CRVAL2'] = hdr['center_dec']
                     hdu.header['CUNIT2'] = 'deg'
                     ### Coordinates - Stokes parameters
                     hdu.header['CTYPE3'] = 'STOKES'
@@ -205,8 +202,6 @@ def main(args):
                     hdu.header['CDELT3'] = 1
                     hdu.header['CRVAL3'] = 1
                     hdu.header['CTYPE4'] = ' '
-                    hdu.header['LONPOLE'] = 180.0
-                    hdu.header['LATPOLE'] = 90.0
                     hdu.header['DATE-OBS'] = dateObs.strftime("%Y-%m-%dT%H:%M:%S")
                     hdu.header['END_UTC'] = dateEnd.strftime("%Y-%m-%dT%H:%M:%S")
                     hdu.header['EXPTIME'] = tInt

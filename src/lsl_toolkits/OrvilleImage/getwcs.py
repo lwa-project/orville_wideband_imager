@@ -9,8 +9,8 @@ def getSVwcs(header, imSize):
     w.wcs.crpix = [imSize/2 + 0.5 * ((imSize+1)%2),imSize/2  + 0.5 * ((imSize+1)%2)]
     # 130 degrees is what is visible to the dipoles
     w.wcs.cdelt = np.array([-130/imSize,130/imSize]) 
-    HA = 357.38856977271047*u.deg
-    Dec = 33.507121493107995*u.deg 
+    HA = 357.38856977271047
+    Dec = 33.507121493107995 
     
     SV = EarthLocation(lat=34.348358*u.deg, lon=-106.885783*u.deg, height=1477.8*u.m)
     t_obs = Time(header['start_time'], format='mjd',location=SV) #time of observation

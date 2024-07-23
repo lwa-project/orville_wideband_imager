@@ -186,15 +186,29 @@ def main(args):
                     if station==b'LWASV':
                         # SV has special correction factors to improve positionsQ
                         w = getSVwcs(hdr, imSize)
+
                     else:
                         w = getGENERICwcs(hdr, imSize)
+                    headertmp = w.to_header()
                     ## Create the FITS HDU and fill in the header information
-                    hdu = astrofits.ImageHDU(data=imdata,header=w.to_header())
+                    hdu = astrofits.ImageHDU(data=imdata)
                     hdu.header['TELESCOP'] = station.decode()
                     hdu.header['EXPTIME'] = tInt
                     ### Coordinates - sky
                     hdu.header['NAXIS'] = 3
+                    hdu.header['CTYPE1'] = headertmp['CTYPE1']
+                    hdu.header['CRPIX1'] = headertmp['CRPIX1']
+                    hdu.header['CDELT1'] = headertmp['CDELT1']
+                    hdu.header['CRVAL1'] = headertmp['CRVAL1']
                     hdu.header['CUNIT1'] = 'deg'
+                    hdu.header['CTYPE2'] = headertmp['CTYPE2']
+                    hdu.header['CRPIX2'] = headertmp['CRPIX2']
+                    hdu.header['CDELT2'] = headertmp['CDELT2']
+                    hdu.header['CRVAL2'] = headertmp['CRVAL2']
+                    if station==b'LWASV':
+                        hdu.header['PV2_1'] = headertmp['PV2_1']
+                        hdu.header['PV2_2'] = headertmp['PV2_2']
+                    hdu.header['lonpole'] = headertmp['lonpole']
                     hdu.header['CUNIT2'] = 'deg'
                     ### Coordinates - Stokes parameters
                     hdu.header['CTYPE3'] = 'STOKES'

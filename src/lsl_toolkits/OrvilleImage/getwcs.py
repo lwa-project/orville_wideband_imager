@@ -8,7 +8,7 @@ def getSVwcs(header, imSize):
     w = WCS(naxis=2)
     w.wcs.crpix = [imSize/2 + 0.5 * ((imSize+1)%2),imSize/2  + 0.5 * ((imSize+1)%2)]
     # 130 degrees is what is visible to the dipoles
-    w.wcs.cdelt = np.array([130/imSize,130/imSize]) 
+    w.wcs.cdelt = np.array([-130/imSize,130/imSize]) 
     HA = 357.38856977271047*u.deg
     Dec = 33.507121493107995*u.deg 
     

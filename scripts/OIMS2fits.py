@@ -16,6 +16,8 @@ import numpy
 import argparse
 
 from lsl_toolkits.OrvilleImage import OrvilleImageDB
+from lsl_toolkits.OrvilleImage.getwcs import getSVwcs, getGENERICwcs
+
 
 def calcbeamprops(az,alt,header,freq):
 
@@ -58,11 +60,11 @@ def calcbeamprops(az,alt,header,freq):
 def pbcorroims(header,imSize,chan):
     pScale = header['pixel_size']
     sRad   = 360.0/pScale/numpy.pi / 2
-    w = WCS(naxis=2)
-    w.wcs.crpix = [imSize/2 + 1 + 0.5 * ((imSize+1)%2),imSize/2 + 1 + 0.5 * ((imSize+1)%2)]
-    w.wcs.cdelt = numpy.array([-360.0/(2*sRad)/numpy.pi, 360.0/(2*sRad)/numpy.pi])
-    w.wcs.crval = [header['center_ra'], header['center_dec']]
-    w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
+    if station==b'LWASV':
+        # SV has special correction factors to improve positions
+        w = getSVwcs(header, imSize)
+    else:
+        w = getGENERICwcs(header, imSize)
     x = numpy.arange(imSize) - 0.5
     y = numpy.arange(imSize) - 0.5
     x,y = numpy.meshgrid(x,y)

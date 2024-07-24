@@ -34,7 +34,7 @@ def getGENERICwcs(header, imSize):
     w = WCS(naxis=2)
     w.wcs.crpix = [imSize/2 + 0.5 * ((imSize+1)%2),imSize/2  + 0.5 * ((imSize+1)%2)]
     # 130 degrees is what is visible to the dipoles
-    w.wcs.cdelt = np.array([130/imSize,130/imSize]) 
+    w.wcs.cdelt = np.array([-130/imSize,130/imSize]) 
     w.wcs.crval = [header['center_ra'],header['center_dec']]
     w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
     return w

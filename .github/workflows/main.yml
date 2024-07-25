@@ -34,7 +34,7 @@ jobs:
             "numpy<2" \
             matplotlib \
             scipy \
-            h5py 
+            h5py
           python -m pip install pylint
       - name: "Build and Install"
         run: python -m pip install .

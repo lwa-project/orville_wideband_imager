@@ -233,11 +233,13 @@ def main(args):
                     ## Write it to disk
                     hdulist.append(hdu)
                 filedir,filebase = os.path.split(os.path.abspath(os.path.expanduser(filename)))
-
+                if args.output_dir is not None:
+                    filedir = args.output_dir
+                    
                 if args.diff:
-                    outName = filedir + '/' + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz-diff.fits"
+                    outName = filedir + os.path.sep + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz-diff.fits"
                 else: 
-                    outName = filedir + '/' + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz.fits"
+                    outName = filedir + os.path.sep + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz.fits"
                 if args.index is not None:
                     outName = outName.replace(".fits",f"-{args.index}.fits")
                 hdulist.writeto(outName, overwrite=args.force)
@@ -265,6 +267,8 @@ if __name__ == "__main__":
                         help='Only output this index')
     parser.add_argument('-p', '--pbcorr', action='store_true',
                         help='Perform primary beam correction on Stokes I')
+    parser.add_argument('-o', '--output-dir',
+                        help='directory to write FITS files to (default: same directory as the .oims files)')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='be verbose during the conversion')
     args = parser.parse_args()

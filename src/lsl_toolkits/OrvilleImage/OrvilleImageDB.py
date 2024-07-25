@@ -431,10 +431,17 @@ class OrvilleImageDB(object):
         """
         
         assert(data.shape[2] == data.shape[3])
-        if self.include_mask:
-            if mask is None:
-                mask = numpy.zeros(data.shape[0], dtype=numpy.uint8)
-            assert(mask.size == data.shape[0])
+        if isinstance(data, numpy.ma.MaskedArray):
+            if self.include_mask:
+                if mask is None:
+                    mask = data.mask[:,0,0,0]
+                assert(mask.size == data.shape[0])
+            data = data.data
+        else:
+            if self.include_mask:
+                if mask is None:
+                    mask = numpy.zeros(data.shape[0], dtype=numpy.uint8)
+                assert(mask.size == data.shape[0])
         self._check_header(info['stokes_params'], data.shape[2], 
                            info['pixel_size'], data.shape[0])
         

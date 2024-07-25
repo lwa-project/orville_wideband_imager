@@ -23,7 +23,7 @@ run_scripts_tests = False
 if MODULE_BUILD is not None:
     run_scripts_tests = True
 
-__version__  = "0.3"
+__version__  = "0.4"
 __author__    = "Jayce Dowell"
 
 
@@ -40,6 +40,31 @@ class OIMS2fits_tests(unittest.TestCase):
 
         numpy.seterr(all='ignore')
         self.testPath = tempfile.mkdtemp(prefix='test-OIMS2fits-', suffix='.tmp')
+        
+    def run_OIMS2fits(self, *args, print_on_failure=True):
+        """
+        Run OIMS2fits.py with the specified arguements and return the subprocess
+        status code.
+        """
+        
+        status = 1
+        with open('OIMS2fits.log', 'w') as logfile:
+            try:
+                cmd = [sys.executable, 'scripts/OIMS2fits.py']
+                cmd.extend(args)
+                
+                status = subprocess.check_call(cmd, stdout=logfile)
+            except subprocess.CalledProcessError:
+                pass
+                
+        if status == 1 and print_on_failure:
+            with open('OIMS2fits.log', 'r') as logfile:
+                print(logfile.read())
+                
+        os.unlink('OIMS2fits.log')
+        
+        return status
+        
     def test_OIMS2fitsdef_run(self):
         """Create fits from oims with default settings"""
         
@@ -51,17 +76,7 @@ class OIMS2fits_tests(unittest.TestCase):
                 except OSError:
                     pass
                     
-        with open('OIMS2fits.log', 'w') as logfile:
-            try:
-                cmd = [sys.executable, 'scripts/OIMS2fits.py', oimsFile]
-
-                status = subprocess.check_call(cmd, stdout=logfile)
-            except subprocess.CalledProcessError:
-                status = 1
-        if status == 1:
-            with open('OIMS2fits.log', 'r') as logfile:
-                print(logfile.read())
-        os.unlink('OIMS2fits.log')
+        status = self.run_OIMS2fits(oimsFile)
         self.assertEqual(status, 0)
         
         fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))
@@ -99,16 +114,7 @@ class OIMS2fits_tests(unittest.TestCase):
                 except OSError:
                     pass
                     
-        with open('OIMS2fits.log', 'w') as logfile:
-            try:
-                cmd = [sys.executable, 'scripts/OIMS2fits.py','-p', oimsFile]
-                status = subprocess.check_call(cmd, stdout=logfile, stderr=logfile)
-            except subprocess.CalledProcessError:
-                status = 1
-        if status == 1:
-            with open('OIMS2fits.log', 'r') as logfile:
-                print(logfile.read())
-        os.unlink('OIMS2fits.log')
+        status = self.run_OIMS2fits('-p', oimsFile)
         self.assertEqual(status, 0)
         
         fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))
@@ -147,16 +153,7 @@ class OIMS2fits_tests(unittest.TestCase):
                 except OSError:
                     pass
                     
-        with open('OIMS2fits.log', 'w') as logfile:
-            try:
-                cmd = [sys.executable, 'scripts/OIMS2fits.py','-i 2', oimsFile]
-                status = subprocess.check_call(cmd, stdout=logfile)
-            except subprocess.CalledProcessError:
-                status = 1
-        if status == 1:
-            with open('OIMS2fits.log', 'r') as logfile:
-                print(logfile.read())
-        os.unlink('OIMS2fits.log')
+        status = self.run_OIMS2fits('-i 2', oimsFile)
         self.assertEqual(status, 0)
         
         fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))
@@ -195,16 +192,7 @@ class OIMS2fits_tests(unittest.TestCase):
                 except OSError:
                     pass
                     
-        with open('OIMS2fits.log', 'w') as logfile:
-            try:
-                cmd = [sys.executable, 'scripts/OIMS2fits.py','-d', oimsFile]
-                status = subprocess.check_call(cmd, stdout=logfile)
-            except subprocess.CalledProcessError:
-                status = 1
-        if status == 1:
-            with open('OIMS2fits.log', 'r') as logfile:
-                print(logfile.read())
-        os.unlink('OIMS2fits.log')
+        status = self.run_OIMS2fits('-d', oimsFile)
         self.assertEqual(status, 0)
         
         fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))
@@ -244,16 +232,7 @@ class OIMS2fits_tests(unittest.TestCase):
                 except OSError:
                     pass
                     
-        with open('OIMS2fits.log', 'w') as logfile:
-            try:
-                cmd = [sys.executable, 'scripts/OIMS2fits.py','--channel','0', oimsFile]
-                status = subprocess.check_call(cmd, stdout=logfile)
-            except subprocess.CalledProcessError:
-                status = 1
-        if status == 1:
-            with open('OIMS2fits.log', 'r') as logfile:
-                print(logfile.read())
-        os.unlink('OIMS2fits.log')
+        status = self.run_OIMS2fits('--channel', '0', oimsFile)
         self.assertEqual(status, 0)
         
         fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))
@@ -280,6 +259,7 @@ class OIMS2fits_tests(unittest.TestCase):
             except OSError:
                 pass
         numpy.testing.assert_array_equal(testpix,knownpix)
+        
     def test_OIMS2fitscorrfacback_run(self):
         """Create fits from oims with specified corrfac and background"""
         
@@ -291,16 +271,7 @@ class OIMS2fits_tests(unittest.TestCase):
                 except OSError:
                     pass
                     
-        with open('OIMS2fits.log', 'w') as logfile:
-            try:
-                cmd = [sys.executable, 'scripts/OIMS2fits.py','-b 5','-c 100', oimsFile]
-                status = subprocess.check_call(cmd, stdout=logfile)
-            except subprocess.CalledProcessError:
-                status = 1
-        if status == 1:
-            with open('OIMS2fits.log', 'r') as logfile:
-                print(logfile.read())
-        os.unlink('OIMS2fits.log')
+        status = self.run_OIMS2fits('-b 5', '-c 100', oimsFile)
         self.assertEqual(status, 0)
         
         fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))

@@ -64,8 +64,8 @@ class OIMS2fits_tests(unittest.TestCase):
         os.unlink('OIMS2fits.log')
         self.assertEqual(status, 0)
         
-        fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))
-        knownpix = numpy.array([-33.82817840576172,-28.67790412902832,-27.860015869140625,-37.22902297973633,-21.941648483276367,-19.186431884765625])
+        fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))
+        knownpix = numpy.array([-19.186431884765625,-27.860015869140625,-37.22902297973633,-33.82817840576172,-28.67790412902832,-21.941648483276367])
         testpix = numpy.zeros(knownpix.shape)
         for i,f in enumerate(fitsFile):
             with fits.open(f) as hdul:
@@ -111,8 +111,8 @@ class OIMS2fits_tests(unittest.TestCase):
         os.unlink('OIMS2fits.log')
         self.assertEqual(status, 0)
         
-        fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))
-        knownpix = numpy.array([188.95354803841997,169.35453431526005,200.2454557769261,198.07150760209828,156.03151446855847,173.84442224017718])
+        fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))
+        knownpix = numpy.array([173.84442224017718,200.2454557769261,198.07150760209828,188.95354803841997,169.35453431526005,156.03151446855847])
         testpix = numpy.zeros(knownpix.shape)
         for i,f in enumerate(fitsFile):
             with fits.open(f) as hdul:
@@ -159,8 +159,9 @@ class OIMS2fits_tests(unittest.TestCase):
         os.unlink('OIMS2fits.log')
         self.assertEqual(status, 0)
         
-        fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))
+        fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))
         knownpix = numpy.array([54.68968200683594,64.94345092773438,62.473182678222656,77.76968383789062,74.6494369506836,75.6445083618164])
+        knownpix = numpy.array([62.473182678222656,75.6445083618164,77.76968383789062,74.6494369506836,64.94345092773438,54.68968200683594])
         testpix = numpy.zeros(knownpix.shape)
         for i,f in enumerate(fitsFile):
             with fits.open(f) as hdul:
@@ -206,8 +207,9 @@ class OIMS2fits_tests(unittest.TestCase):
         os.unlink('OIMS2fits.log')
         self.assertEqual(status, 0)
         
-        fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))
-        knownpix = numpy.array([-3.9064254760742188,-10.29165267944336,-6.341712951660156,-1.3171768188476562,-3.5097122192382812,-2.56549072265625])
+        fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))
+        knownpix = numpy.array([-3.5097122192382812,-2.56549072265625,-1.3171768188476562,-3.9064254760742188,-6.341712951660156,-10.29165267944336])
+
         testpix = numpy.zeros(knownpix.shape)
         for i,f in enumerate(fitsFile):
             with fits.open(f) as hdul:
@@ -254,7 +256,7 @@ class OIMS2fits_tests(unittest.TestCase):
         os.unlink('OIMS2fits.log')
         self.assertEqual(status, 0)
         
-        fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))
+        fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))
         knownpix = numpy.array([69.75801086425781])
         testpix = numpy.zeros(knownpix.shape)
         for i,f in enumerate(fitsFile):
@@ -301,8 +303,8 @@ class OIMS2fits_tests(unittest.TestCase):
         os.unlink('OIMS2fits.log')
         self.assertEqual(status, 0)
         
-        fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))
-        knownpix = numpy.array([7126.630401611328,6334.429931640625,7563.559722900391,7490.340423583984,5794.603729248047,6475.801086425781])
+        fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))
+        knownpix = numpy.array([6475.801086425781,7563.559722900391,7490.340423583984,7126.630401611328,6334.429931640625,5794.603729248047])
         testpix = numpy.zeros(knownpix.shape)
         for i,f in enumerate(fitsFile):
             with fits.open(f) as hdul:

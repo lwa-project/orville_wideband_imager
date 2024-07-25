@@ -1,9 +1,4 @@
-from __future__ import print_function, division, absolute_import
-try:
-    range = xrange
-except NameError:
-    pass
-    
+
 import os
 import numpy
 import ctypes
@@ -504,7 +499,7 @@ class OrvilleImageDB(object):
         if entry_header.sync_word != 0xC0DECAFE:
             raise RuntimeError("Database corrupted")
         info = {}
-        for key in ('stokes_params', 'pixel_size'):
+        for key in ('station', 'stokes_params', 'pixel_size'):
             info[key] = getattr(self.header, key, None)
         for key in ('start_time', 'int_len', 'fill', 'lst', 'start_freq', 'stop_freq',
                     'bandwidth', 'center_ra', 'center_dec', 'center_az', 'center_alt',

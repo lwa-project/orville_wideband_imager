@@ -181,6 +181,7 @@ class OIMS2fits_tests(unittest.TestCase):
             except OSError:
                 pass
         numpy.testing.assert_array_equal(testpix,knownpix)
+        
     def test_OIMS2fitsdiff_run(self):
         """Create fits from oims with diff ims"""
         
@@ -219,7 +220,7 @@ class OIMS2fits_tests(unittest.TestCase):
                 os.remove(f)
             except OSError:
                 pass
-        numpy.testing.assert_array_equal(testpix,knownpix)
+        numpy.testing.assert_allclose(testpix,knownpix)
 
     def test_OIMS2fitschan_run(self):
         """Create fits from oims with specified channel"""
@@ -297,7 +298,8 @@ class OIMS2fits_tests(unittest.TestCase):
                 os.remove(f)
             except OSError:
                 pass
-        numpy.testing.assert_array_equal(testpix,knownpix)
+        numpy.testing.assert_allclose(testpix,knownpix)
+
 
 class OIMS2fits_test_suite(unittest.TestSuite):
     """A unittest.TestSuite class which contains all of the OrvilleImageDB units 

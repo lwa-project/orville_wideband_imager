@@ -157,7 +157,6 @@ class OIMS2fits_tests(unittest.TestCase):
         self.assertEqual(status, 0)
         
         fitsFile = numpy.sort(glob.glob(oimsFile.replace(".oims", "*.fits")))
-        knownpix = numpy.array([54.68968200683594,64.94345092773438,62.473182678222656,77.76968383789062,74.6494369506836,75.6445083618164])
         knownpix = numpy.array([62.473182678222656,75.6445083618164,77.76968383789062,74.6494369506836,64.94345092773438,54.68968200683594])
         testpix = numpy.zeros(knownpix.shape)
         for i,f in enumerate(fitsFile):

@@ -29,13 +29,12 @@ jobs:
       - uses: actions/checkout@v2
       - name: "Software Install - Python" 
         run: |
-          python -m pip install \
+          python -m pip install lsl \
             setuptools \
             "numpy<2" \
             matplotlib \
             scipy \
-            h5py \ 
-            lsl
+            h5py 
           python -m pip install pylint
       - name: "Build and Install"
         run: python -m pip install .

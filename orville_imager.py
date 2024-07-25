@@ -23,7 +23,10 @@ from urllib.request import urlopen
 from scipy.special import pro_ang1, iv
 from scipy.stats import scoreatpercentile as percentile
 
+from astropy import units as astrounits
 from astropy.constants import c as speedOfLight
+from astropy.time import Time as AstroTime
+from astropy.coordinates import EarthLocation, AltAz, HADec, FK5
 speedOfLight = speedOfLight.to('m/s').value
 
 from lsl.common.stations import lwasv, parse_ssmif
@@ -878,13 +881,15 @@ class ImagingOp(object):
         self.out_proclog.update({'nring':1, 'ring0':self.oring.name})
         
         self.station = copy.deepcopy(STATION)
+        self.el = EarthLocation.from_geocentric(*self.station.geocentric_location, unit='m')
         
-        self.phase_center_ha = 0.0                  # radians
-        self.phase_center_dec = self.station.lat    # radians
+        t0 = Time.now()
+        self.phase_center = HADec(0*astrounits.rad, self.station.lat*astrounits.rad,
+                                  location=self.el, obstime=t0)
         if self.station.id == 'SV':
             # Alternate phase center for Sevilleta that minimized the w RMS
-            self.phase_center_ha = 1.0*ephem.hours("-0:07:59.82")
-            self.phase_center_dec = 1.0*ephem.degrees("33:21:27.5")
+            self.phase_center = HADec("-0h07m59.82s", "+33d21m27.5s",
+                                      location=self.el, obstime=t0)
             
     def main(self):
         cpu_affinity.set_core(self.core)
@@ -895,18 +900,9 @@ class ImagingOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
         
-        pce = numpy.sin(self.phase_center_dec)*numpy.sin(self.station.lat) \
-              + numpy.cos(self.phase_center_dec)*numpy.cos(self.station.lat)*numpy.cos(self.phase_center_ha)
-        pce = numpy.arcsin(pce)
-        pca = numpy.sin(self.phase_center_dec) - numpy.sin(pce)*numpy.sin(self.station.lat)
-        pca = pca / numpy.cos(pca) / numpy.cos(self.station.lat)
-        pca = numpy.arccos(pca)
-        if numpy.sin(self.phase_center_ha) > 0:
-            pca = 2*numpy.pi - pca
-            
-        phase_center = numpy.array([numpy.cos(pce)*numpy.sin(pca), 
-                                    numpy.cos(pce)*numpy.cos(pca), 
-                                    numpy.sin(pce)])
+        t0 = Time.now()
+        tc = self.phase_center.transform_to(AltAz(location=self.el, obstime=t0))
+        phase_center = tc.cartesian.xyz.value[[1,0,2]]
         
         with self.oring.begin_writing() as oring:
             for iseq in self.iring.read(guarantee=True):
@@ -953,10 +949,10 @@ class ImagingOp(object):
                 ohdr['ngrid'] = grid_size
                 ohdr['res'] = grid_res
                 ohdr['basis'] = 'Stokes'
-                ohdr['phase_center_ha'] = self.phase_center_ha
-                ohdr['phase_center_dec'] = self.phase_center_dec
-                ohdr['phase_center_az'] = pca
-                ohdr['phase_center_alt'] = pce
+                ohdr['phase_center_ha'] = self.phase_center.ha.rad
+                ohdr['phase_center_dec'] = self.phase_center.dec.rad
+                ohdr['phase_center_az'] = tc.az.rad
+                ohdr['phase_center_alt'] = tc.alt.rad
                 ohdr_str = json.dumps(ohdr)
                 
                 # Setup the sorted full visibility array
@@ -1209,6 +1205,7 @@ class WriterOp(object):
                                 'ring1':self.mring.name})
         
         self.station = copy.deepcopy(STATION)
+        self.el = EarthLocation.from_geocentric(*self.station.geocentric_location, unit='m')
         
     def _save_image(self, station, time_tag, hdr, freq, data, mask=None):
         # Get the fill level as a fraction
@@ -1224,10 +1221,14 @@ class WriterOp(object):
         # Get the date
         mjd, h, m, s = timetag_to_mjdatetime(time_tag)
         
-        # Figure out the LST
+        # Figure out the LST and phase center
         mjd_f = mjd + (h + m/60.0 + s/3600.0)/24.0
-        station.date = mjd_f + (MJD_OFFSET - DJD_OFFSET)
-        lst = station.sidereal_time()
+        t0 = Time(mjd, (h + m/60.0 + s/3600.0)/24.0, format='mjd', scale='utc')
+        lst = t0.sidereal_time('apparent', self.el).rad
+        
+        pc = HADec(hdr['phase_center_ha']*astrounits.rad, hdr['phase_center_dec']*astrounits.rad,
+                   location=self.el, obstime=t0)
+        ec = pc.transform_to(FK5(equinox=t0))
         
         # Fill the info dictionary that describes this image
         info = {'start_time':    mjd_f,
@@ -1237,8 +1238,8 @@ class WriterOp(object):
                 'start_freq':    freq[0],
                 'stop_freq':     freq[-1],
                 'bandwidth':     freq[1]-freq[0],
-                'center_ra':     (lst - hdr['phase_center_ha']) * 180/numpy.pi,
-                'center_dec':    hdr['phase_center_dec'] * 180/numpy.pi,
+                'center_ra':     ec.ra.deg,
+                'center_dec':    ec.dec.deg,
                 'center_az':     hdr['phase_center_az'] * 180/numpy.pi,
                 'center_alt':    hdr['phase_center_alt'] * 180/numpy.pi,
                 'pixel_size':    hdr['res'],
@@ -1273,8 +1274,12 @@ class WriterOp(object):
         
         # Figure out the LST
         mjd_f = mjd + (h + m/60.0 + s/3600.0)/24.0
-        station.date = mjd_f + (MJD_OFFSET - DJD_OFFSET)
-        lst = station.sidereal_time()
+        t0 = Time(mjd, (h + m/60.0 + s/3600.0)/24.0, format='mjd', scale='utc')
+        lst = t0.sidereal_time('apparent', self.el).rad
+        
+        pc = HADec(hdr['phase_center_ha']*astrounits.rad, hdr['phase_center_dec']*astrounits.rad,
+                   location=self.el, obstime=t0)
+        ec = pc.transform_to(FK5(equinox=t0))
         
         # Fill the info dictionary that describes this image
         info = {'start_time':    mjd_f,
@@ -1284,8 +1289,8 @@ class WriterOp(object):
                 'start_freq':    freq[0],
                 'stop_freq':     freq[-1],
                 'bandwidth':     freq[1]-freq[0],
-                'center_ra':     (lst - hdr['phase_center_ha']) * 180/numpy.pi,
-                'center_dec':    hdr['phase_center_dec'] * 180/numpy.pi,
+                'center_ra':     ec.ra.deg,
+                'center_dec':    ec.dec.deg,
                 'center_az':     hdr['phase_center_az'] * 180/numpy.pi,
                 'center_alt':    hdr['phase_center_alt'] * 180/numpy.pi,
                 'pixel_size':    hdr['res'],

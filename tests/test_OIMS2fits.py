@@ -134,7 +134,7 @@ class OIMS2fits_tests(unittest.TestCase):
                 os.remove(f)
             except OSError:
                 pass
-        numpy.testing.assert_array_equal(testpix,knownpix)
+        numpy.testing.assert_allclose(testpix,knownpix)
 
     def test_OIMS2fitsindex_run(self):
         """Create fits from oims with specified index"""

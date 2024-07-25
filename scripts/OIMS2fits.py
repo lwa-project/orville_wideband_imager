@@ -57,7 +57,7 @@ def calcbeamprops(az,alt,header,freq):
     beamDict.close()
     return polarpatterns[0], polarpatterns[1]
 
-def pbcorroims(header,imSize,chan):
+def pbcorroims(header,imSize,chan,station):
     pScale = header['pixel_size']
     sRad   = 360.0/pScale/numpy.pi / 2
     if station==b'LWASV':
@@ -163,7 +163,7 @@ def main(args):
                     imdata[:,invalid[0], invalid[1]] = 0.0
                     ext = imSize/(2*sRad)
                     if args.pbcorr:
-                        XX,YY = pbcorroims(hdrlist[myint],imSize,chan)
+                        XX,YY = pbcorroims(hdrlist[myint],imSize,chan,station)
                         imdata[0]/=((XX+YY)/2)
                     
                     ## Convert the start MJD into a datetime instance and then use

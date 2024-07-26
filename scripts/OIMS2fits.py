@@ -6,7 +6,6 @@ from lsl.misc import parser as aph
 from scipy.interpolate import interp1d
 from astropy.io import fits as astrofits
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord
-from astropy.wcs import WCS
 from astropy.wcs.utils import pixel_to_skycoord
 from astropy.time import Time
 from datetime import datetime, timedelta
@@ -16,7 +15,7 @@ import numpy
 import argparse
 
 from lsl_toolkits.OrvilleImage import OrvilleImageDB
-from lsl_toolkits.OrvilleImage.wcs import getSVwcs, getGENERICwcs
+from lsl_toolkits.OrvilleImage.wcs import WCS
 
 
 def calcbeamprops(az,alt,header,freq):
@@ -60,11 +59,7 @@ def calcbeamprops(az,alt,header,freq):
 def pbcorroims(header,imSize,chan,station):
     pScale = header['pixel_size']
     sRad   = 360.0/pScale/numpy.pi / 2
-    if station==b'LWASV':
-        # SV has special correction factors to improve positionsQ
-        w = getSVwcs(header, imSize)
-    else:
-        w = getGENERICwcs(header, imSize)
+    w = WCS.from_orville_header(header)
     x = numpy.arange(imSize) - 0.5
     y = numpy.arange(imSize) - 0.5
     x,y = numpy.meshgrid(x,y)
@@ -182,40 +177,17 @@ def main(args):
                         print("    end time: %s" % dateEnd)
                         print("    integration time: %.3f s" % tInt)
                         print("    frequency: %.3f MHz" % header['freq'])
-                    
-                    if station==b'LWASV':
-                        # SV has special correction factors to improve positionsQ
-                        w = getSVwcs(hdr, imSize)
-
-                    else:
-                        w = getGENERICwcs(hdr, imSize)
-                    headertmp = w.to_header()
+                        
                     ## Create the FITS HDU and fill in the header information
                     hdu = astrofits.ImageHDU(data=imdata)
                     hdu.header['TELESCOP'] = station.decode()
                     hdu.header['EXPTIME'] = tInt
-                    ### Coordinates - sky
-                    hdu.header['NAXIS'] = 3
-                    hdu.header['CTYPE1'] = headertmp['CTYPE1']
-                    hdu.header['CRPIX1'] = headertmp['CRPIX1']
-                    hdu.header['CDELT1'] = headertmp['CDELT1']
-                    hdu.header['CRVAL1'] = headertmp['CRVAL1']
-                    hdu.header['CUNIT1'] = 'deg'
-                    hdu.header['CTYPE2'] = headertmp['CTYPE2']
-                    hdu.header['CRPIX2'] = headertmp['CRPIX2']
-                    hdu.header['CDELT2'] = headertmp['CDELT2']
-                    hdu.header['CRVAL2'] = headertmp['CRVAL2']
-                    if station==b'LWASV':
-                        hdu.header['PV2_1'] = headertmp['PV2_1']
-                        hdu.header['PV2_2'] = headertmp['PV2_2']
-                    hdu.header['lonpole'] = headertmp['lonpole']
-                    hdu.header['CUNIT2'] = 'deg'
-                    ### Coordinates - Stokes parameters
-                    hdu.header['CTYPE3'] = 'STOKES'
-                    hdu.header['CRPIX3'] = 1
-                    hdu.header['CDELT3'] = 1
-                    hdu.header['CRVAL3'] = 1
-                    hdu.header['CTYPE4'] = ' '
+                    ### Coordinates
+                    w = WCS.from_orville_header(hdr)
+                    w = w.dropaxis(-1)  # Trim off the FREQ axis
+                    wcs_hdr = w.to_header()
+                    for key in wcs_hdr:
+                        hdu.header[key] = wcs_hdr[key]
                     hdu.header['DATE-OBS'] = dateObs.strftime("%Y-%m-%dT%H:%M:%S")
                     hdu.header['END_UTC'] = dateEnd.strftime("%Y-%m-%dT%H:%M:%S")
                     hdu.header['EXPTIME'] = tInt

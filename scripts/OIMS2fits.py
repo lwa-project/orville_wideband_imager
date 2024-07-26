@@ -201,6 +201,7 @@ def main(args):
                     hdu.header['RESTFREQ'] = midfreq
                     hdu.header['RESTFRQ'] = midfreq
                     hdu.header['RESTBW'] = hdr['bandwidth']
+                    hdu.header['SPECSYS'] = 'TOPOCENT'
                     
                     ## Write it to disk
                     hdulist.append(hdu)

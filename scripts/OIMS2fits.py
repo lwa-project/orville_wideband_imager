@@ -16,7 +16,7 @@ import numpy
 import argparse
 
 from lsl_toolkits.OrvilleImage import OrvilleImageDB
-from lsl_toolkits.OrvilleImage.getwcs import getSVwcs, getGENERICwcs
+from lsl_toolkits.OrvilleImage.wcs import getSVwcs, getGENERICwcs
 
 
 def calcbeamprops(az,alt,header,freq):

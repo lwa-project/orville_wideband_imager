@@ -3,7 +3,7 @@ import numpy as np
 import astropy.units as u
 from astropy.wcs import WCS as AstroWCS
 from astropy.time import Time as AstroTime
-from astropy.coordinates import Angle as AstroAngle, EarthLocation, SkyCoord
+from astropy.coordinates import Angle as AstroAngle, EarthLocation, HADec, FK5
 
 
 class WCS(AstroWCS):
@@ -47,12 +47,12 @@ class WCS(AstroWCS):
             
             ## Assume the HA/Dec are measured in the epoch-of-date
             SV = EarthLocation(lat=34.348358*u.deg, lon=-106.885783*u.deg, height=1477.8*u.m)
-            LST = t_obs.sidereal_time("apparent", SV).degree
-            RA = AstroAngle(LST-HA, u.deg).wrap_at(360*u.deg).degree
+            hc = HADec(HA*u.deg, Dec*u.deg, location=SV, obstime=t_obs)
+            ec = hc.transform_to(FK5(equinox=t_obs))
             
             ## Adjust the CRVAL values for RA and dec
-            w.wcs.crval[0] = RA
-            w.wcs.crval[1] = Dec
+            w.wcs.crval[0] = ec.ra.deg
+            w.wcs.crval[1] = ec.dec.deg
             
             ## Adjust the SIN projection center
             theta_c = (89.17548407142988)*np.pi/180

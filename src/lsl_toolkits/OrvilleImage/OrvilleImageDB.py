@@ -499,7 +499,7 @@ class OrvilleImageDB(object):
         if entry_header.sync_word != 0xC0DECAFE:
             raise RuntimeError("Database corrupted")
         info = {}
-        for key in ('station', 'stokes_params', 'pixel_size'):
+        for key in ('station', 'stokes_params', 'ngrid', 'pixel_size'):
             info[key] = getattr(self.header, key, None)
         for key in ('start_time', 'int_len', 'fill', 'lst', 'start_freq', 'stop_freq',
                     'bandwidth', 'center_ra', 'center_dec', 'center_az', 'center_alt',

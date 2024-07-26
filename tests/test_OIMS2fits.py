@@ -28,6 +28,8 @@ __author__    = "Jayce Dowell"
 
 
 oimsFile = os.path.join(os.path.dirname(__file__), 'data', 'test.oims')
+
+
 @unittest.skipUnless(run_scripts_tests, "cannot determine correct script path to use")
 class OIMS2fits_tests(unittest.TestCase):
     """A unittest.TestCase collection of unit tests for the OrvilleImageDB

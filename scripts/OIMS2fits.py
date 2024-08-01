@@ -60,28 +60,28 @@ def pbcorroims(header,imSize,chan,station):
     pScale = header['pixel_size']
     sRad   = 360.0/pScale/numpy.pi / 2
     w = WCS.from_orville_header(header)
-    w = w.dropaxis(-1).dropaxis(-1)
     x = numpy.arange(imSize) - 0.5
     y = numpy.arange(imSize) - 0.5
     x,y = numpy.meshgrid(x,y)
     maskpix  = ((x-imSize/2.0)**2 + (y-imSize/2.0)**2) > ((0.98*sRad)**2)
     x[maskpix] = imSize/2
     y[maskpix] = imSize/2
-    sc = pixel_to_skycoord(x, y, wcs=w, mode='wcs')
+    sc = pixel_to_skycoord(x,y,wcs=w,mode='wcs')
     # Need date and location for converting to altaz
-    if station == b'LWASV':
-        site = EarthLocation.from_geodetic(-106.885783, 34.348358, height=1477.8) 
-    elif station == b'LWANA':
-        site = EarthLocation.from_geodetic(-107.640, 34.247, height=2134)
-    time = Time(header['start_time'], header['int_len']/2, format='mjd', scale='utc')
-    aa = AltAz(location=site, obstime=time)
+    mjd = int(header['start_time'])
+    mpm = int((header['start_time'] - mjd)*86400.0*1000.0)
+    tInt = header['int_len']*86400.0
+    dateObs = mjdmpm_to_datetime(mjd, mpm)
+    lwasv = EarthLocation.from_geodetic(-106.885664,34.348562, height=1475) 
+    time = Time(dateObs.strftime("%Y-%m-%dT%H:%M:%S"),format="isot")
+    aa = AltAz(location=lwasv, obstime=time)
     myaltaz = sc.transform_to(aa)
     alt = myaltaz.alt.deg
     az = myaltaz.az.deg
     # Keep alt between 0 and 90, adjust az accordingly
     negalt = alt < 0
-    alt[negalt] *= -1
-    az[negalt] += 180
+    alt[negalt] += 90
+    az[negalt] + 180
     freq = (int(header['start_freq'])  + ((int(chan)+1)*int(header['bandwidth'])/2))
     XX,YY = calcbeamprops(az,alt,header,freq)
     return XX,YY

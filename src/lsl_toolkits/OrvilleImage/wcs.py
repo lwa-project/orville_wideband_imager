@@ -22,8 +22,8 @@ class WCS(AstroWCS):
         w.wcs.radesys = 'FK5'
         w.wcs.specsys = 'TOPOCENT'
         w.wcs.equinox = t_obs.jyear
-        w.wcs.crpix = [1+hdr['ngrid']/2 + 0.5 * ((hdr['ngrid']+1)%2),
-                       1+hdr['ngrid']/2 + 0.5 * ((hdr['ngrid']+1)%2),
+        w.wcs.crpix = [hdr['ngrid']/2 + 0.5 * ((hdr['ngrid']+1)%2),
+                       hdr['ngrid']/2 + 0.5 * ((hdr['ngrid']+1)%2),
                        1,
                        1]
         w.wcs.cdelt = [-130/hdr['ngrid'],   # 130 degrees is what is visible to the dipoles
@@ -69,7 +69,7 @@ class WCS(AstroWCS):
 
 def getSVwcs(header, imSize):
     w = AstroWCS(naxis=2)
-    w.wcs.crpix = [1+imSize/2 + 0.5 * ((imSize+1)%2),1+imSize/2  + 0.5 * ((imSize+1)%2)]
+    w.wcs.crpix = [imSize/2 + 0.5 * ((imSize+1)%2),imSize/2  + 0.5 * ((imSize+1)%2)]
     # 130 degrees is what is visible to the dipoles
     w.wcs.cdelt = np.array([-130/imSize,130/imSize]) 
     HA = 357.38856977271047
@@ -95,7 +95,7 @@ def getSVwcs(header, imSize):
 
 def getGENERICwcs(header, imSize):
     w = AstroWCS(naxis=2)
-    w.wcs.crpix = [1+imSize/2 + 0.5 * ((imSize+1)%2),1+imSize/2  + 0.5 * ((imSize+1)%2)]
+    w.wcs.crpix = [imSize/2 + 0.5 * ((imSize+1)%2),imSize/2  + 0.5 * ((imSize+1)%2)]
     # 130 degrees is what is visible to the dipoles
     w.wcs.cdelt = np.array([-130/imSize,130/imSize]) 
     w.wcs.crval = [header['center_ra'],header['center_dec']]

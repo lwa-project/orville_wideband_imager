@@ -6,7 +6,6 @@ from lsl.misc import parser as aph
 from scipy.interpolate import interp1d
 from astropy.io import fits as astrofits
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord
-from astropy.wcs import WCS
 from astropy.wcs.utils import pixel_to_skycoord
 from astropy.time import Time
 from datetime import datetime, timedelta
@@ -16,6 +15,8 @@ import numpy
 import argparse
 
 from lsl_toolkits.OrvilleImage import OrvilleImageDB
+from lsl_toolkits.OrvilleImage.wcs import WCS
+
 
 def calcbeamprops(az,alt,header,freq):
 
@@ -55,36 +56,32 @@ def calcbeamprops(az,alt,header,freq):
     beamDict.close()
     return polarpatterns[0], polarpatterns[1]
 
-def pbcorroims(header,imSize,chan):
+def pbcorroims(header,imSize,chan,station):
     pScale = header['pixel_size']
     sRad   = 360.0/pScale/numpy.pi / 2
-    w = WCS(naxis=2)
-    w.wcs.crpix = [imSize/2 + 1 + 0.5 * ((imSize+1)%2),imSize/2 + 1 + 0.5 * ((imSize+1)%2)]
-    w.wcs.cdelt = numpy.array([-360.0/(2*sRad)/numpy.pi, 360.0/(2*sRad)/numpy.pi])
-    w.wcs.crval = [header['center_ra'], header['center_dec']]
-    w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
+    w = WCS.from_orville_header(header)
+    w = w.dropaxis(-1).dropaxis(-1)
     x = numpy.arange(imSize) - 0.5
     y = numpy.arange(imSize) - 0.5
     x,y = numpy.meshgrid(x,y)
     maskpix  = ((x-imSize/2.0)**2 + (y-imSize/2.0)**2) > ((0.98*sRad)**2)
     x[maskpix] = imSize/2
     y[maskpix] = imSize/2
-    sc = pixel_to_skycoord(x,y,wcs=w,mode='wcs')
+    sc = pixel_to_skycoord(x, y, wcs=w, mode='wcs')
     # Need date and location for converting to altaz
-    mjd = int(header['start_time'])
-    mpm = int((header['start_time'] - mjd)*86400.0*1000.0)
-    tInt = header['int_len']*86400.0
-    dateObs = mjdmpm_to_datetime(mjd, mpm)
-    lwasv = EarthLocation.from_geodetic(-106.885664,34.348562, height=1475) 
-    time = Time(dateObs.strftime("%Y-%m-%dT%H:%M:%S"),format="isot")
-    aa = AltAz(location=lwasv, obstime=time)
+    if station == b'LWASV':
+        site = EarthLocation.from_geodetic(-106.885783, 34.348358, height=1477.8) 
+    elif station == b'LWANA':
+        site = EarthLocation.from_geodetic(-107.640, 34.247, height=2134)
+    time = Time(header['start_time'], header['int_len']/2, format='mjd', scale='utc')
+    aa = AltAz(location=site, obstime=time)
     myaltaz = sc.transform_to(aa)
     alt = myaltaz.alt.deg
     az = myaltaz.az.deg
     # Keep alt between 0 and 90, adjust az accordingly
     negalt = alt < 0
-    alt[negalt] += 90
-    az[negalt] + 180
+    alt[negalt] *= -1
+    az[negalt] += 180
     freq = (int(header['start_freq'])  + ((int(chan)+1)*int(header['bandwidth'])/2))
     XX,YY = calcbeamprops(az,alt,header,freq)
     return XX,YY
@@ -161,7 +158,7 @@ def main(args):
                     imdata[:,invalid[0], invalid[1]] = 0.0
                     ext = imSize/(2*sRad)
                     if args.pbcorr:
-                        XX,YY = pbcorroims(hdrlist[myint],imSize,chan)
+                        XX,YY = pbcorroims(hdrlist[myint],imSize,chan,station)
                         imdata[0]/=((XX+YY)/2)
                     
                     ## Convert the start MJD into a datetime instance and then use
@@ -180,31 +177,17 @@ def main(args):
                         print("    end time: %s" % dateEnd)
                         print("    integration time: %.3f s" % tInt)
                         print("    frequency: %.3f MHz" % header['freq'])
-                    
+                        
                     ## Create the FITS HDU and fill in the header information
                     hdu = astrofits.ImageHDU(data=imdata)
                     hdu.header['TELESCOP'] = station.decode()
                     hdu.header['EXPTIME'] = tInt
-                    ### Coordinates - sky
-                    hdu.header['NAXIS'] = 3
-                    hdu.header['CTYPE1'] = 'RA---SIN'
-                    hdu.header['CRPIX1'] = imSize/2 + 1 + 0.5 * ((imSize+1)%2)
-                    hdu.header['CDELT1'] = -360.0/(2*sRad)/numpy.pi
-                    hdu.header['CRVAL1'] = hdr['center_ra']
-                    hdu.header['CUNIT1'] = 'deg'
-                    hdu.header['CTYPE2'] = 'DEC--SIN'
-                    hdu.header['CRPIX2'] = imSize/2 + 1 + 0.5 * ((imSize+1)%2)
-                    hdu.header['CDELT2'] = 360.0/(2*sRad)/numpy.pi
-                    hdu.header['CRVAL2'] = hdr['center_dec']
-                    hdu.header['CUNIT2'] = 'deg'
-                    ### Coordinates - Stokes parameters
-                    hdu.header['CTYPE3'] = 'STOKES'
-                    hdu.header['CRPIX3'] = 1
-                    hdu.header['CDELT3'] = 1
-                    hdu.header['CRVAL3'] = 1
-                    hdu.header['CTYPE4'] = ' '
-                    hdu.header['LONPOLE'] = 180.0
-                    hdu.header['LATPOLE'] = 90.0
+                    ### Coordinates
+                    w = WCS.from_orville_header(hdr)
+                    w = w.dropaxis(-1)  # Trim off the FREQ axis
+                    wcs_hdr = w.to_header()
+                    for key in wcs_hdr:
+                        hdu.header[key] = wcs_hdr[key]
                     hdu.header['DATE-OBS'] = dateObs.strftime("%Y-%m-%dT%H:%M:%S")
                     hdu.header['END_UTC'] = dateEnd.strftime("%Y-%m-%dT%H:%M:%S")
                     hdu.header['EXPTIME'] = tInt
@@ -218,15 +201,18 @@ def main(args):
                     hdu.header['RESTFREQ'] = midfreq
                     hdu.header['RESTFRQ'] = midfreq
                     hdu.header['RESTBW'] = hdr['bandwidth']
+                    hdu.header['SPECSYS'] = 'TOPOCENT'
                     
                     ## Write it to disk
                     hdulist.append(hdu)
                 filedir,filebase = os.path.split(os.path.abspath(os.path.expanduser(filename)))
-
+                if args.output_dir is not None:
+                    filedir = args.output_dir
+                    
                 if args.diff:
-                    outName = filedir + '/' + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz-diff.fits"
+                    outName = filedir + os.path.sep + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz-diff.fits"
                 else: 
-                    outName = filedir + '/' + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz.fits"
+                    outName = filedir + os.path.sep + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz.fits"
                 if args.index is not None:
                     outName = outName.replace(".fits",f"-{args.index}.fits")
                 hdulist.writeto(outName, overwrite=args.force)
@@ -254,6 +240,8 @@ if __name__ == "__main__":
                         help='Only output this index')
     parser.add_argument('-p', '--pbcorr', action='store_true',
                         help='Perform primary beam correction on Stokes I')
+    parser.add_argument('-o', '--output-dir',
+                        help='directory to write FITS files to (default: same directory as the .oims files)')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='be verbose during the conversion')
     args = parser.parse_args()

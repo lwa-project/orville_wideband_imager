@@ -486,6 +486,8 @@ class OrvilleImageDB(object):
             asp_atten_1 -- ASP first attenuator setting
             asp_atten_2 -- ASP second attenuator setting
             asp_atten_s -- ASP split attenuator setting
+            station -- Name of the LWA station where the data are from
+            ngrid --  x/y size of the image in pixels
             pixel_size -- Real-world size of a pixel, in degrees
             stokes_params -- a list or comma-delimited string of Stokes params
         data -- a 4D float array of image data indexed as [chan, stokes, x, y]
@@ -541,6 +543,8 @@ class OrvilleImageDB(object):
             asp_atten_1 -- ASP first attenuator setting
             asp_atten_2 -- ASP second attenuator setting
             asp_atten_s -- ASP split attenuator setting
+            station -- Name of the LWA station where the data are from
+            ngrid --  x/y size of the image in pixels
             pixel_size -- Real-world size of a pixel, in degrees
             stokes_params -- a list or comma-delimited string of Stokes params
         data_all -- a 5D masked float32 array of image data indexed as 

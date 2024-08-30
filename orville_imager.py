@@ -1574,23 +1574,11 @@ class UploaderOp(object):
                     try:
                         ## Upload and stage
                         p = subprocess.Popen(['timeout', '2', 'rsync', '-e', 'ssh', '-a', self.uploader_dir+os.path.sep,
-                                              'mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/incoming/'],
+                                              'mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/'],
                                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                         _, error = p.communicate()
                         if p.returncode != 0:
                             self.log.warning('Error uploading: %s', error.decode())
-                            
-                    except subprocess.CalledProcessError:
-                        pass
-                        
-                    try:
-                        ## Activate
-                        p = subprocess.Popen(['timeout', '2', 'ssh', 'mcsdr@lwalab.phys.unm.edu',
-                                              'mv -f /var/www/lwatv2/incoming/* /var/www/lwatv2/'],
-                                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-                        _, error = p.communicate()
-                        if p.returncode != 0:
-                            self.log.warning('Error making active: %s', error.decode())
                             
                     except subprocess.CalledProcessError:
                         pass

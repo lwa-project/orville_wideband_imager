@@ -1183,7 +1183,7 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), uploader_dir=None, freq_save=(0,100e6), no_oims=False, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, base_dir=os.getcwd(), uploader_dir=None, freq_save=(0,100e6), core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
@@ -1192,7 +1192,6 @@ class WriterOp(object):
         self.output_dir_lwatv = os.path.join(base_dir, 'lwatv')
         self.uploader_dir = uploader_dir
         self.freq_save = freq_save
-        self.no_oims = no_oims
         self.core = core
         self.gpu = gpu
         
@@ -1264,20 +1263,19 @@ class WriterOp(object):
         info.update(ASP_CONFIG[0])
         
         # Write the image to disk
-        if not self.no_oims:
-            outname = os.path.join(self.output_dir_images, str(mjd))
-            if not os.path.exists(outname):
-                os.makedirs(outname, exist_ok=True)
-            filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq_save.min()/1e6, freq_save.max()/1e6)
-            outname = os.path.join(outname, filename)
+        outname = os.path.join(self.output_dir_images, str(mjd))
+        if not os.path.exists(outname):
+            os.makedirs(outname, exist_ok=True)
+        filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq_save.min()/1e6, freq_save.max()/1e6)
+        outname = os.path.join(outname, filename)
+        
+        try:
+            with OrvilleImageDB(outname, mode='a', station=station.name) as db:
+                db.add_image(info, data_save, mask=mask_save)
+            self.log.debug("Added integration to disk as part of '%s'", os.path.basename(outname))
+        except Exception as e:
+            self.log.warning("Failed to add integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
             
-            try:
-                with OrvilleImageDB(outname, mode='a', station=station.name) as db:
-                    db.add_image(info, data_save, mask=mask_save)
-                self.log.debug("Added integration to disk as part of '%s'", os.path.basename(outname))
-            except Exception as e:
-                self.log.warning("Failed to add integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
-                
     def _save_archive_image(self, station, time_tag, hdr, freq, data):
         # Get the fill level as a fraction
         global FILL_QUEUE
@@ -1319,20 +1317,19 @@ class WriterOp(object):
         info.update(ASP_CONFIG[0])
         
         # Write the image to disk
-        if not self.no_oims:
-            outname = os.path.join(self.output_dir_archive, str(mjd))
-            if not os.path.exists(outname):
-                os.makedirs(outname, exist_ok=True)
-            filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq_save.min()/1e6, freq_save.max()/1e6)
-            outname = os.path.join(outname, filename)
+        outname = os.path.join(self.output_dir_archive, str(mjd))
+        if not os.path.exists(outname):
+            os.makedirs(outname, exist_ok=True)
+        filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq_save.min()/1e6, freq_save.max()/1e6)
+        outname = os.path.join(outname, filename)
+        
+        try:
+            with OrvilleImageDB(outname, mode='a', station=station.name) as db:
+                db.add_image(info, data_save)
+            self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
+        except Exception as e:
+            self.log.warning("Failed to add archive integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
             
-            try:
-                with OrvilleImageDB(outname, mode='a', station=station.name) as db:
-                    db.add_image(info, data_save)
-                self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
-            except Exception as e:
-                self.log.warning("Failed to add archive integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
-                
     def main(self):
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
@@ -1802,7 +1799,7 @@ def main(args):
     ## The image writer and plotter for LWA TV
     ops.append(WriterOp(log, writer_ring, rfimask_ring, base_dir=args.output_dir,
                          uploader_dir=uploader_dir,
-                         freq_save=args.freq_save, no_oims=args.no_oims,
+                         freq_save=args.freq_save,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
     ops.append(UploaderOp(log, uploader_dir=uploader_dir,
@@ -1844,8 +1841,6 @@ if __name__ == '__main__':
                         help='base directory to write output data to')
     parser.add_argument('-f', '--flagfile', type=str,
                         help='path to flagger file that gives frequencies to flag')
-    parser.add_argument('-n', '--no-oims', action='store_true',
-                        help='do not save any .oims files')
     parser.add_argument('-s', '--freq-save', type=str, default='',
                         help='frequency range in MHz to save as "start~stop", blank is everything')
     args = parser.parse_args()

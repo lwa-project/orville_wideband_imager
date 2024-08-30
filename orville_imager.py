@@ -1271,11 +1271,13 @@ class WriterOp(object):
             filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq_save.min()/1e6, freq_save.max()/1e6)
             outname = os.path.join(outname, filename)
             
-            db = OrvilleImageDB(outname, mode='a', station=station.name)
-            db.add_image(info, data_save, mask=mask_save)
-            db.close()
-            self.log.debug("Added integration to disk as part of '%s'", os.path.basename(outname))
-            
+            try:
+                with OrvilleImageDB(outname, mode='a', station=station.name) as db:
+                    db.add_image(info, data_save, mask=mask_save)
+                self.log.debug("Added integration to disk as part of '%s'", os.path.basename(outname))
+            except Exception as e:
+                self.log.warning("Failed to add integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
+                
     def _save_archive_image(self, station, time_tag, hdr, freq, data):
         # Get the fill level as a fraction
         global FILL_QUEUE
@@ -1324,11 +1326,13 @@ class WriterOp(object):
             filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq_save.min()/1e6, freq_save.max()/1e6)
             outname = os.path.join(outname, filename)
             
-            db = OrvilleImageDB(outname, mode='a', station=station.name)
-            db.add_image(info, data_save)
-            db.close()
-            self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
-            
+            try:
+                with OrvilleImageDB(outname, mode='a', station=station.name) as db:
+                    db.add_image(info, data_save)
+                self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
+            except Exception as e:
+                self.log.warning("Failed to add archive integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
+                
     def main(self):
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:

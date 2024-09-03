@@ -1601,6 +1601,7 @@ class UploaderOp(object):
             acquire_time = curr_time - prev_time
             prev_time = curr_time
             
+            ## Upload and make active
             if self.uploader_dir is not None:
                 if os.listdir(self.uploader_dir):
                     try:

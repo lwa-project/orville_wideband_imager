@@ -338,7 +338,7 @@ class SpectraOp(object):
             ## Mask
             c = '#000000'
             for b in bad:
-                xl = x0 + b * 64 // nchan
+                xl = x0 + b * box_size // nchan
                 draw.line(list(zip((xl,xl), (y0,y0-8))), fill=c)
                 
         # Summary

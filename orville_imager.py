@@ -301,30 +301,31 @@ class SpectraOp(object):
         bad = numpy.where(mask == 0)[0]
         
         # Image setup
-        width = height = 8
-        im = PIL.Image.new('RGB', (width * 129 + 1, height * 129 + 21), '#FFFFFF')
+        width = height = int(numpy.ceil(numpy.sqrt(nstand)))
+        box_size = 1024 // width
+        im = PIL.Image.new('RGB', (width * (box_size+1) + 1, height * (box_size+1) + 21), '#FFFFFF')
         draw = PIL.ImageDraw.Draw(im)
         font = PIL.ImageFont.load(os.path.join(BASE_PATH, 'fonts', 'helvB10.pil'))
         
         # Axes boxes
         for i in range(width + 1):
-            draw.line([i * 129, 0, i * 129, height * 129], fill = '#000000')
+            draw.line([i * (box_size+1), 0, i * (box_size+1), height * (box_size+1)], fill = '#000000')
         for i in range(height + 1):
-            draw.line([(0, i * 129), (im.size[0], i * 129)], fill = '#000000')
+            draw.line([(0, i * (box_size+1)), (im.size[0], i * (box_size+1))], fill = '#000000')
             
         # Power as a function of frequency for all antennas
-        x = numpy.arange(nchan) * 128 // nchan
+        x = numpy.arange(nchan) * box_size // nchan
         for s in range(nstand):
             if s >= height * width:
                 break
-            x0, y0 = (s % width) * 129 + 1, (s // width + 1) * 129
-            draw.text((x0 + 5, y0 - 124), str(labels[2*s+0]), font=font, fill='#000000')
+            x0, y0 = (s % width) * (box_size+1) + 1, (s // width + 1) * (box_size+1)
+            draw.text((x0 + 5, y0 - (box_size-4)), str(labels[2*s+0]), font=font, fill='#000000')
             
             ## XX
             c = '#1F77B4'
             if status[2*s+0] != 33:
                 c = '#799CB4'
-            y = ((118.0 / (maxval - minval)) * (specs[s,:,0] - minval)).clip(0, 118)
+            y = (((box_size-10) / (maxval - minval)) * (specs[s,:,0] - minval)).clip(0, (box_size-10))
             y = numpy.where(numpy.isfinite(y), y, 0)
             draw.line(list(zip(x0 + x, y0 - y)), fill=c)
             
@@ -332,18 +333,18 @@ class SpectraOp(object):
             c = '#FF7F0E'
             if status[2*s+1] != 33:
                 c = '#FFC28C'
-            y = ((118.0 / (maxval - minval)) * (specs[s,:,1] - minval)).clip(0, 118)
+            y = (((box_size-10) / (maxval - minval)) * (specs[s,:,1] - minval)).clip(0, (box_size-10))
             y = numpy.where(numpy.isfinite(y), y, 0)
             draw.line(list(zip(x0 + x, y0 - y)), fill=c)
             
             ## Mask
             c = '#000000'
             for b in bad:
-                xl = x0 + b * 128 // nchan
+                xl = x0 + b * box_size // nchan
                 draw.line(list(zip((xl,xl), (y0,y0-8))), fill=c)
                 
         # Summary
-        ySummary = height * 129 + 2
+        ySummary = height * (box_size+1) + 2
         timeStr = datetime.utcfromtimestamp(time_tag / fS)
         timeStr = timeStr.strftime("%Y/%m/%d %H:%M:%S UTC")
         draw.text((5, ySummary), timeStr, font = font, fill = '#000000')

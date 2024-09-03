@@ -122,6 +122,14 @@ def timetag_to_mjdatetime(time_tag):
     return mjd, h, m, s
 
 
+def navg_to_timetag(navg):
+    """
+    Convert an integration time into a timetag increment.
+    """
+    
+    return navg
+
+
 class MultiQueue(object):
     def __init__(self, slots, maxsize=0):
         self._lock = threading.RLock()
@@ -426,7 +434,7 @@ class SpectraOp(object):
                     shutil.copy2(outname, os.path.join(self.uploader_dir, 'lwatv_spec.png'))
                 self.log.debug("Wrote spectra %i to disk as '%s'", intCount, os.path.basename(outname))
                 
-                time_tag += navg
+                time_tag += navg_to_timetag(navg)
                 intCount += 1
                 
                 curr_time = time.time()
@@ -606,7 +614,7 @@ class BaselineOp(object):
                     shutil.copy2(outname, os.path.join(self.uploader_dir, 'lwatv_uvdist.png'))
                 self.log.debug("Wrote baselines %i to disk as '%s'", intCount, os.path.basename(outname))
                 
-                time_tag += navg
+                time_tag += navg_to_timetag(navg)
                 intCount += 1
                 
                 curr_time = time.time()
@@ -729,7 +737,7 @@ class MatrixOp(object):
                 else:
                     pass
 
-                time_tag += navg
+                time_tag += navg_to_timetag(navg)
 
                 curr_time = time.time()
                 process_time = curr_time - prev_time
@@ -849,7 +857,7 @@ class FlaggerOp(object):
                             ## Save
                             odata[...] = mask
                             
-                            time_tag += navg
+                            time_tag += navg_to_timetag(navg)
                             
                             curr_time = time.time()
                             process_time = curr_time - prev_time
@@ -1162,7 +1170,7 @@ class ImagingOp(object):
                             BFSync()
                             copy_array(odata, self.grid)
                             
-                            time_tag += navg
+                            time_tag += navg_to_timetag(navg)
                             intCount += 1
                             
                             curr_time = time.time()
@@ -1248,7 +1256,7 @@ class WriterOp(object):
             
         # Fill the info dictionary that describes this image
         info = {'start_time':    mjd_f,
-                'int_len':       hdr['navg'] / fS / 86400.0,
+                'int_len':       navg_to_timetag(hdr['navg']) / fS / 86400.0,
                 'fill':          fill,
                 'lst':           lst * 0.5/numpy.pi,
                 'start_freq':    freq_save[0],
@@ -1302,7 +1310,7 @@ class WriterOp(object):
         
         # Fill the info dictionary that describes this image
         info = {'start_time':    mjd_f,
-                'int_len':       hdr['navg'] / fS / 86400.0,
+                'int_len':       navg_to_timetag(hdr['navg']) / fS / 86400.0,
                 'fill':          fill,
                 'lst':           lst * 0.5/numpy.pi,
                 'start_freq':    freq_save[0],
@@ -1544,7 +1552,7 @@ class WriterOp(object):
                         
                     self.log.debug("Wrote LWATV %i, %i to disk as '%s'", intCount, c, os.path.basename(outname))
                     
-                time_tag += navg
+                time_tag += navg_to_timetag(navg)
                 intCount += 1
                 
                 curr_time = time.time()

@@ -1259,7 +1259,7 @@ class WriterOp(object):
         # Write the image to disk
         outname = os.path.join(self.output_dir_images, str(mjd))
         if not os.path.exists(outname):
-            os.makedirs(outname, exists_ok=True)
+            os.makedirs(outname, exist_ok=True)
         filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
         outname = os.path.join(outname, filename)
         

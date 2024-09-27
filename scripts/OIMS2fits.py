@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from lsl.common.mcs import mjdmpm_to_datetime
-from lsl.common.paths import DATA as dataPath
+from lsl.sim.beam import beam_response
 from lsl.misc import parser as aph
 from scipy.interpolate import interp1d
 from astropy.io import fits as astrofits
@@ -20,39 +20,11 @@ from lsl_toolkits.OrvilleImage import OrvilleImageDB
 def calcbeamprops(az,alt,header,freq):
 
     # az and alt need to be the same shape as the image we will correct
-
-    i = 0
-    beamDict = numpy.load(os.path.join(dataPath, 'lwa1-dipole-emp.npz'))
+    
     polarpatterns = []
-    for beamCoeff in (beamDict['fitX'], beamDict['fitY']):
-        alphaE = numpy.polyval(beamCoeff[0,0,:],freq )
-        betaE =  numpy.polyval(beamCoeff[0,1,:],freq )
-        gammaE = numpy.polyval(beamCoeff[0,2,:],freq )
-        deltaE = numpy.polyval(beamCoeff[0,3,:],freq )
-        alphaH = numpy.polyval(beamCoeff[1,0,:],freq )
-        betaH =  numpy.polyval(beamCoeff[1,1,:],freq )
-        gammaH = numpy.polyval(beamCoeff[1,2,:],freq )
-        deltaH = numpy.polyval(beamCoeff[1,3,:],freq )
-        corrFnc = None
-
-        def compute_beam_pattern(az, alt, corr=corrFnc):
-            zaR = numpy.pi/2 - alt*numpy.pi / 180.0
-            azR = az*numpy.pi / 180.0
-
-            c = 1.0
-            if corrFnc is not None:
-                c = corrFnc(alt*numpy.pi / 180.0)
-                c = numpy.where(numpy.isfinite(c), c, 1.0)
-
-            pE = (1-(2*zaR/numpy.pi)**alphaE)*numpy.cos(zaR)**betaE + gammaE*(2*zaR/numpy.pi)*numpy.cos(zaR)**deltaE
-            pH = (1-(2*zaR/numpy.pi)**alphaH)*numpy.cos(zaR)**betaH + gammaH*(2*zaR/numpy.pi)*numpy.cos(zaR)**deltaH
-
-            return c*numpy.sqrt((pE*numpy.cos(azR))**2 + (pH*numpy.sin(azR))**2)
-        # Calculate the beam
-        pattern = compute_beam_pattern(az, alt)
-        polarpatterns.append(pattern)
-        i += 1
-    beamDict.close()
+    polarpatterns.append(beam_response('empirical', 'XX', az, alt, frequency=freq))
+    polarpatterns.append(beam_response('empirical', 'YY', az, alt, frequency=freq))
+    
     return polarpatterns[0], polarpatterns[1]
 
 def pbcorroims(header,imSize,chan):

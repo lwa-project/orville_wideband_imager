@@ -1539,7 +1539,7 @@ class WriterOp(object):
             t0 = time.time()
             freq = chan0*fC + np.arange(nchan)*4*fC
             arc_freq = freq*1.0
-            arc_freq = arc_freq.reshape(22, -1)
+            arc_freq = arc_freq.reshape(-1, 32)
             arc_freq = arc_freq.mean(axis=1)
             
             # Setup the frequencies to write images for

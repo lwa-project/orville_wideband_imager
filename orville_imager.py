@@ -1948,8 +1948,8 @@ def main(args):
     for i in range(orville_config['nsub']):
         ## The subband imager
         ops.append(ImagingOp(log, sub_capture_rings[i], writer_rings[i],
-                             decimation=args.decimation, label=str(i),
-                             core=cores.pop(0), gpu=gpus.pop(0)))
+                             decimation=args.decimation, config=orville_config,
+                             label=str(i), core=cores.pop(0), gpu=gpus.pop(0)))
         ## The subband image writer and plotter for LWA TV
         ops.append(WriterOp(log, writer_rings[i], sub_rfimask_rings[i], base_dir=args.output_dir,
                              uploader_dir=uploader_dir, lwatv_freq=args.lwatv_freq,

@@ -1865,6 +1865,9 @@ def main(args):
         with open(args.configfile, 'r') as fh:
             config = json.loads(json_minify.json_minify(fh.read()))
         orville_config.update(config)
+    log.info('Config args:')
+    for key,value in orville_config.items():
+        log.info("  %s: %s", key, value)
         
     # Setup the cores and GPUs to use
     cores = [0, 1, 2, 3, 4, 5, 6, 7, 7]

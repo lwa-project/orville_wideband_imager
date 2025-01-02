@@ -946,7 +946,9 @@ class SubbandSplitterOp(object):
                         ogulp_size = igulp_size // nsub
                         oshape = (nchan//nsub,1,1,1)
                         dtype = np.uint8
-                        
+                for o in self.orings:
+                    o.resize(ogulp_size, 4*ogulp_size)
+                    
                 ohdr = ihdr.copy()
                 ohdr['nchan'] = nchan // nsub
                 ohdr['bw'] = nchan*self.decimation // nsub * fC
@@ -985,7 +987,7 @@ class SubbandSplitterOp(object):
                                     subband = np.s_[:,nchan//nsub*i:nchan//nsub*(i+1),:,:]
                                 else:
                                     subband = np.s_[nchan//nsub*i:nchan//nsub*(i+1),:,:,:]
-                                odata[...] = idata[subband].copy()
+                                o[...] = idata[subband].copy()
                                 
                         time_tag += navg_to_timetag(navg)
                         

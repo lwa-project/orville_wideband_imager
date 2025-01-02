@@ -909,7 +909,7 @@ class SubbandSplitterOp(object):
         odict = {'nring':len(self.orings)}
         for i,o in enumerate(self.orings):
             odict[f"ring{i}"] = o.name
-        self.out_proclog.update(odict})
+        self.out_proclog.update(odict)
         
     def main(self):
         cpu_affinity.set_core(self.core)
@@ -1539,7 +1539,7 @@ class WriterOp(object):
             # Setup the frequencies
             t0 = time.time()
             freq = chan0*fC + np.arange(nchan)*4*fC
-            arc_freq = freq[]*1.0
+            arc_freq = freq*1.0
             arc_freq = arc_freq.reshape(22, -1)
             arc_freq = arc_freq.mean(axis=1)
             
@@ -1952,7 +1952,7 @@ def main(args):
                              core=cores.pop(0), gpu=gpus.pop(0)))
         ## The subband image writer and plotter for LWA TV
         ops.append(WriterOp(log, writer_rings[i], sub_rfimask_rings[i], base_dir=args.output_dir,
-                             uploader_dir=uploader_dir, lwatv_freq=args.lwatv_freq
+                             uploader_dir=uploader_dir, lwatv_freq=args.lwatv_freq,
                              label=str(i), core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
     ops.append(UploaderOp(log, uploader_dir=uploader_dir,
@@ -1982,7 +1982,7 @@ if __name__ == '__main__':
         description="Capture data from the NDP wideband correlator mode and image it",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
         )
-    parser.add_arugment('-c', '--configfile', type=str,
+    parser.add_argument('-c', '--configfile', type=str,
                         help='Orville configuration file')
     parser.add_argument('-a', '--address', type=str, default='192.168.40.46',
                         help='IP address to listen to')

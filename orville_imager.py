@@ -961,8 +961,8 @@ class SubbandSplitterOp(object):
                         out_ohdr['chan0'] = chan0 + nchan*self.decimation//nsub * i
                         out_ohdr['cfreq'] = out_ohdr['chan0'] * fC
                         out_ohdr_str = json.dumps(out_ohdr)
-                    out_oseq.append(oseq_stack.enter_context(o.begin_sequence(time_tag=iseq.time_tag, header=out_ohdr_str)))
-                    
+                        out_oseq.append(oseq_stack.enter_context(o.begin_sequence(time_tag=iseq.time_tag, header=out_ohdr_str)))
+                        
                     for ispan in iseq.read(igulp_size):
                         if ispan.size < igulp_size:
                             continue # Ignore final gulp

@@ -207,10 +207,6 @@ class CaptureOp(object):
         self.kwargs = kwargs
         self.shutdown_event = threading.Event()
         
-        self.decimation = 1
-        if 'decimation' in self.kwargs:
-            self.decimation = self.kwargs['decimation']
-            del self.kwargs['decimation']
         self.nsub   = 1
         if 'nsub' in self.kwargs:
             self.nsub = self.kwargs['nsub']
@@ -227,7 +223,8 @@ class CaptureOp(object):
             'chan0':    chan0,
             'cfreq':    chan0*fC,
             'nchan':    nchan,
-            'bw':       nchan*self.decimation*fC,
+            'cdecim':   4,
+            'bw':       nchan*4*fC,
             'navg':     navg,
             'nstand':   int(np.sqrt(8*nsrc+1)-1)//2,
             'npol':     2,
@@ -885,12 +882,11 @@ class FlaggerOp(object):
 
 
 class SubbandSplitterOp(object):
-    def __init__(self, log, iring, orings, label='', decimation=1, core=-1, gpu=-1):
+    def __init__(self, log, iring, orings, label='', core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.orings = orings
         self.label = label
-        self.decimation = decimation
         self.core = core
         self.gpu = gpu
         
@@ -925,6 +921,7 @@ class SubbandSplitterOp(object):
                 # Setup the ring metadata and gulp sizes
                 chan0  = ihdr['chan0']
                 nchan  = ihdr['nchan']
+                cdecim = ihdr['cdecim']
                 nbl    = ihdr['nbl']
                 nstand = int(np.sqrt(8*nbl+1)-1)//2
                 npol   = ihdr['npol']
@@ -951,14 +948,14 @@ class SubbandSplitterOp(object):
                     
                 ohdr = ihdr.copy()
                 ohdr['nchan'] = nchan // nsub
-                ohdr['bw'] = nchan*self.decimation // nsub * fC
+                ohdr['bw'] = nchan*cdecim // nsub * fC
                 
                 prev_time = time.time()
                 with ExitStack() as oseq_stack:
                     out_oseq = []
                     for i,o in enumerate(out_orings):
                         out_ohdr = ohdr.copy()
-                        out_ohdr['chan0'] = chan0 + nchan*self.decimation//nsub * i
+                        out_ohdr['chan0'] = chan0 + nchan*cdecim//nsub * i
                         out_ohdr['cfreq'] = out_ohdr['chan0'] * fC
                         out_ohdr_str = json.dumps(out_ohdr)
                         out_oseq.append(oseq_stack.enter_context(o.begin_sequence(time_tag=iseq.time_tag, header=out_ohdr_str)))
@@ -1927,8 +1924,7 @@ def main(args):
     ops.append(CaptureOp(log, capture_ring,
                          isock, nBL*orville_config['buffer_factor'], 1,
                          orville_config['max_packet_size'], 1, 1,
-                         nsub=orville_config['nsub'], decimation=args.decimation,
-                         core=cores.pop(0)))
+                         nsub=orville_config['nsub'], core=cores.pop(0)))
     ## The flagger
     ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring,
                          core=cores.pop(0)))
@@ -1945,9 +1941,9 @@ def main(args):
                           core=cores.pop(0), gpu=gpus.pop(0)))
     ## The subband splitters
     ops.append(SubbandSplitterOp(log, capture_ring, sub_capture_rings,
-                                 label='Data', decimation=args.decimation, core=cores.pop(0)))
+                                 label='Data', core=cores.pop(0)))
     ops.append(SubbandSplitterOp(log, rfimask_ring, sub_rfimask_rings,
-                                 label='Mask', decimation=args.decimation, core=cores.pop(0)))
+                                 label='Mask', core=cores.pop(0)))
     for i in range(orville_config['nsub']):
         ## The subband imager
         ops.append(ImagingOp(log, sub_capture_rings[i], writer_rings[i],

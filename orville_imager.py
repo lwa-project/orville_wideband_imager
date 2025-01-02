@@ -937,14 +937,15 @@ class SubbandSplitterOp(object):
                 oshape = (nstand*(nstand+1)//2,nchan//nsub,npol,npol)
                 dtype = np.complex64
                 if 'type' in ihdr:
-                    if type == 'mask':
+                    if ihdr['type'] == 'mask':
                         igulp_size = nchan*1              # uint8
                         ishape = (nchan,1,1,1)
                         ogulp_size = igulp_size // nsub
                         oshape = (nchan//nsub,1,1,1)
                         dtype = np.uint8
+                self.iring.resize(igulp_size, igulp_size*10)
                 for o in self.orings:
-                    o.resize(ogulp_size, 4*ogulp_size)
+                    o.resize(ogulp_size, ogulp_size*10)
                     
                 ohdr = ihdr.copy()
                 ohdr['nchan'] = nchan // nsub

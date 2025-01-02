@@ -1905,7 +1905,7 @@ def main(args):
     sub_capture_rings = []
     sub_rfimask_rings = []
     writer_rings = []
-    for i in range(nsub):
+    for i in range(orville_config['nsub']):
         sub_capture_rings.append(Ring(name=f"subcapture{i}", space='system'))
         sub_rfimask_rings.append(Ring(name=f"subrfimask{i}", space='system'))
         writer_rings.append(Ring(name=f"writer{i}", space='system'))
@@ -1925,7 +1925,8 @@ def main(args):
     ops.append(CaptureOp(log, capture_ring,
                          isock, nBL*orville_config['buffer_factor'], 1,
                          orville_config['max_packet_size'], 1, 1,
-                         nsub=nsub, decimation=args.decimation, core=cores.pop(0)))
+                         nsub=orville_config['nsub'], decimation=args.decimation,
+                         core=cores.pop(0)))
     ## The flagger
     ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring,
                          core=cores.pop(0)))
@@ -1945,7 +1946,7 @@ def main(args):
                                  label='Data', decimation=args.decimation, core=cores.pop(0)))
     ops.append(SubbandSplitterOp(log, rfimask_ring, sub_rfimask_rings,
                                  label='Mask', decimation=args.decimation, core=cores.pop(0)))
-    for i in range(nsub):
+    for i in range(orville_config['nsub']):
         ## The subband imager
         ops.append(ImagingOp(log, sub_capture_rings[i], writer_rings[i],
                              decimation=args.decimation, label=str(i),

@@ -894,9 +894,6 @@ class SubbandSplitterOp(object):
         self.core = core
         self.gpu = gpu
         
-        if len(self.orings) != len(self.mrings):
-            raise RuntimeError("Number of output rings does not match")
-            
         self.bind_proclog = ProcLog(type(self).__name__+"/bind")
         self.in_proclog   = ProcLog(type(self).__name__+"/in")
         self.out_proclog  = ProcLog(type(self).__name__+"/out")

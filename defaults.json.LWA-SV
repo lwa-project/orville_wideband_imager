@@ -1,0 +1,19 @@
+{
+  /* Station diameter in m */
+  "diameter": 100,
+  
+  /* Minimum image size in pixels */
+  "min_grid_size": 128,
+  
+  /* Phase center to minimize the w term (HA in hours; dec in deg) */
+  "phase_center": ["-0:07:59.82", "33:21:27.5"],
+  
+  /* Number of sub-bands to use for imaging */
+  "nsub": 1,
+  
+  /* Maximum packet size in B */
+  "max_packet_size": 9000,
+  
+  /* Ring buffer factor (should be related to the number of DRX pipelines) */
+  "buffer_factor": 6
+}

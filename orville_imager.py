@@ -1324,7 +1324,7 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1e6, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
@@ -1333,7 +1333,9 @@ class WriterOp(object):
         self.output_dir_archive = os.path.join(base_dir, 'archive')
         self.output_dir_lwatv = os.path.join(base_dir, 'lwatv')
         self.uploader_dir = uploader_dir
-        self.lwatv_freq = lwatv_freq*1e6
+        if not isinstance(lwatv_freq, (tuple, list)):
+            lwatv_freq = [lwatv_freq,]
+        self.lwatv_freq = lwatv_freq
         self.core = core
         self.gpu = gpu
         
@@ -1541,10 +1543,16 @@ class WriterOp(object):
             arc_freq = arc_freq.mean(axis=1)
             
             # Setup the frequencies to write images for
-            ichans = [np.argmin(np.abs(freq - self.lwatv_freq)),]   ## Only make one image at the specified LWATV frequency
-            if abs(freq[ichans[0]] - self.lwatv_freq) > 250e3:
-                ichans = []
-                
+            ichans = []
+            is_default_lwatv = False
+            for lf in args.lwatv_freq:
+                best_chan = np.argmin(np.abs(freq - lf))
+                if abs(freq[best_chan] - lf) <= 250e3:
+                    if abs(freq[best_chan] - 38e6) <= 250e3:
+                        is_default_lwatv = True
+                    ichans.append(best_chan)
+                    break
+                    
             # Setup the buffer for the automatic color scale control
             vmax = [deque([], maxlen=60) for c in freq]
             
@@ -1661,20 +1669,25 @@ class WriterOp(object):
                     if not os.path.exists(outname):
                         os.makedirs(outname, exist_ok=True)
                     filename = '%i_%02i%02i%02i_%.3fMHz.png' % (mjd, h, m, s, freq[c]/1e6)
+                    if not is_default_lwatv:
+                        filename += '_nomovie'
                     outname = os.path.join(outname, filename)
                     canvas = matplotlib.backends.backend_agg.FigureCanvasAgg(fig)
                     canvas.print_figure(outname, dpi=78, facecolor='black')
                     
                     ## Timestamp file
                     outname_ts = os.path.join(self.output_dir_lwatv, 'lwatv_timestamp')
-                    with open(outname_ts, 'w') as fh:
-                        fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
-                        
+                    if is_default_lwatv:
+                        with open(outname_ts, 'w') as fh:
+                            fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
+                            
                     if self.uploader_dir is not None:
-                        shutil.copy2(outname, os.path.join(self.uploader_dir, 'lwatv.png'))
-                        shutil.copy2(outname_ts, os.path.join(self.uploader_dir, 'lwatv_timestamp'))
-                        
-                    self.log.debug("Wrote LWATV %i, %i to disk as '%s'", intCount, c, os.path.basename(outname))
+                        label = '' if is_default_lwatv else ('.'+self.label)
+                        shutil.copy2(outname, os.path.join(self.uploader_dir, f"lwatv{label}.png"))
+                        if is_default_lwatv:
+                            shutil.copy2(outname_ts, os.path.join(self.uploader_dir, 'lwatv_timestamp'))
+                            
+                    self.log.debug("Wrote LWATV%s %i, %i to disk as '%s'", label, intCount, c, os.path.basename(outname))
                     
                 time_tag += navg_to_timetag(navg)
                 intCount += 1
@@ -1996,9 +2009,13 @@ if __name__ == '__main__':
                         help='base directory to write output data to')
     parser.add_argument('-f', '--flagfile', type=str,
                         help='path to flagger file that gives frequencies to flag')
-    parser.add_argument('-t', '--lwatv-freq', type=float, default=38.1,
+    parser.add_argument('-t', '--lwatv-freq', type=str, default='38.1',
                         help='LWATV frequency in MHz')
     args = parser.parse_args()
-    
+    if args.lwatv_freq.find(',') != -1:
+        values = args.lwatv_freq.split(',')
+        args.lwatv_freq = [float(v)*1e6 for v in values]
+    else:
+        args.lwatv_freq = [float(args.lwatv_freq)*1e6,]
+        
     main(args)
-    

@@ -1612,9 +1612,12 @@ class WriterOp(object):
                     
                 ## Plot
                 for c in ichans:
+                    cstart = max([0, c-5])
+                    cstop  = min([c+6, nchan])
+                    cfreq = np.median(freq[cstart:cstop])
                     for i,p,l in ((0,0,'I'), (1,3,'V')):
                         ### Pull out the data and get it ready for plotting
-                        img = idata[c,p,:,:]
+                        img = np.median(idata[cstart:cstop,p,:,:], axis=0)
                         if l == 'V':
                             l = '|V|'
                             img = np.abs(img)
@@ -1668,7 +1671,7 @@ class WriterOp(object):
                     outname = os.path.join(self.output_dir_lwatv, str(mjd))
                     if not os.path.exists(outname):
                         os.makedirs(outname, exist_ok=True)
-                    filename = '%i_%02i%02i%02i_%.3fMHz.png' % (mjd, h, m, s, freq[c]/1e6)
+                    filename = '%i_%02i%02i%02i_%.3fMHz.png' % (mjd, h, m, s, cfreq/1e6)
                     if not is_default_lwatv:
                         filename = 'nomovie+' + filename
                     outname = os.path.join(outname, filename)

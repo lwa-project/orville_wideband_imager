@@ -1614,10 +1614,10 @@ class WriterOp(object):
                 for c in ichans:
                     cstart = max([0, c-5])
                     cstop  = min([c+6, nchan])
-                    cfreq = np.median(freq[cstart:cstop])
+                    cfreq = np.mean(freq[cstart:cstop])
                     for i,p,l in ((0,0,'I'), (1,3,'V')):
                         ### Pull out the data and get it ready for plotting
-                        img = np.median(idata[cstart:cstop,p,:,:].copy(), axis=0)
+                        img = np.mean(idata[cstart:cstop,p,:,:], axis=0)
                         if l == 'V':
                             l = '|V|'
                             img = np.abs(img)

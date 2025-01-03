@@ -27,7 +27,7 @@ def main(args):
         mjd = os.path.basename(args.directory)
         
     # Find all of the PNGs...
-    pngs = glob.glob(os.path.join(args.directory, '*.png'))
+    pngs = glob.glob(os.path.join(args.directory, '[0-9]*.png'))
     pngs.sort()
     if len(pngs) == 0:
         print('No .png files found in "%s", exiting' % args.directory)

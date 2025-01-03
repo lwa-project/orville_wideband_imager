@@ -1670,7 +1670,7 @@ class WriterOp(object):
                         os.makedirs(outname, exist_ok=True)
                     filename = '%i_%02i%02i%02i_%.3fMHz.png' % (mjd, h, m, s, freq[c]/1e6)
                     if not is_default_lwatv:
-                        filename += '_nomovie'
+                        filename = 'nomovie+' + filename
                     outname = os.path.join(outname, filename)
                     canvas = matplotlib.backends.backend_agg.FigureCanvasAgg(fig)
                     canvas.print_figure(outname, dpi=78, facecolor='black')

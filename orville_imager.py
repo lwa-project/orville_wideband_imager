@@ -1551,14 +1551,13 @@ class WriterOp(object):
             
             # Setup the frequencies to write images for
             ichans = []
+            lchans = []
             is_default_lwatv = False
-            for lf in args.lwatv_freq:
+            for lsc,lf in enumerate(args.lwatv_freq):
                 best_chan = np.argmin(np.abs(freq - lf))
                 if abs(freq[best_chan] - lf) <= 250e3:
-                    if abs(freq[best_chan] - 38e6) <= 250e3:
-                        is_default_lwatv = True
                     ichans.append(best_chan)
-                    break
+                    lchans.append(lsc)
                     
             # Setup the buffer for the automatic color scale control
             vmax = [deque([], maxlen=60) for c in freq]
@@ -1618,7 +1617,7 @@ class WriterOp(object):
                     plane_y = np.array(plane_y)
                     
                 ## Plot
-                for c in ichans:
+                for lsc,c in zip(lchans,ichans):
                     for i,p,l in ((0,0,'I'), (1,3,'V')):
                         ### Pull out the data and get it ready for plotting
                         img = idata[c,p,:,:]
@@ -1676,7 +1675,7 @@ class WriterOp(object):
                     if not os.path.exists(outname):
                         os.makedirs(outname, exist_ok=True)
                     filename = '%i_%02i%02i%02i_%.3fMHz.png' % (mjd, h, m, s, freq[c]/1e6)
-                    if not is_default_lwatv:
+                    if lsc != 0:
                         filename = 'nomovie+' + filename
                     outname = os.path.join(outname, filename)
                     canvas = matplotlib.backends.backend_agg.FigureCanvasAgg(fig)
@@ -1689,7 +1688,7 @@ class WriterOp(object):
                             fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
                             
                     if self.uploader_dir is not None:
-                        label = '' if is_default_lwatv else ('.'+self.label)
+                        label = '' if lsc == 0 else ('.'+str(lsc))
                         shutil.copy2(outname, os.path.join(self.uploader_dir, f"lwatv{label}.png"))
                         if is_default_lwatv:
                             shutil.copy2(outname_ts, os.path.join(self.uploader_dir, 'lwatv_timestamp'))

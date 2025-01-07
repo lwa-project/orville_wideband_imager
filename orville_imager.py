@@ -45,7 +45,7 @@ import bifrost.ndarray as BFArray
 from bifrost.fft import Fft
 from bifrost.quantize import quantize as Quantize
 from bifrost.linalg import LinAlg as Correlator
-from bifrost.orville import Orville as Gridder
+from bifrost.orville2 import Orville2 as Gridder
 from bifrost.proclog import ProcLog
 from bifrost import map as BFMap, asarray as BFAsArray
 from bifrost.DataType import DataType as BFDataType
@@ -1084,6 +1084,9 @@ class ImagingOp(object):
                 grid_size = round_up_to_even(grid_size)     # px
                 grid_res = 130.0 / grid_size                # deg/px
                 
+                # Setup the image weighting
+                weighting = 'briggs@0.5'
+                
                 # Report
                 self.log.info("ImagerOp%s: grid is %i by %i with a resolution of %.3f deg/px", self.label, grid_size, grid_size, grid_res)
                 
@@ -1102,6 +1105,7 @@ class ImagingOp(object):
                 ohdr['ngrid'] = grid_size
                 ohdr['res'] = grid_res
                 ohdr['basis'] = 'Stokes'
+                ohdr['weighting'] = weighting
                 ohdr['phase_center_ha'] = self.phase_center_ha
                 ohdr['phase_center_dec'] = self.phase_center_dec
                 ohdr['phase_center_az'] = pca
@@ -1288,14 +1292,14 @@ class ImagingOp(object):
                                 memset_array(self.grid, 0)
                                 BFSync()
                                 try:
-                                    bfdg.execute(self.sdata, self.grid)
+                                    bfdg.execute(self.sdata, self.grid, weighting=weighting)
                                 except NameError:
                                     bfdg = Gridder()
                                     bfdg.init(self.guvws, self.gwgts, self.gkernel, 
                                             grid_size, grid_res, W_STEP, SUPPORT_OVERSAMPLE, 
                                             polmajor=False)
                                     #bfdg.set_stream(stream)
-                                    bfdg.execute(self.sdata, self.grid)
+                                    bfdg.execute(self.sdata, self.grid, weighting=weighting)
                             except RuntimeError as e:
                                 self.log.error("Error during imaging: %s", str(e))
                                 
@@ -1363,7 +1367,7 @@ class WriterOp(object):
         
         self.station = copy.deepcopy(STATION)
         
-    def _save_image(self, station, time_tag, hdr, freq, data, mask=None):
+    def _save_image(self, station, time_tag, hdr, freq, data, mask=None, weighting='natural'):
         # Get the fill level as a fraction
         global FILL_QUEUE
         global ASP_CONFIG
@@ -1390,6 +1394,7 @@ class WriterOp(object):
                 'start_freq':    freq[0],
                 'stop_freq':     freq[-1],
                 'bandwidth':     freq[1]-freq[0],
+                'weighting':     weighting,
                 'center_ra':     (lst - hdr['phase_center_ha']) * 180/np.pi,
                 'center_dec':    hdr['phase_center_dec'] * 180/np.pi,
                 'center_az':     hdr['phase_center_az'] * 180/np.pi,
@@ -1412,7 +1417,7 @@ class WriterOp(object):
         except Exception as e:
             self.log.warning("Failed to add integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
             
-    def _save_archive_image(self, station, time_tag, hdr, freq, data):
+    def _save_archive_image(self, station, time_tag, hdr, freq, data, weighting='natural'):
         # Get the fill level as a fraction
         global FILL_QUEUE
         global ASP_CONFIG
@@ -1439,6 +1444,7 @@ class WriterOp(object):
                 'start_freq':    freq[0],
                 'stop_freq':     freq[-1],
                 'bandwidth':     freq[1]-freq[0],
+                'weighting':     weighting,
                 'center_ra':     (lst - hdr['phase_center_ha']) * 180/np.pi,
                 'center_dec':    hdr['phase_center_dec'] * 180/np.pi,
                 'center_az':     hdr['phase_center_az'] * 180/np.pi,
@@ -1523,6 +1529,7 @@ class WriterOp(object):
             navg       = ihdr['navg']
             ngrid      = ihdr['ngrid']
             res        = ihdr['res']
+            weighting  = ihdr['weighting']
             time_tag0  = iseq.time_tag
             time_tag   = time_tag0
             igulp_size = nchan*npol*npol*ngrid*ngrid*4        # float32
@@ -1574,7 +1581,7 @@ class WriterOp(object):
                 
                 ## Write the full image set to disk
                 tSave = time.time()
-                self._save_image(self.station, time_tag, ihdr, freq, idata, mask=1-mdata)
+                self._save_image(self.station, time_tag, ihdr, freq, idata, mask=1-mdata, weighting=weighting)
                 self.log.debug('Save time%s: %.3f s', self.label, time.time()-tSave)
                 
                 ## Write the archive image set to disk
@@ -1588,7 +1595,7 @@ class WriterOp(object):
                     if mask_mean[band,0,0,0] < 0.5:
                         arc_mask[band,:,:,:,:] = 0
                 arc_data = (arc_data*arc_mask).sum(axis=1) / arc_mask.sum(axis=1)
-                self._save_archive_image(self.station, time_tag, ihdr, arc_freq, arc_data)
+                self._save_archive_image(self.station, time_tag, ihdr, arc_freq, arc_data, weighting=weighting)
                 self.log.debug('Archive save time%s: %.3f s', self.label, time.time()-tArchive)
                 
                 ## Timetag stuff

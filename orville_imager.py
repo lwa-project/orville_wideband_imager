@@ -7,7 +7,7 @@ import json
 import time
 import queue
 import ephem
-import numpy
+import numpy as np
 import ctypes
 import shutil
 import signal
@@ -42,7 +42,7 @@ import bifrost.ndarray as BFArray
 from bifrost.fft import Fft
 from bifrost.quantize import quantize as Quantize
 from bifrost.linalg import LinAlg as Correlator
-from bifrost.orville import Orville as Gridder
+from bifrost.orville2 import Orville2 as Gridder
 from bifrost.proclog import ProcLog
 from bifrost import map as BFMap, asarray as BFAsArray
 from bifrost.DataType import DataType as BFDataType
@@ -215,9 +215,10 @@ class CaptureOp(object):
             'chan0':    chan0,
             'cfreq':    chan0*fC,
             'nchan':    nchan,
+            'cdecim':   4,
             'bw':       nchan*4*fC,
             'navg':     navg,
-            'nstand':   int(numpy.sqrt(8*nsrc+1)-1)//2,
+            'nstand':   int(np.sqrt(8*nsrc+1)-1)//2,
             'npol':     2,
             'nbl':      nsrc,
             'complex':  True,
@@ -291,15 +292,15 @@ class SpectraOp(object):
         nchan = freq.size
         nstand = specs.shape[0]
         try:
-            minval = numpy.min(specs[numpy.where(numpy.isfinite(specs))])
-            maxval = numpy.max(specs[numpy.where(numpy.isfinite(specs))])
+            minval = np.min(specs[np.where(np.isfinite(specs))])
+            maxval = np.max(specs[np.where(np.isfinite(specs))])
         except ValueError:
             minval = 0.0
             maxval = 1.0
-        bad = numpy.where(mask == 0)[0]
+        bad = np.where(mask == 0)[0]
         
         # Image setup
-        width = height = int(numpy.ceil(numpy.sqrt(nstand)))
+        width = height = int(np.ceil(np.sqrt(nstand)))
         box_size = 1024 // width
         im = PIL.Image.new('RGB', (width * (box_size+1) + 1, height * (box_size+1) + 21), '#FFFFFF')
         draw = PIL.ImageDraw.Draw(im)
@@ -312,7 +313,7 @@ class SpectraOp(object):
             draw.line([(0, i * (box_size+1)), (im.size[0], i * (box_size+1))], fill = '#000000')
             
         # Power as a function of frequency for all antennas
-        x = numpy.arange(nchan) * box_size // nchan
+        x = np.arange(nchan) * box_size // nchan
         for s in range(nstand):
             if s >= height * width:
                 break
@@ -324,7 +325,7 @@ class SpectraOp(object):
             if status[2*s+0] != 33:
                 c = '#799CB4'
             y = (((box_size-10) / (maxval - minval)) * (specs[s,:,0] - minval)).clip(0, (box_size-10))
-            y = numpy.where(numpy.isfinite(y), y, 0)
+            y = np.where(np.isfinite(y), y, 0)
             draw.line(list(zip(x0 + x, y0 - y)), fill=c)
             
             ## YY
@@ -332,7 +333,7 @@ class SpectraOp(object):
             if status[2*s+1] != 33:
                 c = '#FFC28C'
             y = (((box_size-10) / (maxval - minval)) * (specs[s,:,1] - minval)).clip(0, (box_size-10))
-            y = numpy.where(numpy.isfinite(y), y, 0)
+            y = np.where(np.isfinite(y), y, 0)
             draw.line(list(zip(x0 + x, y0 - y)), fill=c)
             
             ## Mask
@@ -379,7 +380,7 @@ class SpectraOp(object):
             chan0  = ihdr['chan0']
             nchan  = ihdr['nchan']
             nbl    = ihdr['nbl']
-            nstand = int(numpy.sqrt(8*nbl+1)-1)//2
+            nstand = int(np.sqrt(8*nbl+1)-1)//2
             npol   = ihdr['npol']
             navg   = ihdr['navg']
             time_tag0 = iseq.time_tag
@@ -393,7 +394,7 @@ class SpectraOp(object):
             self.mring.resize(mgulp_size, mgulp_size*10)
             
             # Setup the arrays for the frequencies and auto-correlations
-            freq = chan0*fC + numpy.arange(nchan)*4*fC
+            freq = chan0*fC + np.arange(nchan)*4*fC
             autos = [i*(2*(nstand-1)+1-i)//2 + i for i in range(nstand)]
             
             intCount = 0
@@ -409,15 +410,15 @@ class SpectraOp(object):
                 
                 ## Setup and load
                 t0 = time.time()
-                idata = ispan.data_view(numpy.complex64).reshape(ishape)
-                mdata = mspan.data_view(numpy.uint8).reshape(mshape)
+                idata = ispan.data_view(np.complex64).reshape(ishape)
+                mdata = mspan.data_view(np.uint8).reshape(mshape)
                 
                 ## Pull out the auto-correlations
                 adata = idata[autos,:,:,:].real
                 adata = adata[:,:,[0,1],[0,1]]
                 
                 ## Plot
-                im = self._plot_spectra(time_tag, freq, 10*numpy.log10(adata), labels, status, mdata)
+                im = self._plot_spectra(time_tag, freq, 10*np.log10(adata), labels, status, mdata)
                 
                 ## Save
                 ### Timetag stuff
@@ -480,14 +481,14 @@ class BaselineOp(object):
         nbl = baselines.shape[0]
         freq = freq[range(nchan//6//2,nchan,nchan//6)]
         baselines = baselines[:,range(nchan//6//2,nchan,nchan//6),:,:]
-        baselines = numpy.abs(baselines[:,:,[0,1,1],[0,0,1]])
-        minval = numpy.min(baselines[valid,:,:])
-        maxval = numpy.max(baselines[valid,:,:])
+        baselines = np.abs(baselines[:,:,[0,1,1],[0,0,1]])
+        minval = np.min(baselines[valid,:,:])
+        maxval = np.max(baselines[valid,:,:])
         if minval == maxval:
             maxval = minval + 1.0
             
         mindst = 0.0
-        maxdst = numpy.max(dist)
+        maxdst = np.max(dist)
         
         # Image setup
         width, height = 2, 3
@@ -557,7 +558,7 @@ class BaselineOp(object):
             chan0  = ihdr['chan0']
             nchan  = ihdr['nchan']
             nbl    = ihdr['nbl']
-            nstand = int(numpy.sqrt(8*nbl+1)-1)//2
+            nstand = int(np.sqrt(8*nbl+1)-1)//2
             npol   = ihdr['npol']
             navg   = ihdr['navg']
             time_tag0 = iseq.time_tag
@@ -567,21 +568,21 @@ class BaselineOp(object):
             self.iring.resize(igulp_size, igulp_size*10)
             
             # Setup the arrays for the frequencies and baseline lengths
-            freq = chan0*fC + numpy.arange(nchan)*4*fC
+            freq = chan0*fC + np.arange(nchan)*4*fC
             t0 = time.time()
             distname = os.path.join(CAL_PATH, 'dist_%i_%i_%i.npy' % (nbl, chan0, nchan))
             try:
                 if os.path.exists(distname) and os.path.getmtime(distname) < os.path.getmtime(__file__):
                     raise IOError
-                dist = numpy.load(distname)
+                dist = np.load(distname)
             except IOError:
                 print('dist cache failed')
-                uvw = uvutils.compute_uvw(ANTENNAS[0::2], HA=0, dec=self.station.lat*180/numpy.pi,
+                uvw = uvutils.compute_uvw(ANTENNAS[0::2], HA=0, dec=self.station.lat*180/np.pi,
                                             freq=freq[0], site=self.station.get_observer(), include_auto=True)
                 print('uvw.shape', uvw.shape)
-                dist = numpy.sqrt(uvw[:,0,0]**2 + uvw[:,1,0]**2)
-                numpy.save(distname, dist)
-            valid = numpy.where( dist > 0.1 )[0]
+                dist = np.sqrt(uvw[:,0,0]**2 + uvw[:,1,0]**2)
+                np.save(distname, dist)
+            valid = np.where( dist > 0.1 )[0]
             print('@dist', time.time() - t0, '@', dist.shape, dist.size*4/1024.**2)
             
             intCount = 0
@@ -594,7 +595,7 @@ class BaselineOp(object):
                 prev_time = curr_time
                 
                 ## Setup and load
-                idata = ispan.data_view(numpy.complex64).reshape(ishape)
+                idata = ispan.data_view(np.complex64).reshape(ishape)
                 
                 ## Plot
                 im = self._plot_baselines(time_tag, freq, dist, idata, valid)
@@ -670,7 +671,7 @@ class MatrixOp(object):
             chan0  = ihdr['chan0']
             nchan  = ihdr['nchan']
             nbl    = ihdr['nbl']
-            nstand = int(numpy.sqrt(8*nbl+1)-1)//2
+            nstand = int(np.sqrt(8*nbl+1)-1)//2
             npol   = ihdr['npol']
             navg   = ihdr['navg']
             time_tag0 = iseq.time_tag
@@ -698,12 +699,12 @@ class MatrixOp(object):
                 prev_time = curr_time
 
                 ##Set up and load
-                idata = ispan.data_view(numpy.complex64).reshape(ishape)
-                mdata = mspan.data_view(numpy.uint8).reshape(mshape)
+                idata = ispan.data_view(np.complex64).reshape(ishape)
+                mdata = mspan.data_view(np.uint8).reshape(mshape)
 
                 ##Normalize
-                idata = numpy.array(idata)
-                idata /= numpy.abs(idata)
+                idata = np.array(idata)
+                idata /= np.abs(idata)
 
                 ##Apply the flags
                 bad = ~(mdata.astype(bool))
@@ -718,7 +719,7 @@ class MatrixOp(object):
                     even, odd = integrations
 
                     corr = even * odd.conj()
-                    corr = numpy.sum(corr, axis=1)
+                    corr = np.sum(corr, axis=1)
                 
                     #Save
                     ### Timetag stuff
@@ -729,7 +730,7 @@ class MatrixOp(object):
                         os.mkdir(outname)
                     filename = 'CorrMatrix_%i_%02i%02i%02i.npz' % (mjd, h, m, s)
                     outname = os.path.join(outname, filename)
-                    numpy.savez(outname, hdr=fhdr, data=corr, mask=mdata)
+                    np.savez(outname, hdr=fhdr, data=corr, mask=mdata)
                     self.log.debug("Wrote correlation matrix %i to disk as '%s'", intCount, os.path.basename(outname))
                 
                     intCount += 1
@@ -788,7 +789,7 @@ class FlaggerOp(object):
                 chan0  = ihdr['chan0']
                 nchan  = ihdr['nchan']
                 nbl    = ihdr['nbl']
-                nstand = int(numpy.sqrt(8*nbl+1)-1)//2
+                nstand = int(np.sqrt(8*nbl+1)-1)//2
                 npol   = ihdr['npol']
                 navg   = ihdr['navg']
                 time_tag0 = iseq.time_tag
@@ -802,13 +803,14 @@ class FlaggerOp(object):
                 self.oring.resize(ogulp_size, ogulp_size*10)
                 
                 ohdr = ihdr.copy()
+                ohdr['type'] = 'mask'
                 ohdr_str = json.dumps(ohdr)
                 
                 autos = [i*(2*(nstand-1)+1-i)//2+i for i in range(nstand)]
                 
                 # Setup the mask
-                freq = chan0*fC + numpy.arange(nchan)*4*fC
-                mask = numpy.zeros(freq.size, dtype=numpy.uint8)
+                freq = chan0*fC + np.arange(nchan)*4*fC
+                mask = np.zeros(freq.size, dtype=np.uint8)
                 if self.flagfile is not None:
                     try:
                         with open(self.flagfile, 'r') as fh:
@@ -821,7 +823,7 @@ class FlaggerOp(object):
                                     
                                 try:
                                     f = float(line)*1e6
-                                    mask[numpy.where(numpy.abs(freq-f) < 100e3)] = 1
+                                    mask[np.where(np.abs(freq-f) < 100e3)] = 1
                                 except ValueError:
                                     pass
                     except OSError as err:
@@ -850,8 +852,8 @@ class FlaggerOp(object):
                             prev_time = curr_time
                             
                             ## Setup and load
-                            idata = ispan.data_view(numpy.complex64).reshape(ishape)
-                            odata = ospan.data_view(numpy.uint8).reshape(oshape)
+                            idata = ispan.data_view(np.complex64).reshape(ishape)
+                            odata = ospan.data_view(np.uint8).reshape(oshape)
                             
                             ## Save
                             odata[...] = mask
@@ -906,18 +908,18 @@ class ImagingOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
         
-        pce = numpy.sin(self.phase_center_dec)*numpy.sin(self.station.lat) \
-              + numpy.cos(self.phase_center_dec)*numpy.cos(self.station.lat)*numpy.cos(self.phase_center_ha)
-        pce = numpy.arcsin(pce)
-        pca = numpy.sin(self.phase_center_dec) - numpy.sin(pce)*numpy.sin(self.station.lat)
-        pca = pca / numpy.cos(pca) / numpy.cos(self.station.lat)
-        pca = numpy.arccos(pca)
-        if numpy.sin(self.phase_center_ha) > 0:
-            pca = 2*numpy.pi - pca
+        pce = np.sin(self.phase_center_dec)*np.sin(self.station.lat) \
+              + np.cos(self.phase_center_dec)*np.cos(self.station.lat)*np.cos(self.phase_center_ha)
+        pce = np.arcsin(pce)
+        pca = np.sin(self.phase_center_dec) - np.sin(pce)*np.sin(self.station.lat)
+        pca = pca / np.cos(pca) / np.cos(self.station.lat)
+        pca = np.arccos(pca)
+        if np.sin(self.phase_center_ha) > 0:
+            pca = 2*np.pi - pca
             
-        phase_center = numpy.array([numpy.cos(pce)*numpy.sin(pca), 
-                                    numpy.cos(pce)*numpy.cos(pca), 
-                                    numpy.sin(pce)])
+        phase_center = np.array([np.cos(pce)*np.sin(pca), 
+                                 np.cos(pce)*np.cos(pca), 
+                                 np.sin(pce)])
         
         with self.oring.begin_writing() as oring:
             for iseq in self.iring.read(guarantee=True):
@@ -930,7 +932,7 @@ class ImagingOp(object):
                 chan0  = ihdr['chan0']
                 nchan  = ihdr['nchan']
                 nbl    = ihdr['nbl']
-                nstand = int(numpy.sqrt(8*nbl+1)-1)//2
+                nstand = int(np.sqrt(8*nbl+1)-1)//2
                 npol   = ihdr['npol']
                 navg   = ihdr['navg']
                 time_tag0 = iseq.time_tag
@@ -939,12 +941,15 @@ class ImagingOp(object):
                 # Figure out the grid size and resolution - assumes a station size of 
                 # 100 m and maximum angular extent for the sky of 130 degrees
                 min_lambda = 299792458.0 / ((chan0 + 4*nchan-1)*fC)     # m
-                rayleigh_res = 1.22 * min_lambda / 100.0 * 180/numpy.pi # deg
+                rayleigh_res = 1.22 * min_lambda / 100.0 * 180/np.pi # deg
                 res = rayleigh_res / 4.0    # deg
-                grid_size = int(numpy.ceil(130.0 / res))    # px
+                grid_size = int(np.ceil(130.0 / res))    # px
                 grid_size = max([grid_size, 128])           # px
                 grid_size = round_up_to_even(grid_size)     # px
                 grid_res = 130.0 / grid_size                # deg/px
+                
+                # Setup the image weighting
+                weighting = 'briggs@0.5'
                 
                 # Report
                 self.log.info("ImagerOp: grid is %i by %i with a resolution of %.3f deg/px", grid_size, grid_size, grid_res)
@@ -964,6 +969,7 @@ class ImagingOp(object):
                 ohdr['ngrid'] = grid_size
                 ohdr['res'] = grid_res
                 ohdr['basis'] = 'Stokes'
+                ohdr['weighting'] = weighting
                 ohdr['phase_center_ha'] = self.phase_center_ha
                 ohdr['phase_center_dec'] = self.phase_center_dec
                 ohdr['phase_center_az'] = pca
@@ -975,12 +981,12 @@ class ImagingOp(object):
                     self.rdata
                     self.sdata
                 except AttributeError:
-                    self.rdata = BFArray(shape=ishape, dtype=numpy.complex64, space='cuda')
-                    self.sdata = BFArray(shape=(nchan,nstand,nstand,npol,npol), dtype=numpy.complex64, space='cuda')
+                    self.rdata = BFArray(shape=ishape, dtype=np.complex64, space='cuda')
+                    self.sdata = BFArray(shape=(nchan,nstand,nstand,npol,npol), dtype=np.complex64, space='cuda')
                     
                 # Setup the uvw coordinates and get them ready for gridding
                 t0 = time.time()
-                freq = chan0*fC + numpy.arange(nchan)*4*fC
+                freq = chan0*fC + np.arange(nchan)*4*fC
                 dfreq = freq*1.0
                 dfreq.shape = (freq.size//self.decimation, self.decimation)
                 dfreq = dfreq.mean(axis=1)
@@ -988,11 +994,11 @@ class ImagingOp(object):
                 try:
                     if os.path.exists(uvwname) and os.path.getmtime(uvwname) < os.path.getmtime(__file__):
                         raise IOError
-                    uvw = numpy.load(uvwname)
+                    uvw = np.load(uvwname)
                 except IOError:
                     print('uvw cache failed')
-                    uvw = numpy.zeros((3,nchan,nstand,nstand,1,1), dtype=numpy.float32)
-                    uvwT = uvutils.compute_uvw(ANTENNAS[0::2], HA=self.phase_center_ha*12/numpy.pi, dec=self.phase_center_dec*180/numpy.pi,
+                    uvw = np.zeros((3,nchan,nstand,nstand,1,1), dtype=np.float32)
+                    uvwT = uvutils.compute_uvw(ANTENNAS[0::2], HA=self.phase_center_ha*12/np.pi, dec=self.phase_center_dec*180/np.pi,
                                               freq=freq, site=self.station.get_observer(), include_auto=True).transpose(1,2,0)
                     uvwT.shape += (1,1)
                     k = 0
@@ -1002,7 +1008,7 @@ class ImagingOp(object):
                             uvw[:,:,j,i,:,:] =  uvwT[:,:,k]
                             k += 1
                     uvw[1,:,:] *= -1
-                    numpy.save(uvwname, uvw)
+                    np.save(uvwname, uvw)
                 print('@uvw', time.time() - t0, '@', uvw.shape, uvw.size*4/1024.**2)
                 
                 # Setup the baselines phasing terms for zenith
@@ -1011,22 +1017,22 @@ class ImagingOp(object):
                 try:
                     #if os.path.exists(phsname) and os.path.getmtime(phsname) < os.path.getmtime(__file__):
                     #    raise IOError
-                    phases = numpy.load(phsname)
+                    phases = np.load(phsname)
                 except IOError:
                     print('phase cache failed')
-                    phases = numpy.zeros((nchan,nstand*(nstand+1)//2,npol,npol), dtype=numpy.complex64)
+                    phases = np.zeros((nchan,nstand*(nstand+1)//2,npol,npol), dtype=np.complex64)
                     k = 0
                     for i in range(nstand):
                         ## X
                         a = ANTENNAS[2*i + 0]
-                        delayX0 = a.cable.delay(freq) - numpy.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
+                        delayX0 = a.cable.delay(freq) - np.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
                         gainX0 = a.cable.gain(freq)
-                        cgainX0 = numpy.exp(2j*numpy.pi*freq*delayX0) / numpy.sqrt(gainX0)
+                        cgainX0 = np.exp(2j*np.pi*freq*delayX0) / np.sqrt(gainX0)
                         ## Y
                         a = ANTENNAS[2*i + 1]
-                        delayY0 = a.cable.delay(freq) - numpy.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
+                        delayY0 = a.cable.delay(freq) - np.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
                         gainY0 = a.cable.gain(freq)
-                        cgainY0 = numpy.exp(2j*numpy.pi*freq*delayY0) / numpy.sqrt(gainY0)
+                        cgainY0 = np.exp(2j*np.pi*freq*delayY0) / np.sqrt(gainY0)
                         ## Goodness check
                         if ANTENNAS[2*i + 0].combined_status != 33 or ANTENNAS[2*i + 1].combined_status != 33:
                             cgainX0 *= 0.0
@@ -1035,14 +1041,14 @@ class ImagingOp(object):
                         for j in range(i, nstand):
                             ## X
                             a = ANTENNAS[2*j + 0]
-                            delayX1 = a.cable.delay(freq) - numpy.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
+                            delayX1 = a.cable.delay(freq) - np.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
                             gainX1 = a.cable.gain(freq)
-                            cgainX1 = numpy.exp(2j*numpy.pi*freq*delayX1) / numpy.sqrt(gainX1)
+                            cgainX1 = np.exp(2j*np.pi*freq*delayX1) / np.sqrt(gainX1)
                             ## Y
                             a = ANTENNAS[2*j + 1]
-                            delayY1 = a.cable.delay(freq) - numpy.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
+                            delayY1 = a.cable.delay(freq) - np.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
                             gainY1 = a.cable.gain(freq)
-                            cgainY1 = numpy.exp(2j*numpy.pi*freq*delayY1) / numpy.sqrt(gainY1)
+                            cgainY1 = np.exp(2j*np.pi*freq*delayY1) / np.sqrt(gainY1)
                             ## Goodness check
                             if ANTENNAS[2*j + 0].combined_status != 33 or ANTENNAS[2*j + 1].combined_status != 33:
                                 cgainX1 *= 0.0
@@ -1053,18 +1059,18 @@ class ImagingOp(object):
                             phases[:,k,1,0] = cgainY0.conj()*cgainX1
                             phases[:,k,1,1] = cgainY0.conj()*cgainY1
                             k += 1
-                    numpy.save(phsname, phases)
+                    np.save(phsname, phases)
                 print('@phases', time.time() - t0, '@', phases.shape, phases.size*(4+4)/1024.**2)
                 
                 # Build the gridding kernel
                 t0 = time.time()
-                kernel = numpy.zeros((SUPPORT_SIZE*SUPPORT_OVERSAMPLE,), dtype=numpy.complex64)
-                kx = numpy.arange(-(SUPPORT_SIZE*SUPPORT_OVERSAMPLE)//2+1, (SUPPORT_SIZE*SUPPORT_OVERSAMPLE)//2+1, 
-                                  dtype=numpy.float32) / SUPPORT_OVERSAMPLE
-                kernel = numpy.sinc(kx) * iv(0, 8.6*numpy.sqrt(1-(2*numpy.abs(kx)/SUPPORT_SIZE)**2)) / iv(0, 8.6)
+                kernel = np.zeros((SUPPORT_SIZE*SUPPORT_OVERSAMPLE,), dtype=np.complex64)
+                kx = np.arange(-(SUPPORT_SIZE*SUPPORT_OVERSAMPLE)//2+1, (SUPPORT_SIZE*SUPPORT_OVERSAMPLE)//2+1, 
+                                  dtype=np.float32) / SUPPORT_OVERSAMPLE
+                kernel = np.sinc(kx) * iv(0, 8.6*np.sqrt(1-(2*np.abs(kx)/SUPPORT_SIZE)**2)) / iv(0, 8.6)
                 
                 t0 = time.time()
-                weights = numpy.ones((nchan,nstand,nstand,npol,npol), dtype=numpy.complex64)
+                weights = np.ones((nchan,nstand,nstand,npol,npol), dtype=np.complex64)
                 for i in range(nstand):
                     # Mask out bad antennas
                     if ANTENNAS[2*i+0].combined_status != 33 or ANTENNAS[2*i+1].combined_status != 33:
@@ -1082,18 +1088,18 @@ class ImagingOp(object):
                 uvw = uvw.reshape(3,nchan//self.decimation,self.decimation*nstand**2)
                 weights = weights.reshape(nchan//self.decimation,self.decimation*nstand**2,npol**2)
                 try:
-                    copy_array(self.guvws, uvw.astype(numpy.float32))
+                    copy_array(self.guvws, uvw.astype(np.float32))
                     copy_array(self.gwgts, weights)
-                    copy_array(self.gkernel, kernel.astype(numpy.complex64))
+                    copy_array(self.gkernel, kernel.astype(np.complex64))
                     copy_array(self.gphases, phases)
                 except AttributeError:
-                    self.guvws = BFArray(uvw.astype(numpy.float32), space='cuda')
+                    self.guvws = BFArray(uvw.astype(np.float32), space='cuda')
                     self.gwgts = BFArray(weights, space='cuda')
-                    self.gkernel = BFArray(kernel.astype(numpy.complex64), space='cuda')
+                    self.gkernel = BFArray(kernel.astype(np.complex64), space='cuda')
                     self.gphases = BFArray(phases, space='cuda')
                     
                 # Setup the output grid
-                self.grid = BFArray(shape=(nchan//self.decimation,npol**2,grid_size,grid_size), dtype=numpy.float32, space='cuda')
+                self.grid = BFArray(shape=(nchan//self.decimation,npol**2,grid_size,grid_size), dtype=np.float32, space='cuda')
                     
                 intCount = 0
                 prev_time = time.time()
@@ -1111,8 +1117,8 @@ class ImagingOp(object):
                             prev_time = curr_time
                             
                             ## Setup and load
-                            idata = ispan.data_view(numpy.complex64).reshape(ishape)
-                            odata = ospan.data_view(numpy.float32).reshape(oshape)
+                            idata = ispan.data_view(np.complex64).reshape(ishape)
+                            odata = ospan.data_view(np.float32).reshape(oshape)
                             copy_array(self.rdata, idata)
                             
                             ## Phase and fill in the other half of the visibility matrix
@@ -1150,14 +1156,14 @@ class ImagingOp(object):
                                 memset_array(self.grid, 0)
                                 BFSync()
                                 try:
-                                    bfdg.execute(self.sdata, self.grid)
+                                    bfdg.execute(self.sdata, self.grid, weighting=weighting)
                                 except NameError:
                                     bfdg = Gridder()
                                     bfdg.init(self.guvws, self.gwgts, self.gkernel, 
                                             grid_size, grid_res, W_STEP, SUPPORT_OVERSAMPLE, 
                                             polmajor=False)
                                     #bfdg.set_stream(stream)
-                                    bfdg.execute(self.sdata, self.grid)
+                                    bfdg.execute(self.sdata, self.grid, weighting=weighting)
                             except RuntimeError as e:
                                 self.log.error("Error during imaging: %s", str(e))
                                 
@@ -1221,7 +1227,7 @@ class WriterOp(object):
         
         self.station = copy.deepcopy(STATION)
         
-    def _save_image(self, station, time_tag, hdr, freq, data, mask=None):
+    def _save_image(self, station, time_tag, hdr, freq, data, mask=None, weighting='natural'):
         # Get the fill level as a fraction
         global FILL_QUEUE
         global ASP_CONFIG
@@ -1244,14 +1250,15 @@ class WriterOp(object):
         info = {'start_time':    mjd_f,
                 'int_len':       navg_to_timetag(hdr['navg']) / fS / 86400.0,
                 'fill':          fill,
-                'lst':           lst * 0.5/numpy.pi,
+                'lst':           lst * 0.5/np.pi,
                 'start_freq':    freq[0],
                 'stop_freq':     freq[-1],
                 'bandwidth':     freq[1]-freq[0],
-                'center_ra':     (lst - hdr['phase_center_ha']) * 180/numpy.pi,
-                'center_dec':    hdr['phase_center_dec'] * 180/numpy.pi,
-                'center_az':     hdr['phase_center_az'] * 180/numpy.pi,
-                'center_alt':    hdr['phase_center_alt'] * 180/numpy.pi,
+                'weighting':     weighting,
+                'center_ra':     (lst - hdr['phase_center_ha']) * 180/np.pi,
+                'center_dec':    hdr['phase_center_dec'] * 180/np.pi,
+                'center_az':     hdr['phase_center_az'] * 180/np.pi,
+                'center_alt':    hdr['phase_center_alt'] * 180/np.pi,
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
         info.update(ASP_CONFIG[0])
@@ -1270,7 +1277,7 @@ class WriterOp(object):
         except Exception as e:
             self.log.warning("Failed to add integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
             
-    def _save_archive_image(self, station, time_tag, hdr, freq, data):
+    def _save_archive_image(self, station, time_tag, hdr, freq, data, weighthing='natural'):
         # Get the fill level as a fraction
         global FILL_QUEUE
         global ASP_CONFIG
@@ -1293,14 +1300,15 @@ class WriterOp(object):
         info = {'start_time':    mjd_f,
                 'int_len':       navg_to_timetag(hdr['navg']) / fS / 86400.0,
                 'fill':          fill,
-                'lst':           lst * 0.5/numpy.pi,
+                'lst':           lst * 0.5/np.pi,
                 'start_freq':    freq[0],
                 'stop_freq':     freq[-1],
                 'bandwidth':     freq[1]-freq[0],
-                'center_ra':     (lst - hdr['phase_center_ha']) * 180/numpy.pi,
-                'center_dec':    hdr['phase_center_dec'] * 180/numpy.pi,
-                'center_az':     hdr['phase_center_az'] * 180/numpy.pi,
-                'center_alt':    hdr['phase_center_alt'] * 180/numpy.pi,
+                'weighting':     weighting,
+                'center_ra':     (lst - hdr['phase_center_ha']) * 180/np.pi,
+                'center_dec':    hdr['phase_center_dec'] * 180/np.pi,
+                'center_az':     hdr['phase_center_az'] * 180/np.pi,
+                'center_alt':    hdr['phase_center_alt'] * 180/np.pi,
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
         info.update(ASP_CONFIG[0])
@@ -1381,6 +1389,7 @@ class WriterOp(object):
             navg       = ihdr['navg']
             ngrid      = ihdr['ngrid']
             res        = ihdr['res']
+            weighting  = ihdr['weighting']
             time_tag0  = iseq.time_tag
             time_tag   = time_tag0
             igulp_size = nchan*npol*npol*ngrid*ngrid*4        # float32
@@ -1391,17 +1400,18 @@ class WriterOp(object):
             mshape = (nchan,1,1,1)
             self.mring.resize(mgulp_size, mgulp_size*10)
             
-            clip_size = 180.0/numpy.pi/res
+            clip_size = 180.0/np.pi/res
             
             # Setup the frequencies
             t0 = time.time()
-            freq = chan0*fC + numpy.arange(nchan)*4*fC
+            freq = chan0*fC + np.arange(nchan)*4*fC
             arc_freq = freq*1.0
             arc_freq = arc_freq.reshape(6, -1)
             arc_freq = arc_freq.mean(axis=1)
             
             # Setup the frequencies to write images for
-            ichans = [nchan//2,]   ## Only make one image at the center of the band
+            ichans = [nchan//2, nchan//2-80, nchan//2+80]
+            lchans = [0, 1, 2]
             
             # Setup the buffer for the automatic color scale control
             vmax = [deque([], maxlen=60) for c in freq]
@@ -1418,8 +1428,8 @@ class WriterOp(object):
                 prev_time = curr_time
                 
                 ## Setup and load
-                idata = ispan.data_view(numpy.float32).reshape(ishape)
-                mdata = mspan.data_view(numpy.uint8).reshape(mshape)
+                idata = ispan.data_view(np.float32).reshape(ishape)
+                mdata = mspan.data_view(np.uint8).reshape(mshape)
                 mdata = mdata.copy()
                 
                 ## Write the full image set to disk
@@ -1447,24 +1457,24 @@ class WriterOp(object):
                 self.station.date = date_str[:-4]
                 for src in srcs:
                     src.compute(self.station)
-                ateam_x = [numpy.cos(src.alt)*numpy.sin(src.az) for src in srcs if src.alt > 0]
-                ateam_y = [numpy.cos(src.alt)*numpy.cos(src.az) for src in srcs if src.alt > 0]
-                ateam_s = [src.name                             for src in srcs if src.alt > 0]
+                ateam_x = [np.cos(src.alt)*np.sin(src.az) for src in srcs if src.alt > 0]
+                ateam_y = [np.cos(src.alt)*np.cos(src.az) for src in srcs if src.alt > 0]
+                ateam_s = [src.name                       for src in srcs if src.alt > 0]
                 for g in gplane:
                     g.compute(self.station)
-                plane_x = [numpy.cos(g.alt)*numpy.sin(g.az) if g.alt > 0 else numpy.nan for g in gplane]
-                plane_x = numpy.array(plane_x)
-                plane_y = [numpy.cos(g.alt)*numpy.cos(g.az) if g.alt > 0 else numpy.nan for g in gplane]
-                plane_y = numpy.array(plane_y)
+                plane_x = [np.cos(g.alt)*np.sin(g.az) if g.alt > 0 else np.nan for g in gplane]
+                plane_x = np.array(plane_x)
+                plane_y = [np.cos(g.alt)*np.cos(g.az) if g.alt > 0 else np.nan for g in gplane]
+                plane_y = np.array(plane_y)
                 
                 ## Plot
-                for c in ichans:
+                for lsc,c in zip(lchans,ichans):
                     for i,p,l in ((0,0,'I'), (1,3,'V')):
                         ### Pull out the data and get it ready for plotting
                         img = idata[c,p,:,:]
                         if l == 'V':
                             l = '|V|'
-                            img = numpy.abs(img)
+                            img = np.abs(img)
                             
                         ### Update the colorbar limits
                         if i == 0:
@@ -1473,7 +1483,7 @@ class WriterOp(object):
                         ### Plot the sky and clip at the horizon
                         ax[i].cla()
                         img = ax[i].imshow(img, origin='lower',
-                                           vmin=0, vmax=max([1e-6, numpy.median(vmax[c])]),
+                                           vmin=0, vmax=max([1e-6, np.median(vmax[c])]),
                                            interpolation='bilinear', cmap='jet')
                         clip = mpatches.Circle((ngrid/2., ngrid/2.), 1.03*clip_size,
                                                facecolor='none', edgecolor='none')
@@ -1516,20 +1526,25 @@ class WriterOp(object):
                     if not os.path.exists(outname):
                         os.makedirs(outname, exist_ok=True)
                     filename = '%i_%02i%02i%02i_%.3fMHz.png' % (mjd, h, m, s, freq[c]/1e6)
+                    if lsc != 0:
+                        filename = 'nomovie+' + filename
                     outname = os.path.join(outname, filename)
                     canvas = matplotlib.backends.backend_agg.FigureCanvasAgg(fig)
                     canvas.print_figure(outname, dpi=78, facecolor='black')
                     
                     ## Timestamp file
                     outname_ts = os.path.join(self.output_dir_lwatv, 'lwatv_timestamp')
-                    with open(outname_ts, 'w') as fh:
-                        fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
-                    
+                    if lsc == 0:
+                        with open(outname_ts, 'w') as fh:
+                            fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
+                            
                     if self.uploader_dir is not None:
-                        shutil.copy2(outname, os.path.join(self.uploader_dir, 'lwatv.png'))
-                        shutil.copy2(outname_ts, os.path.join(self.uploader_dir, 'lwatv_timestamp'))    
-                        
-                    self.log.debug("Wrote LWATV %i, %i to disk as '%s'", intCount, c, os.path.basename(outname))
+                        label = '' if lsc == 0 else ('.'+str(lsc))
+                        shutil.copy2(outname, os.path.join(self.uploader_dir, f"lwatv{label}.png"))
+                        if lsc == 0:
+                            shutil.copy2(outname_ts, os.path.join(self.uploader_dir, 'lwatv_timestamp'))    
+                            
+                    self.log.debug("Wrote LWATV%s %i, %i to disk as '%s'", label, intCount, c, os.path.basename(outname))
                     
                 time_tag += navg_to_timetag(navg)
                 intCount += 1

@@ -1552,7 +1552,6 @@ class WriterOp(object):
             # Setup the frequencies to write images for
             ichans = []
             lchans = []
-            is_default_lwatv = False
             for lsc,lf in enumerate(args.lwatv_freq):
                 best_chan = np.argmin(np.abs(freq - lf))
                 if abs(freq[best_chan] - lf) <= 250e3:
@@ -1683,14 +1682,14 @@ class WriterOp(object):
                     
                     ## Timestamp file
                     outname_ts = os.path.join(self.output_dir_lwatv, 'lwatv_timestamp')
-                    if is_default_lwatv:
+                    if lsc == 0:
                         with open(outname_ts, 'w') as fh:
                             fh.write("%i:%02i:%02i:%02i" % (mjd, h, m, s))
                             
                     if self.uploader_dir is not None:
                         label = '' if lsc == 0 else ('.'+str(lsc))
                         shutil.copy2(outname, os.path.join(self.uploader_dir, f"lwatv{label}.png"))
-                        if is_default_lwatv:
+                        if lsc == 0:
                             shutil.copy2(outname_ts, os.path.join(self.uploader_dir, 'lwatv_timestamp'))
                             
                     self.log.debug("Wrote LWATV%s %i, %i to disk as '%s'", label, intCount, c, os.path.basename(outname))

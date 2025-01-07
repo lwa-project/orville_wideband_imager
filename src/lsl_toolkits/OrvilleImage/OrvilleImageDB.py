@@ -476,7 +476,13 @@ class OrvilleImageDB(object):
                 if self.version != self._FORMAT_VERSION:
                     continue
                 elif key not in info:
-                    info[key] = 'natural'
+                    info[key] = b'natural'
+                else:
+                    try:
+                        info[key] = info[key].encode()
+                    except AttributeError:
+                        # Already bytes
+                        pass
             elif key.startswith('asp_'):
                 if self.version != self._FORMAT_VERSION:
                     continue
@@ -536,7 +542,7 @@ class OrvilleImageDB(object):
                     'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s'):
             info[key] = getattr(entry_header, key, None)
             if key == 'weighting' and info[key] is None:
-                info['key'] = 'natural'
+                    info[key] = b'natural'
             elif key.startswith('asp_') and info[key] is None:
                 info[key] = -1
                 

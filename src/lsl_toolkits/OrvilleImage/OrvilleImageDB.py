@@ -68,7 +68,7 @@ class OrvilleImageDB(object):
     # (including RA) and pixel sizes are in degrees.  All other entries are in
     # standard mks units.
     
-    _FORMAT_VERSION = 'OrvilleImageDBv004'
+    _FORMAT_VERSION = 'OrvilleImageDBv005'
     
     class _FileHeader_v1(PrintableLittleEndianStructure):
         _pack_   = 1
@@ -84,6 +84,7 @@ class OrvilleImageDB(object):
     _FileHeader_v2 = _FileHeader_v1
     _FileHeader_v3 = _FileHeader_v2
     _FileHeader_v4 = _FileHeader_v3
+    _FileHeader_v5 = _FileHeader_v4
     
     FLAG_SORTED = 0x0001
     
@@ -131,11 +132,31 @@ class OrvilleImageDB(object):
                     ('asp_atten_1', ctypes.c_int),
                     ('asp_atten_2', ctypes.c_int),
                     ('asp_atten_s', ctypes.c_int)]
+    class _EntryHeader_v5(PrintableLittleEndianStructure):
+        _pack_   = 1
+        _fields_ = [('sync_word',   ctypes.c_uint),
+                    ('start_time',  ctypes.c_double),
+                    ('int_len',     ctypes.c_double),
+                    ('fill',        ctypes.c_double),
+                    ('lst',         ctypes.c_double),
+                    ('start_freq',  ctypes.c_double),
+                    ('stop_freq',   ctypes.c_double),
+                    ('bandwidth',   ctypes.c_double),
+                    ('weighting',   ctypes.c_char*24),
+                    ('center_ra',   ctypes.c_double),
+                    ('center_dec',  ctypes.c_double),
+                    ('center_az',   ctypes.c_double),
+                    ('center_alt',  ctypes.c_double),
+                    ('asp_filter',  ctypes.c_int),
+                    ('asp_atten_1', ctypes.c_int),
+                    ('asp_atten_2', ctypes.c_int),
+                    ('asp_atten_s', ctypes.c_int)]
     
     _TIME_OFFSET_v1 = 4
     _TIME_OFFSET_v2 = _TIME_OFFSET_v1
     _TIME_OFFSET_v3 = _TIME_OFFSET_v2
     _TIME_OFFSET_v4 = _TIME_OFFSET_v3
+    _TIME_OFFSET_v5 = _TIME_OFFSET_v4
     
     def __init__(self, filename, mode='r', imager_version='', station=''):
         """
@@ -151,9 +172,9 @@ class OrvilleImageDB(object):
         self.file = None
         self.curr_int = -1
         
-        self._FileHeader = self._FileHeader_v4
-        self._EntryHeader = self._EntryHeader_v4
-        self._TIME_OFFSET = self._TIME_OFFSET_v4
+        self._FileHeader = self._FileHeader_v5
+        self._EntryHeader = self._EntryHeader_v5
+        self._TIME_OFFSET = self._TIME_OFFSET_v5
         
         # 'station' is a required keyword
         if mode[0] == 'w' and (station == '' or station == b''):
@@ -217,6 +238,10 @@ class OrvilleImageDB(object):
                     self._FileHeader = self._FileHeader_v3
                     self._EntryHeader = self._EntryHeader_v3
                     self._TIME_OFFSET = self._TIME_OFFSET_v3
+                elif self.version == 'OrvilleImageDBv004':
+                    self._FileHeader = self._FileHeader_v4
+                    self._EntryHeader = self._EntryHeader_v4
+                    self._TIME_OFFSET = self._TIME_OFFSET_v4
                 else:
                     raise KeyError('The file "%s" does not appear to be a '
                                    'OrvilleImageDB file.  Initial string: "%s"' %
@@ -241,7 +266,7 @@ class OrvilleImageDB(object):
                 entry_header = self._EntryHeader()
                 int_size = ctypes.sizeof(entry_header) \
                           + 4*self.header.nchan*(0 + self.nstokes*self.header.ngrid**2)
-                if self.version in ('OrvilleImageDBv003', 'OrvilleImageDBv004'):
+                if self.version in ('OrvilleImageDBv003', 'OrvilleImageDBv004', 'OrvilleImageDBv005'):
                     int_size += 1*self.header.nchan
                 if (fileSize - 24 - ctypes.sizeof(self.header)) % int_size != 0:
                     raise RuntimeError('The file "%s" appears to be '
@@ -272,7 +297,7 @@ class OrvilleImageDB(object):
             self.header.flags = self.FLAG_SORTED     # Sorted until it's not
             self.nint = 0
             
-        self.include_mask = (self.version in ('OrvilleImageDBv003', 'OrvilleImageDBv004'))
+        self.include_mask = (self.version in ('OrvilleImageDBv003', 'OrvilleImageDBv004', 'OrvilleImageDBv005'))
         
     def __del__(self):
         if self.file is not None and not self.file.closed:
@@ -416,6 +441,7 @@ class OrvilleImageDB(object):
             start_freq -- frequency of first channel in the integration, in Hz
             stop_freq -- frequency of last channel in the integration, in Hz
             bandwidth -- bandwidth of each channel in the integrated data, in Hz
+            weighting -- string indicating the weighting used during imaging
             center_ra -- RA of the image phase center, in degrees
             center_dec -- Declination of image phase center, in degrees
             center_az -- azimuth of the image phase center, in degrees
@@ -442,11 +468,16 @@ class OrvilleImageDB(object):
         entry_header = self._EntryHeader()
         entry_header.sync_word = 0xC0DECAFE
         for key in ('start_time', 'int_len', 'fill', 'lst', 'start_freq', 'stop_freq',
-                    'bandwidth', 'center_ra', 'center_dec', 'center_az', 'center_alt',
+                    'bandwidth', 'weighting', 'center_ra', 'center_dec', 'center_az', 'center_alt',
                     'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s'):
-            if key in ('fill', 'center_az', 'center_alt') and self.version != self._FORMAT_VERSION:
+            if key in ('weighting', 'fill', 'center_az', 'center_alt') and self.version != self._FORMAT_VERSION:
                 continue
-            if key.startswith('asp_'):
+            if key == 'weighting':
+                if self.version != self._FORMAT_VERSION:
+                    continue
+                elif key not in info:
+                    info[key] = 'natural'
+            elif key.startswith('asp_'):
                 if self.version != self._FORMAT_VERSION:
                     continue
                 elif key not in info:
@@ -476,6 +507,7 @@ class OrvilleImageDB(object):
             start_freq -- frequency of first channel in the integration, in Hz
             stop_freq -- frequency of last channel in the integration, in Hz
             bandwidth -- bandwidth of each channel in the integrated data, in Hz
+            weighting - image weighting used
             center_ra -- RA of the image phase center, in degrees
             center_dec -- Declination of image phase center, in degrees
             center_az -- azimuth of the image phase center, in degrees
@@ -500,10 +532,12 @@ class OrvilleImageDB(object):
         for key in ('stokes_params', 'pixel_size'):
             info[key] = getattr(self.header, key, None)
         for key in ('start_time', 'int_len', 'fill', 'lst', 'start_freq', 'stop_freq',
-                    'bandwidth', 'center_ra', 'center_dec', 'center_az', 'center_alt',
+                    'bandwidth', 'weighting', 'center_ra', 'center_dec', 'center_az', 'center_alt',
                     'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s'):
             info[key] = getattr(entry_header, key, None)
-            if key.startswith('asp_') and info[key] is None:
+            if key == 'weighting' and info[key] is None:
+                info['key'] = 'natural'
+            elif key.startswith('asp_') and info[key] is None:
                 info[key] = -1
                 
         nchan, nstokes, ngrid = self.header.nchan, self.nstokes, self.header.ngrid
@@ -531,6 +565,7 @@ class OrvilleImageDB(object):
             start_freq -- frequency of first channel in the integration, in Hz
             stop_freq -- frequency of last channel in the integration, in Hz
             bandwidth -- bandwidth of each channel in the integrated data, in Hz
+            weighting - image weighting used
             center_ra -- RA of the image phase center, in degrees
             center_dec -- Declination of image phase center, in degrees
             center_az -- azimuth of the image phase center, in degrees

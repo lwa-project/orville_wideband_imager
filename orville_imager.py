@@ -1277,7 +1277,7 @@ class WriterOp(object):
         except Exception as e:
             self.log.warning("Failed to add integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
             
-    def _save_archive_image(self, station, time_tag, hdr, freq, data, weighthing='natural'):
+    def _save_archive_image(self, station, time_tag, hdr, freq, data, weighting='natural'):
         # Get the fill level as a fraction
         global FILL_QUEUE
         global ASP_CONFIG

@@ -24,9 +24,10 @@ Environment=PYTHONPATH=/home/jdowell/orville3/bifrost/python:$PYTHONPATH
 
 ExecStart=/bin/bash -ec '\
 python3 /home/jdowell/orville3/orville_imager.py \
+   --configfile /home/jdowell/orville3/defaults.json \
 	 --logfile    /data/orville/log/wideband-imager.log \
 	 --output-dir /data/orville \
-	 --freq-save  29~47'
+	 --lwatv-freq 38.1,25.6,51.0,64.0,74.0'
 
 [Install]
 WantedBy=multi-user.target

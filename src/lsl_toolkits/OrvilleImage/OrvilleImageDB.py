@@ -514,7 +514,6 @@ class OrvilleImageDB(object):
                     continue
                 elif key not in info:
                     info[key] = -1
-            if key
             setattr(entry_header, key, info[key])
         self.file.write(entry_header)
         data.astype('<f4').tofile(self.file)

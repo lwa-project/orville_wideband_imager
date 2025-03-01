@@ -5,7 +5,7 @@ import shutil
 from setuptools import setup, find_namespace_packages
 
 setup(name                 = "lsl-toolkits-orvilleimage",
-      version              = "0.4.1",
+      version              = "0.5.1",
       description          = "LSL Toolkit for Orville Image Database Files",
       long_description     = "LWA Software Library reader for Orville Image Database files",
       author               = "J. Dowell, S. Varghese, and G. B. Taylor",

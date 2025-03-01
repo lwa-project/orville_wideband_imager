@@ -85,6 +85,7 @@ class OrvilleImageDB(object):
     _FileHeader_v3 = _FileHeader_v2
     _FileHeader_v4 = _FileHeader_v3
     _FileHeader_v5 = _FileHeader_v4
+    _FileHeader_v6 = _FileHeader_v5
     
     FLAG_SORTED = 0x0001
     
@@ -151,12 +152,14 @@ class OrvilleImageDB(object):
                     ('asp_atten_1', ctypes.c_int),
                     ('asp_atten_2', ctypes.c_int),
                     ('asp_atten_s', ctypes.c_int)]
+    _EntryHeader_v6 = _EntryHeader_v5
     
     _TIME_OFFSET_v1 = 4
     _TIME_OFFSET_v2 = _TIME_OFFSET_v1
     _TIME_OFFSET_v3 = _TIME_OFFSET_v2
     _TIME_OFFSET_v4 = _TIME_OFFSET_v3
     _TIME_OFFSET_v5 = _TIME_OFFSET_v4
+    _TIME_OFFSET_v6 = _TIME_OFFSET_v5
     
     def __init__(self, filename, mode='r', imager_version='', station=''):
         """
@@ -172,9 +175,9 @@ class OrvilleImageDB(object):
         self.file = None
         self.curr_int = -1
         
-        self._FileHeader = self._FileHeader_v5
-        self._EntryHeader = self._EntryHeader_v5
-        self._TIME_OFFSET = self._TIME_OFFSET_v5
+        self._FileHeader = self._FileHeader_v6
+        self._EntryHeader = self._EntryHeader_v6
+        self._TIME_OFFSET = self._TIME_OFFSET_v6
         
         # 'station' is a required keyword
         if mode[0] == 'w' and (station == '' or station == b''):
@@ -242,6 +245,10 @@ class OrvilleImageDB(object):
                     self._FileHeader = self._FileHeader_v4
                     self._EntryHeader = self._EntryHeader_v4
                     self._TIME_OFFSET = self._TIME_OFFSET_v4
+                elif self.version == 'OrvilleImageDBv005':
+                    self._FileHeader = self._FileHeader_v5
+                    self._EntryHeader = self._EntryHeader_v5
+                    self._TIME_OFFSET = self._TIME_OFFSET_v5
                 else:
                     raise KeyError('The file "%s" does not appear to be a '
                                    'OrvilleImageDB file.  Initial string: "%s"' %
@@ -266,8 +273,11 @@ class OrvilleImageDB(object):
                 entry_header = self._EntryHeader()
                 int_size = ctypes.sizeof(entry_header) \
                           + 4*self.header.nchan*(0 + self.nstokes*self.header.ngrid**2)
-                if self.version in ('OrvilleImageDBv003', 'OrvilleImageDBv004', 'OrvilleImageDBv005'):
+                if self.version in ('OrvilleImageDBv003', 'OrvilleImageDBv004', 'OrvilleImageDBv005', 'OrvilleImageDBv006'):
                     int_size += 1*self.header.nchan
+                if self.version in ('OrvilleImageDBv006'):
+                    int_size += 4*self.header.nchan
+                    int_size += 16*self.header.nchan
                 if (fileSize - 24 - ctypes.sizeof(self.header)) % int_size != 0:
                     raise RuntimeError('The file "%s" appears to be '
                                        'corrupted.' % filename)
@@ -297,7 +307,8 @@ class OrvilleImageDB(object):
             self.header.flags = self.FLAG_SORTED     # Sorted until it's not
             self.nint = 0
             
-        self.include_mask = (self.version in ('OrvilleImageDBv003', 'OrvilleImageDBv004', 'OrvilleImageDBv005'))
+        self.include_mask = (self.version in ('OrvilleImageDBv003', 'OrvilleImageDBv004', 'OrvilleImageDBv005', 'OrvilleImageDBv006'))
+        self.include_per_channel = (self.version in ('OrvilleImageDBv006',))
         
     def __del__(self):
         if self.file is not None and not self.file.closed:
@@ -339,6 +350,9 @@ class OrvilleImageDB(object):
                        + 4*self.header.nchan*(0 + self.nstokes*self.header.ngrid**2)
             if self.include_mask:
                 int_size += 1*self.header.nchan
+            if self.include_per_channel:
+                int_size += 4*self.header.nchan
+                int_size += 16*self.header.nchan
             file_header = self._FileHeader()
             headerSize = 24 + ctypes.sizeof(file_header)
             self.file.seek(headerSize + int_size * index, os.SEEK_SET)
@@ -450,6 +464,8 @@ class OrvilleImageDB(object):
             asp_atten_1 -- (optional) ASP first attenuator setting
             asp_atten_2 -- (optional) ASP second attenuator setting
             asp_atten_s -- (optional) ASP split attenuator setting
+            quality_score -- (optional) Image quality score list (0 to 1; 1 is good)
+            quality_label -- (optional) Image classification label list
             pixel_size -- Real-world size of a pixel, in degrees
             stokes_params -- a list or comma-delimited string of Stokes params
         data -- a 4D float array of image data indexed as [chan, stokes, x, y]
@@ -464,6 +480,16 @@ class OrvilleImageDB(object):
         self._check_header(info['stokes_params'], data.shape[2], 
                            info['pixel_size'], data.shape[0])
         
+        if self.include_per_channel:
+            qscore = numpy.zeros(data.shape[0], dtype=numpy.float32) - 1
+            qlabel = numpy.zeros(data.shape[0],16), dtype='<U16')
+            qlabel[:] = b'unknown         '
+            try:
+                qscore[:] = info['quality_score']
+                qlabel[:] = info['quality_label']
+            except KeyError:
+                pass
+                
         # Write it out.
         entry_header = self._EntryHeader()
         entry_header.sync_word = 0xC0DECAFE
@@ -472,7 +498,7 @@ class OrvilleImageDB(object):
                     'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s'):
             if key in ('weighting', 'fill', 'center_az', 'center_alt') and self.version != self._FORMAT_VERSION:
                 continue
-            if key == 'weighting':
+            elif key == 'weighting':
                 if self.version != self._FORMAT_VERSION:
                     continue
                 elif key not in info:
@@ -488,6 +514,7 @@ class OrvilleImageDB(object):
                     continue
                 elif key not in info:
                     info[key] = -1
+            if key
             setattr(entry_header, key, info[key])
         self.file.write(entry_header)
         data.astype('<f4').tofile(self.file)
@@ -495,12 +522,15 @@ class OrvilleImageDB(object):
         if self.include_mask:
             mask.astype('u1').tofile(self.file)
             self.file.flush()
+        if self.include_per_channel:
+            qscore.astype('<f4').tofile(self.file)
+            qlabel.tofile(self.file)
             
         interval = [info['start_time'], info['start_time'] + info['int_len']]
         self._update_file_header(interval)
         return self.nint - 1
         
-    def read_image(self):
+    def read_image(self, drop_mask=False):
         """
         Reads an integration from the database.
         
@@ -522,6 +552,8 @@ class OrvilleImageDB(object):
             asp_atten_1 -- ASP first attenuator setting
             asp_atten_2 -- ASP second attenuator setting
             asp_atten_s -- ASP split attenuator setting
+            quality_score -- Image quality score list (0 to 1; 1 is good)
+            quality_label -- Image classification label list
             pixel_size -- Real-world size of a pixel, in degrees
             stokes_params -- a list or comma-delimited string of Stokes params
         data -- a 4D float array of image data indexed as [chan, stokes, x, y]
@@ -542,7 +574,7 @@ class OrvilleImageDB(object):
                     'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s'):
             info[key] = getattr(entry_header, key, None)
             if key == 'weighting' and info[key] is None:
-                    info[key] = b'natural'
+                info[key] = b'natural'
             elif key.startswith('asp_') and info[key] is None:
                 info[key] = -1
                 
@@ -551,14 +583,21 @@ class OrvilleImageDB(object):
         data = data.reshape(nchan, nstokes, ngrid, ngrid)
         if self.include_mask:
             mask = numpy.fromfile(self.file, 'u1', nchan)
-            reshaped_mask = numpy.full(data.shape, False, dtype=bool) # Create Bool array filled with False values
-            reshaped_mask[numpy.argwhere(mask),...] = True # Propagate True across rows of flagged channels
-            data = numpy.ma.masked_array(data, reshaped_mask, dtype=data.dtype) # Create masked array
+            if not drop_mask:
+                reshaped_mask = numpy.full(data.shape, False, dtype=bool) # Create Bool array filled with False values
+                reshaped_mask[numpy.argwhere(mask),...] = True # Propagate True across rows of flagged channels
+                data = numpy.ma.masked_array(data, reshaped_mask, dtype=data.dtype) # Create masked array
+        if self.include_per_channel:
+            qscale = numpy.fromfile(self.file, '<f4', nchan)
+            qlabel = numpy.fromfile(self.file, '<U16', nchan)
+            
+            info['quality_score'] = list(qscale)
+            info['quality_label'] = [l.strip().rstrip() for l in qlabel]
             
         self.curr_int += 1
         return info, data
         
-    def read_all(self):
+    def read_all(self, drop_mask=False):
         """
         Reads all integrations from the database.
         
@@ -580,6 +619,8 @@ class OrvilleImageDB(object):
             asp_atten_1 -- ASP first attenuator setting
             asp_atten_2 -- ASP second attenuator setting
             asp_atten_s -- ASP split attenuator setting
+            quality_score -- Image quality score list (0 to 1; 1 is good)
+            quality_label -- Image classification label list
             pixel_size -- Real-world size of a pixel, in degrees
             stokes_params -- a list or comma-delimited string of Stokes params
         data_all -- a 5D masked float32 array of image data indexed as 
@@ -591,7 +632,7 @@ class OrvilleImageDB(object):
         data_all = numpy.ma.zeros((self.nint, nchan, nstokes, ngrid, ngrid), dtype=numpy.float32)
         hdr_list = []
         while self.curr_int < self.nint:
-            hdr, data = self.read_image()
+            hdr, data = self.read_image(drop_mask=drop_mask)
             hdr_list.append(hdr)
             data_all[self.curr_int-1] = data
         return hdr_list, data_all
@@ -614,6 +655,9 @@ class OrvilleImageDB(object):
         dataSize = 4*inDB.header.nchan*(0 + inDB.nstokes*inDB.header.ngrid**2)
         if inDB.include_mask:
             dataSize += 1*inDB.header.nchan
+        if inDB.include_per_channel:
+            dataSize += 4*self.header.nchan
+            dataSize += 16*self.header.nchan
         int_size = headerSize + dataSize
         
         data = inDB.file.read()

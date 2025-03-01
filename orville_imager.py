@@ -56,6 +56,11 @@ import PIL.Image, PIL.ImageDraw, PIL.ImageFont
 
 from lsl_toolkits.OrvilleImage import OrvilleImageDB
 
+try:
+    from oarfish import client as classification_client
+except ImportError:
+    classification_client = None
+
 
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 CAL_PATH = os.path.join(BASE_PATH, 'calibration')
@@ -1203,6 +1208,11 @@ class WriterOp(object):
         self.core = core
         self.gpu = gpu
         
+        try:
+            self.client = classification_client(logger=self.log)
+        except TypeError:
+            self.client = None
+            
         if not os.path.exists(base_dir):
             os.makedirs(base_dir, exist_ok=True)
         if not os.path.exists(self.output_dir_images):
@@ -1296,6 +1306,14 @@ class WriterOp(object):
         station.date = mjd_f + (MJD_OFFSET - DJD_OFFSET)
         lst = station.sidereal_time()
         
+        # Classify each channel and assign it a quality score and label
+        final_results = {}
+        if self.client is not None:
+            results = self.client.send(hdr, data[:,[0,-1],:,:])
+            final_results = {'quality_score': [r['quality_score'] for r in results],
+                             'quality_label': r['final_label'] for r in results]
+                            }
+            
         # Fill the info dictionary that describes this image
         info = {'start_time':    mjd_f,
                 'int_len':       navg_to_timetag(hdr['navg']) / fS / 86400.0,
@@ -1312,6 +1330,7 @@ class WriterOp(object):
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
         info.update(ASP_CONFIG[0])
+        info.update(final_results)
         
         # Write the image to disk
         outname = os.path.join(self.output_dir_archive, str(mjd))
@@ -1324,6 +1343,8 @@ class WriterOp(object):
             with OrvilleImageDB(outname, mode='a', station=station.name) as db:
                 db.add_image(info, data)
             self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
+            if final_results:
+                self.log.debug("Mean quality score is %.3f", sum(final_results['quality_score'])/len(final_results['quality_score']))
         except Exception as e:
             self.log.warning("Failed to add archive integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
             

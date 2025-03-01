@@ -482,8 +482,8 @@ class OrvilleImageDB(object):
         
         if self.include_per_channel:
             qscore = numpy.zeros(data.shape[0], dtype=numpy.float32) - 1
-            qlabel = numpy.zeros(data.shape[0],16), dtype='<U16')
-            qlabel[:] = b'unknown         '
+            qlabel = numpy.zeros(data.shape[0], dtype='<U16')
+            qlabel[:] = b'unknown'
             try:
                 qscore[:] = info['quality_score']
                 qlabel[:] = info['quality_label']

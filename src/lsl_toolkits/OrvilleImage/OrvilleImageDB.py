@@ -482,7 +482,7 @@ class OrvilleImageDB(object):
         
         if self.include_per_channel:
             qscore = numpy.zeros(data.shape[0], dtype=numpy.float32) - 1
-            qlabel = numpy.zeros(data.shape[0], dtype='<U16')
+            qlabel = numpy.zeros(data.shape[0], dtype='<S16')
             qlabel[:] = b'unknown'
             try:
                 qscore[:] = info['quality_score']
@@ -589,7 +589,7 @@ class OrvilleImageDB(object):
                 data = numpy.ma.masked_array(data, reshaped_mask, dtype=data.dtype) # Create masked array
         if self.include_per_channel:
             qscale = numpy.fromfile(self.file, '<f4', nchan)
-            qlabel = numpy.fromfile(self.file, '<U16', nchan)
+            qlabel = numpy.fromfile(self.file, '<S16', nchan)
             
             info['quality_score'] = list(qscale)
             info['quality_label'] = [l.strip().rstrip() for l in qlabel]

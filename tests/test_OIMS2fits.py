@@ -76,7 +76,7 @@ class OIMS2fits_tests(unittest.TestCase):
         os.unlink('OIMS2fits.log')
         self.assertEqual(status, 0)
         
-        fitsFile = glob.glob(os.path.join(self.testPath, os.path.basename(oimsFile).replace(".oims", "*.fits"))
+        fitsFile = glob.glob(os.path.join(self.testPath, os.path.basename(oimsFile).replace(".oims", "*.fits")))
         for f in fitsFile:
             with fits.open(f) as hdul:
                 nchan = len(fitsFile)
@@ -120,7 +120,7 @@ class OIMS2fits_tests(unittest.TestCase):
                 print(logfile.read())
         self.assertEqual(status, 0)
         
-        fitsFile = glob.glob(os.path.join(self.testPath, os.path.basename(o5File).replace(".o5", "*.o5"))
+        fitsFile = glob.glob(os.path.join(self.testPath, os.path.basename(o5File).replace(".o5", "*.o5")))
         for f in fitsFile:
             with fits.open(f) as hdul:
                 nchan = len(fitsFile)

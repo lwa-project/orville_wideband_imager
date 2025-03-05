@@ -73,7 +73,7 @@ class OIMS2o5_tests(unittest.TestCase):
                 print(logfile.read())
         self.assertEqual(status, 0)
         
-        o5File = glob.glob(os.path.join(self.testPath, os.path.basename(oimsFile).replace(".oims", "*.o5"))
+        o5File = glob.glob(os.path.join(self.testPath, os.path.basename(oimsFile).replace(".oims", "*.o5")))
         for f in o5File:
             with OrvilleImageHDF5(f, 'r') as o5:
                 nchan = o5.header.nchan

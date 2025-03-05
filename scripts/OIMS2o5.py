@@ -13,7 +13,11 @@ from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
 
 def main(args):
     compression = 'gzip' if args.compression else None
-    
+    if args.compression and args.compression_level:
+        if args.compression_level < 0 or args.compression_level > 9:
+            raise RuntimeError(f"Invalid compression level '{args.compression_level}'")
+        compression = args.compression_level
+        
     for filename in args.filename:
         outname = os.path.basename(filename)
         outname = os.path.splitext(outname)[0]+'.o5'
@@ -72,5 +76,7 @@ if __name__ == '__main__':
                        help='directory to write .o5 files to')
     parser.add_argument('-c', '--compression', action='store_true',
                         help='enable gzip compression on the .o5 file')
+    parser.add_argument('-l', '--compression-level', type=int,
+                        help='compression level is compression is to be used')
     args = parser.parse_args()
     main(args)

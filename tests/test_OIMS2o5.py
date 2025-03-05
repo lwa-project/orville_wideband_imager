@@ -51,11 +51,75 @@ class OIMS2o5_tests(unittest.TestCase):
             pass
             
     def test_OIMS2o5_run(self):
-        """Create fits from oims"""
+        """Create o5 from oims"""
         
         with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'w') as logfile:
             try:
                 cmd = [sys.executable, os.path.join(MODULE_BUILD, 'scripts', 'OIMS2o5.py'), oimsFile]
+                status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
+            except subprocess.CalledProcessError:
+                status = 1
+                
+        if status == 1:
+            with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'r') as logfile:
+                print(logfile.read())
+        self.assertEqual(status, 0)
+        
+        o5File = glob.glob(os.path.join(self.testPath, "*.o5"))
+        for f in o5File:
+            with OrvilleImageHDF5(f, 'r') as o5:
+                nchan = o5.header.nchan
+                ints = o5.nint
+                _, img = o5[0]
+                stokes = img.shape[1]
+                xdata = img.shape[2]
+                ydata = img.shape[3]
+
+            with OrvilleImageDB(oimsFile, 'r') as db:
+                self.assertEqual(nchan, db.header.nchan)
+                self.assertEqual(ints, db.nint)
+                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                self.assertEqual(xdata, db.header.ngrid)
+                self.assertEqual(ydata, db.header.ngrid)
+                
+    def test_OIMS2o5_compression_run(self):
+        """Create compressed o5 from oims"""
+        
+        with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'w') as logfile:
+            try:
+                cmd = [sys.executable, os.path.join(MODULE_BUILD, 'scripts', 'OIMS2o5.py'), '--compression', oimsFile]
+                status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
+            except subprocess.CalledProcessError:
+                status = 1
+                
+        if status == 1:
+            with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'r') as logfile:
+                print(logfile.read())
+        self.assertEqual(status, 0)
+        
+        o5File = glob.glob(os.path.join(self.testPath, "*.o5"))
+        for f in o5File:
+            with OrvilleImageHDF5(f, 'r') as o5:
+                nchan = o5.header.nchan
+                ints = o5.nint
+                _, img = o5[0]
+                stokes = img.shape[1]
+                xdata = img.shape[2]
+                ydata = img.shape[3]
+
+            with OrvilleImageDB(oimsFile, 'r') as db:
+                self.assertEqual(nchan, db.header.nchan)
+                self.assertEqual(ints, db.nint)
+                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                self.assertEqual(xdata, db.header.ngrid)
+                self.assertEqual(ydata, db.header.ngrid)
+                
+    def test_OIMS2o5_compression_level_run(self):
+        """Create compressed o5 from oims with a specific compression level"""
+        
+        with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'w') as logfile:
+            try:
+                cmd = [sys.executable, os.path.join(MODULE_BUILD, 'scripts', 'OIMS2o5.py'), '--compression', '--compression-level=9', oimsFile]
                 status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
             except subprocess.CalledProcessError:
                 status = 1

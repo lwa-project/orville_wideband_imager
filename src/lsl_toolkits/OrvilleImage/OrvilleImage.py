@@ -36,6 +36,7 @@ class OrvilleImageHDF5:
     
     def __init__(self, filename: str, mode: str='r',
                        imager_version: str='', station: str='',
+                       time_format: str='mjd', time_scale: str='utc',
                        compression: Optional[Union[str,int]]=None):
         """
         Constructs a new OrvilleImageHDF5.
@@ -45,6 +46,8 @@ class OrvilleImageHDF5:
             mode: Access mode ('r', 'w', 'a')
             imager_version: String providing the imager version (for writing)
             station: Station name (for writing)
+            time_format: time format (jd, mjd, etc.; for writing)
+            time_scale: time scale (utc, tai etc.; for writing)
             compression: HDF5 compression method (for writing)
         """
         
@@ -66,12 +69,12 @@ class OrvilleImageHDF5:
             else:
                 self._is_new = True
                 self.h5 = h5py.File(filename, 'w', libver='latest')
-                self._setup_new_file(imager_version, station)
+                self._setup_new_file(imager_version, station, time_format, time_scale)
                 
         elif mode == 'w':
             self._is_new = True
             self.h5 = h5py.File(filename, 'w', libver='latest')
-            self._setup_new_file(imager_version, station)
+            self._setup_new_file(imager_version, station, time_format, time_scale)
             
         else:
             raise ValueError("Mode must be 'r', 'w', or 'a'.")
@@ -80,8 +83,9 @@ class OrvilleImageHDF5:
         if mode != 'r' and hasattr(self.h5, 'swmr_mode'):
             self.h5.swmr_mode = True
             self.compression = compression
-    
-    def _setup_new_file(self, imager_version: str, station: str):
+            
+    def _setup_new_file(self, imager_version: str, station: str,
+                              time_format: str, time_scale: str):
         """
         Set up a new HDF5 file with the appropriate structure.
         """
@@ -105,6 +109,8 @@ class OrvilleImageHDF5:
         header.attrs['flags'] = 0
         header.attrs['start_time'] = 0.0
         header.attrs['stop_time'] = 0.0
+        header.attrs['time_format'] = time_format
+        header.attrs['time_scale'] = time_scale
         
         # Properties
         self._header = header
@@ -180,8 +186,6 @@ class OrvilleImageHDF5:
         stop_time = start_time + info['int_len']
         self._header.attrs['start_time'] = start_time
         self._header.attrs['stop_time'] = stop_time
-        self._header.attrs['time_format'] = 'mjd'
-        self._header.attrs['time_scale'] = 'utc'
         
         # Set stokes count
         self.nstokes = len(stokes_params.split(','))
@@ -275,17 +279,17 @@ class OrvilleImageHDF5:
                 value = json.dumps(value)
             img_group.attrs[key] = value
             
-        # Store the image data with compression
-        d = img_group.create_dataset('data', data=data, chunks=True, compression=self.compression)
-        d.attrs['axis0'] = 'channel'
-        d.attrs['axis1'] = 'stokes'
-        d.attrs['axis2'] = 'x'
-        d.attrs['axis3'] = 'y'
+        # Store the image data with optional compression
+        d = img_group.create_dataset('data', data=data, chunks=(1,)+data.shape[1:], compression=self.compression)
+        #d.attrs['axis0'] = 'channel'
+        #d.attrs['axis1'] = 'stokes'
+        #d.attrs['axis2'] = 'x'
+        #d.attrs['axis3'] = 'y'
         
         # Store mask if provided
         if mask is not None:
             m = img_group.create_dataset('mask', data=mask, compression=self.compression)
-            m.attrs['axis0'] = 'channel'
+            #m.attrs['axis0'] = 'channel'
             
         # Update header time range if needed
         self._update_time_range(info)
@@ -298,7 +302,7 @@ class OrvilleImageHDF5:
         
         return self.nint - 1
         
-    def read_image(self, idx: int) -> Tuple[Dict[str, Any], np.ndarray]:
+    def read_image(self, idx: int) -> Tuple[HeaderContainer[str, Any], np.ndarray]:
         """
         Read in the metadata and image at the specified index.
         """
@@ -309,8 +313,11 @@ class OrvilleImageHDF5:
             raise IndexError("Requested index is out of range")
             
         img_group = self.h5['images'][f"int_{idx}"]
-        info = {'stokes_params': self._header.attrs['stokes_params'],
-                'pixel_size': self._header.attrs['pixel_size']}
+        info = HeaderContainer({'stokes_params': self._header.attrs['stokes_params'],
+                                'pixel_size': self._header.attrs['pixel_size'],
+                                'time_format': self._header.attrs['time_format'],
+                                'time_scale': self._header.attrs['time_scale']
+                               })
         for key in img_group.attrs:
             info[key] = img_group.attrs[key]
             if isinstance(info[key], bytes):
@@ -324,7 +331,7 @@ class OrvilleImageHDF5:
             
         return info, data
         
-    def read_all(self) -> Tuple[List[Dict[str, Any]], np.ndarray]:
+    def read_all(self) -> Tuple[List[HeaderContainer[str, Any]], np.ndarray]:
         """
         Read in all metadata and images at once and return them.
         """

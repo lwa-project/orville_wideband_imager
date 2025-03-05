@@ -2,6 +2,7 @@
 
 import os
 import sys
+import numpy as np
 import argparse
 
 from lsl.common.progress import ProgressBarPlus
@@ -42,8 +43,13 @@ def main(args):
                     for key in metadata:
                         if isinstance(metadata[key], bytes):
                             metadata[key] = metadata[key].decode()
-                            
-                    o5.add_image(metadata, data.data, mask=data.mask[:,0,0,0])
+                           
+                    if isinstance(data, np.ma.core.MaskedArray):
+                        mask = data.mask[:,0,0,0,0]
+                        data = data.data
+                    else:
+                        mask = None 
+                    o5.add_image(metadata, data, mask=mask)
                     
                     pb.inc(amount=1)
                     sys.stdout.write(pb.show()+'\r')

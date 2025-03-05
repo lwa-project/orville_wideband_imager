@@ -29,7 +29,7 @@ class o5_tests(unittest.TestCase):
         """Turn off all numpy warnings and create the temporary file directory."""
 
         numpy.seterr(all='ignore')
-        self.testPath = tempfile.mkdtemp(prefix='test-oims-', suffix='.tmp')
+        self.testPath = tempfile.mkdtemp(prefix='test-o5-', suffix='.tmp')
         
     def test_o5_read(self):
         """Test reading in an image from a OrvilleImage file."""
@@ -51,7 +51,7 @@ class o5_tests(unittest.TestCase):
 
         with OrvilleImageHDF5(o5File, 'r') as db:
             # Read in the first image with the correct number of elements
-            hdr, data = db.read_image()
+            hdr, data = db.read_image(0)
             ## Image
             self.assertEqual(data.shape[0], db.header.nchan)
             self.assertEqual(data.shape[1], len(db.header.stokes_params.split(b',')))
@@ -263,8 +263,8 @@ class o5_tests(unittest.TestCase):
 
 
 class o5_test_suite(unittest.TestSuite):
-    """A unittest.TestSuite class which contains all of the OrvilleImageHDF5 units 
-    tests."""
+    """A unittest.TestSuite class which contains all of the OrvilleImageHDF5
+    unit tests."""
     
     def __init__(self):
         unittest.TestSuite.__init__(self)

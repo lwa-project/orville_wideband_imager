@@ -1,5 +1,5 @@
 """
-Unit test for OrvilleImageDB module.
+Unit test for OIMS2o5.py script.
 """
 
 import os
@@ -32,8 +32,8 @@ oimsFile = os.path.join(os.path.dirname(__file__), 'data', 'test.oims')
 
 @unittest.skipUnless(run_scripts_tests, "cannot determine correct script path to use")
 class OIMS2o5_tests(unittest.TestCase):
-    """A unittest.TestCase collection of unit tests for the OrvilleImageDB
-    module."""
+    """A unittest.TestCase collection of unit tests for the OIMS2o5.py
+    script."""
     
     testPath = None
 
@@ -42,6 +42,7 @@ class OIMS2o5_tests(unittest.TestCase):
 
         numpy.seterr(all='ignore')
         self.testPath = tempfile.mkdtemp(prefix='test-OIMS2o5-', suffix='.tmp')
+        
     def test_OIMS2o5_run(self):
         """Create fits from oims"""
         
@@ -90,7 +91,7 @@ class OIMS2o5_tests(unittest.TestCase):
 
 
 class OIMS2o5s_test_suite(unittest.TestSuite):
-    """A unittest.TestSuite class which contains all of the OrvilleImageDB units 
+    """A unittest.TestSuite class which contains all of the OIMS2o5.py unit
     tests."""
     
     def __init__(self):

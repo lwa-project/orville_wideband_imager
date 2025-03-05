@@ -1,5 +1,5 @@
 """
-Unit test for OrvilleImageDB module.
+Unit test for the legacy OrvilleImageDB module.
 """
 
 import os
@@ -7,7 +7,7 @@ import numpy
 import tempfile
 import unittest
 
-from lsl_toolkits.OrvilleImage import OrvilleImageHDF5, BAD_FREQ_LIST
+from lsl_toolkits.OrvilleImage import BAD_FREQ_LIST
 from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
 
 
@@ -19,8 +19,8 @@ oimsFile = os.path.join(os.path.dirname(__file__), 'data', 'test.oims')
 
 
 class oims_tests(unittest.TestCase):
-    """A unittest.TestCase collection of unit tests for the OrvilleImageDB
-    module."""
+    """A unittest.TestCase collection of unit tests for the legacy
+    OrvilleImageDB module."""
     
     testPath = None
 
@@ -149,8 +149,8 @@ class oims_tests(unittest.TestCase):
 
 
 class oims_test_suite(unittest.TestSuite):
-    """A unittest.TestSuite class which contains all of the OrvilleImageDB units 
-    tests."""
+    """A unittest.TestSuite class which contains all of the legacy OrvilleImageDB
+    unit tests."""
     
     def __init__(self):
         unittest.TestSuite.__init__(self)

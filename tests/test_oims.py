@@ -173,12 +173,21 @@ class oims_tests(unittest.TestCase):
         hdr0, img0 = db0.read_image()
         hdr1, img1 = db1.read_image(0)
         for attr in ('stokes_params', 'ngrid', 'pixel_size', 'ngrid'):
-            attr0 = getattr(hdr0, attr, None)
-            if isinstance(attr0, bytes):
-                attr0 = attr0.decode()
+            try:
+                attr0 = hdr0[attr]
+                if isinstance(attr0, bytes):
+                    attr0 = attr0.decode()
+            except KeyError:
+                attr0 = None
             self.assertEqual(attr0, getattr(hdr1, attr, None))
         for attr in ('start_time', 'int_len', 'lst', 'start_freq', 'stop_freq', 'bandwidth', 'fill', 'center_ra', 'center_dec'):
-            self.assertAlmostEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None), 6)
+            try:
+                attr0 = hdr0[attr]
+                if isinstance(attr0, bytes):
+                    attr0 = attr0.decode()
+            except KeyError:
+                attr0 = None
+            self.assertAlmostEqual(attr0, getattr(hdr1, attr, None), 6)
         ### Image
         for i in range(img0.shape[0]):
             for j in range(img0.shape[1]):
@@ -188,12 +197,21 @@ class oims_tests(unittest.TestCase):
         ## First image another way
         hdr1, img1 = db1[0]
         for attr in ('stokes_params', 'ngrid', 'pixel_size', 'ngrid'):
-            attr0 = getattr(hdr0, attr, None)
-            if isinstance(attr0, bytes):
-                attr0 = attr0.decode()
+            try:
+                attr0 = hdr0[attr]
+                if isinstance(attr0, bytes):
+                    attr0 = attr0.decode()
+            except KeyError:
+                attr0 = None
             self.assertEqual(attr0, getattr(hdr1, attr, None))
         for attr in ('start_time', 'int_len', 'lst', 'start_freq', 'stop_freq', 'bandwidth', 'fill', 'center_ra', 'center_dec'):
-            self.assertAlmostEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None), 6)
+            try:
+                attr0 = hdr0[attr]
+                if isinstance(attr0, bytes):
+                    attr0 = attr0.decode()
+            except KeyError:
+                attr0 = None
+            self.assertAlmostEqual(attr0, getattr(hdr1, attr, None), 6)
         ### Image
         for i in range(img0.shape[0]):
             for j in range(img0.shape[1]):

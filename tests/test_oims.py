@@ -171,7 +171,22 @@ class oims_tests(unittest.TestCase):
         ## First image
         ### Image header
         hdr0, img0 = db0.read_image()
-        hdr1, img1 = db1.read_image()
+        hdr1, img1 = db1.read_image(0)
+        for attr in ('stokes_params', 'ngrid', 'pixel_size', 'ngrid'):
+            attr0 = getattr(hdr0, attr, None)
+            if isinstance(attr0, bytes):
+                attr0 = attr0.decode()
+            self.assertEqual(attr0, getattr(hdr1, attr, None))
+        for attr in ('start_time', 'int_len', 'lst', 'start_freq', 'stop_freq', 'bandwidth', 'fill', 'center_ra', 'center_dec'):
+            self.assertAlmostEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None), 6)
+        ### Image
+        for i in range(img0.shape[0]):
+            for j in range(img0.shape[1]):
+                for k in range(img0.shape[2]):
+                    for l in range(img0.shape[3]):
+                        self.assertAlmostEqual(img0[i,j,k,l], img1[i,j,k,l], 6)                
+        ## First image another way
+        hdr1, img1 = db1[0]
         for attr in ('stokes_params', 'ngrid', 'pixel_size', 'ngrid'):
             attr0 = getattr(hdr0, attr, None)
             if isinstance(attr0, bytes):

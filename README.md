@@ -48,7 +48,7 @@ nchan = db.header.nchan # number of frequency channels
 # 1. Reading a particular image integration
 #    (Usually 720 integrations (each 5 seconds) in an hour) 
 
-hdr, dat = db[710] # collecting header and data from the 710 th integration
+hdr, dat = db[710] # collecting header and data from the 711 th integration
 
 # The dat array contains the image data in a four dimensional array of the form [nchan,stokes,xgrid,ygrid]
 # where nchan = 198 frequency channels, stokes = 4 [stokes (I, Q, U,V)], xgrid = grid size in the x direction,

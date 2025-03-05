@@ -53,14 +53,6 @@ class OIMS2o5_tests(unittest.TestCase):
     def test_OIMS2o5_run(self):
         """Create fits from oims"""
         
-        fitsFile = glob.glob(oimsFile.replace(".oims", "*.o5"))
-        if fitsFile:
-            for f in fitsFile:
-                try:
-                    os.remove(f)
-                except OSError:
-                    pass
-                    
         with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'w') as logfile:
             try:
                 cmd = [sys.executable, 'scripts/OIMS2o5.py', oimsFile]
@@ -73,7 +65,7 @@ class OIMS2o5_tests(unittest.TestCase):
                 print(logfile.read())
         self.assertEqual(status, 0)
         
-        o5File = glob.glob(os.path.join(self.testPath, os.path.basename(oimsFile).replace(".oims", "*.o5")))
+        o5File = glob.glob(os.path.join(self.testPath, "*.o5"))
         for f in o5File:
             with OrvilleImageHDF5(f, 'r') as o5:
                 nchan = o5.header.nchan
@@ -89,11 +81,6 @@ class OIMS2o5_tests(unittest.TestCase):
                 self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
                 self.assertEqual(xdata, db.header.ngrid)
                 self.assertEqual(ydata, db.header.ngrid)
-                
-            try:
-                os.remove(f)
-            except OSError:
-                pass
 
 
 class OIMS2o5s_test_suite(unittest.TestSuite):

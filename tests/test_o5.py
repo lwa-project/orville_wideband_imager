@@ -167,7 +167,7 @@ class o5_tests(unittest.TestCase):
                 attr0 = None
             self.assertEqual(attr0, getattr(hdr1, attr, None))
         for attr in ('start_time', 'int_len', 'lst', 'start_freq', 'stop_freq', 'bandwidth', 'fill', 'center_ra', 'center_dec'):
-            self.assertAlmostEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None), 6)
+            self.assertAlmostEqual(attr0, getattr(hdr1, attr, None), 6)
         ### Image
         for i in range(img0.shape[0]):
             for j in range(img0.shape[1]):

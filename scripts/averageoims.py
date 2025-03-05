@@ -41,8 +41,11 @@ def main(args):
 
             binchan = int(nchan/6)
             for i in range(ints):
-                db.seek(i)
-                hdr,alldata = db.read_image()
+                try:
+                    hdr,alldata = db.read_image(i)
+                except TypeError:
+                    db.seek(i)
+                    hdr,alldata = db.read_image()
                 oldbw = numpy.copy(hdr['bandwidth'])
                 hdr['bandwidth'] = hdr['bandwidth']*binchan
                 start_freq = hdr['start_freq'] 

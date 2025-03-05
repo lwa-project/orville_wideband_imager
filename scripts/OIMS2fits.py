@@ -86,27 +86,39 @@ def main(args):
             if args.index is not None:
                 if not args.diff:
                     data = numpy.zeros((1,nchan,4,ngrid,ngrid))
-                    db.seek(args.index)
-                    hdr,alldata = db.read_image()
+                    try:
+                        hdr,alldata = db.read_image(args.index)
+                    except TypeError:
+                        db.seek(args.index)
+                        hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
                     data[0] = numpy.asarray(alldata.data)
                 else:
                     data = numpy.zeros((1,nchan,4,ngrid,ngrid))
                     # FIRST do the next image
-                    db.seek(args.index+1)
-                    hdr,alldata = db.read_image()
+                    try:
+                        hdr,alldata = db.read_image(args.index+1)
+                    except TypeError:
+                        db.seek(args.index+1)
+                        hdr,alldata = db.read_image()
                     data[0] = numpy.asarray(alldata.data)
                     # Next subtract our image
-                    db.seek(args.index)
-                    hdr,alldata = db.read_image()
+                    try:
+                        hdr,alldata = db.read_image(args.index)
+                    except TypeError:
+                        db.seek(args.index)
+                        hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
                     data[0] = data[0] - numpy.asarray(alldata.data)
                 hdr = hdrlist[0]
             else:    
                 data = numpy.zeros((ints,nchan,4,ngrid,ngrid))
                 for i in range(ints):
-                    db.seek(i)
-                    hdr,alldata = db.read_image()
+                    try:
+                        hdr,alldata = db.read_image(i)
+                    except TypeError:
+                        db.seek(i)
+                        hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
                     data[i] = numpy.asarray(alldata.data)
                 hdr = hdrlist[0]

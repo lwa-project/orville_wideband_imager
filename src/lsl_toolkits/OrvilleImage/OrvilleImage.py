@@ -3,7 +3,7 @@ import numpy as np
 import os
 import time
 import json
-from typing import Dict, Any, Optional, Tuple, List, TypeVar
+from typing import Dict, Any, Optional, Tuple, List, TypeVar, Union
 
 
 K = TypeVar('K')
@@ -35,7 +35,8 @@ class OrvilleImageHDF5:
                          ]
     
     def __init__(self, filename: str, mode: str='r',
-                       imager_version: str='', station: str=''):
+                       imager_version: str='', station: str='',
+                       compression: Optional[Union[str,int]]=None):
         """
         Constructs a new OrvilleImageHDF5.
         
@@ -44,6 +45,7 @@ class OrvilleImageHDF5:
             mode: Access mode ('r', 'w', 'a')
             imager_version: String providing the imager version (for writing)
             station: Station name (for writing)
+            compression: HDF5 compression method (for writing)
         """
         
         self.name = filename
@@ -77,6 +79,7 @@ class OrvilleImageHDF5:
         # Enable single writer, multiple reader (SWMR) mode if available
         if mode != 'r' and hasattr(self.h5, 'swmr_mode'):
             self.h5.swmr_mode = True
+            self.compression = compression
     
     def _setup_new_file(self, imager_version: str, station: str):
         """
@@ -271,11 +274,11 @@ class OrvilleImageHDF5:
             img_group.attrs[key] = value
             
         # Store the image data with compression
-        img_group.create_dataset('data', data=data, chunks=True)
+        img_group.create_dataset('data', data=data, chunks=True, compression=self.compression)
         
         # Store mask if provided
         if mask is not None:
-            img_group.create_dataset('mask', data=mask)
+            img_group.create_dataset('mask', data=mask, compression=self.compression)
             
         # Update header time range if needed
         self._update_time_range(info)

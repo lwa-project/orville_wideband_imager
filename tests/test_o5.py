@@ -171,7 +171,13 @@ class o5_tests(unittest.TestCase):
                 self.assertEqual(attr0, getattr(hdr1, attr, None))
         for attr in ('start_time', 'int_len', 'lst', 'start_freq', 'stop_freq', 'bandwidth', 'fill', 'center_ra', 'center_dec'):
             with self.subTest(frame_header_attr=attr):
-                self.assertAlmostEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None), 6)
+                try:
+                    attr0 = hdr0[attr]
+                    if isinstance(attr0, bytes):
+                        attr0 = attr0.decode()
+                except KeyError:
+                    attr0 = None
+                self.assertEqual(attr0, getattr(hdr1, attr, None), 6)
         ### Image
         for i in range(img0.shape[0]):
             for j in range(img0.shape[1]):
@@ -191,7 +197,13 @@ class o5_tests(unittest.TestCase):
                 self.assertEqual(attr0, getattr(hdr1, attr, None))
         for attr in ('start_time', 'int_len', 'lst', 'start_freq', 'stop_freq', 'bandwidth', 'fill', 'center_ra', 'center_dec'):
             with self.subTest(frame_header_attr=attr):
-                self.assertAlmostEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None), 6)
+                try:
+                    attr0 = hdr0[attr]
+                    if isinstance(attr0, bytes):
+                        attr0 = attr0.decode()
+                except KeyError:
+                    attr0 = None
+                self.assertEqual(attr0, getattr(hdr1, attr, None), 6)
         ### Image
         for i in range(img0.shape[0]):
             for j in range(img0.shape[1]):

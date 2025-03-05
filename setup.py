@@ -18,6 +18,6 @@ setup(name                 = "lsl-toolkits-orvilleimage",
       package_data         = {'lsl_toolkits.OrvilleImage': ['data/*.txt']},
       scripts              = glob.glob('scripts/*.py'),
       python_requires      = '>=3.6',
-      install_requires     = ['numpy', 'scipy', 'astropy', 'lsl'],
+      install_requires     = ['numpy', 'scipy', 'astropy', 'lsl', 'h5py'],
       zip_safe             = False,
       test_suite           = "tests")

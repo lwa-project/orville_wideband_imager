@@ -3,6 +3,7 @@ import numpy as np
 import os
 import time
 import json
+from functools import lru_cache
 from typing import Dict, Any, Optional, Tuple, List, TypeVar, Union
 
 
@@ -246,6 +247,66 @@ class OrvilleImageHDF5:
                 # No longer time-sorted
                 self._header.attrs['flags'] &= ~1
                 
+    @staticmethod
+    @lru_cache(maxsize=16)
+    def _get_chunk_size(shape: Tuple, item_size: int,
+                        min_bytes: int=100*1024,
+                        max_bytes: int=1*1024*1024) -> Union[Tuple, bool]:
+        """
+        Calculate an appropriate chunk size for HDF5 dataset based on shape and data type.
+        
+        Args:
+            shape: Tuple representing the array shape
+            dtype: NumPy data type of the array
+            min_bytes: Minimum target chunk size in bytes (default: 100 KB)
+            max_bytes: Maximum target chunk size in bytes (default: 1 MB)
+            
+        Returns:
+            Either a tuple of chunk dimensions or True if no good chunking strategy is found
+        """
+        
+        # Get the total size of the data
+        data_size = np.prod(shape)*item_size
+        if data_size < min_bytes:
+            return True
+            
+        # Create the chunking variables and figure out how we can best divide
+        # each access by factors of 2, 3, 5, or 7
+        chunk_shape = list(shape)
+        chunk_size = data_size
+        chunk_factors = {}
+        for i in range(len(chunk_shape)):
+            temp = chunk_shape[i]
+            chunk_factors[i] = []
+            for j in (2, 3, 5, 7):
+                while temp % j == 0:
+                    chunk_factors[i].append(j)
+                    temp //= j
+                    
+        # While we are larger than the chunk size, work on making smaller
+        # chunks
+        while chunk_size > max_bytes and any([s for s in chunk_shape]):
+            ## Look for an axis that we can divide
+            dim_to_reduce = None
+            for dim in range(4):
+                if chunk_shape[dim] > 1 and len(chunk_factors[dim]):
+                    dim_to_reduce = dim
+                    break
+                    
+            ## No axis, found, continue
+            if dim_to_reduce is None:
+                break
+                
+            ## Yep, divide that axis
+            chunk_shape[dim_to_reduce] = max(1, chunk_shape[dim_to_reduce]//chunk_factors[dim_to_reduce].pop(0))
+            chunk_size = np.prod(chunk_shape)*item_size
+            
+        # Make sure we are still above the mimum chunk size
+        if chunk_size < min_bytes:
+            return True
+            
+        return tuple(chunk_shape)
+        
     def add_image(self, info: Dict[str, Any], data: np.ndarray,
                         mask: Optional[np.ndarray]=None) -> int:
         """
@@ -292,7 +353,8 @@ class OrvilleImageHDF5:
             img_group.attrs[key] = value
             
         # Store the image data with optional compression
-        d = img_group.create_dataset('data', data=data, chunks=(1,)+data.shape[1:],
+        chunks = self._get_chunk_size(data.shape, data.dtype.itemsize)
+        d = img_group.create_dataset('data', data=data, chunks=chunks,
                                      compression=self.compression)
         #d.attrs['axis0'] = 'channel'
         #d.attrs['axis1'] = 'stokes'

@@ -13,11 +13,7 @@ from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
 
 def main(args):
     compression = 'gzip' if args.compression else None
-    if args.compression and args.compression_level:
-        if args.compression_level < 0 or args.compression_level > 9:
-            raise RuntimeError(f"Invalid compression level '{args.compression_level}'")
-        compression = args.compression_level
-        
+    
     for filename in args.filename:
         outname = os.path.basename(filename)
         outname = os.path.splitext(outname)[0]+'.o5'
@@ -40,8 +36,9 @@ def main(args):
             
             ## Convert!
             with OrvilleImageHDF5(outname, mode='w',
-                                imager_version=imager_version, station=station,
-                                compression=compression) as o5:
+                                  imager_version=imager_version, station=station,
+                                  compression=compression,
+                                  compression_opts=args.compression_opts) as o5:
                 for (metadata,data) in db:
                     ### Make sure we scrub bytes from the .oims metadata
                     for key in metadata:

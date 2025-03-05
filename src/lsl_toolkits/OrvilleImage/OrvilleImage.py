@@ -45,7 +45,8 @@ class OrvilleImageHDF5:
     def __init__(self, filename: str, mode: str='r',
                        imager_version: str='', station: str='',
                        time_format: str='mjd', time_scale: str='utc',
-                       compression: Optional[Union[str,int]]=None):
+                       compression: Optional[str]=None,
+                       compression_opts: Optional[Any]=None):
         """
         Constructs a new OrvilleImageHDF5.
         
@@ -57,6 +58,10 @@ class OrvilleImageHDF5:
             time_format: time format (jd, mjd, etc.; for writing)
             time_scale: time scale (utc, tai etc.; for writing)
             compression: HDF5 compression method (for writing)
+            compression_opts: HDF5 compression options (for writing)
+            
+        For details on the compression methods/options available see the
+        HDF5 or h5py documentation.
         """
         
         self.name = filename
@@ -91,6 +96,7 @@ class OrvilleImageHDF5:
         if mode != 'r' and hasattr(self.h5, 'swmr_mode'):
             self.h5.swmr_mode = True
             self.compression = compression
+            self.compression_opts = compression_opts
             
     def _setup_new_file(self, imager_version: str, station: str,
                               time_format: str, time_scale: str):
@@ -355,7 +361,8 @@ class OrvilleImageHDF5:
         # Store the image data with optional compression
         chunks = self._get_chunk_size(data.shape, data.dtype.itemsize)
         d = img_group.create_dataset('data', data=data, chunks=chunks,
-                                     compression=self.compression)
+                                     compression=self.compression,
+                                     compression_opts=self.compression_opts)
         #d.attrs['axis0'] = 'channel'
         #d.attrs['axis1'] = 'stokes'
         #d.attrs['axis2'] = 'x'

@@ -38,7 +38,7 @@ def main(args):
             with OrvilleImageHDF5(outname, mode='w',
                                   imager_version=imager_version, station=station,
                                   compression=compression,
-                                  compression_opts=args.compression_opts) as o5:
+                                  compression_opts=args.compression_level) as o5:
                 for (metadata,data) in db:
                     ### Make sure we scrub bytes from the .oims metadata
                     for key in metadata:
@@ -74,6 +74,6 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--compression', action='store_true',
                         help='enable gzip compression on the .o5 file')
     parser.add_argument('-l', '--compression-level', type=int,
-                        help='compression level is compression is to be used')
+                        help='gzip compression level if compression is to be used')
     args = parser.parse_args()
     main(args)

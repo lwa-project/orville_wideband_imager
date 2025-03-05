@@ -129,7 +129,7 @@ class OrvilleImageHDF5:
             self.nstokes = len(stokes_str.split(','))
             
     @property
-    def header(self) -> HeaderContainer[str, Any]:
+    def header(self) -> HeaderContainer:
         """
         The file header as a dictionary.
         """

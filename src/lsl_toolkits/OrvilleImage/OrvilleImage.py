@@ -180,6 +180,8 @@ class OrvilleImageHDF5:
         stop_time = start_time + info['int_len']
         self._header.attrs['start_time'] = start_time
         self._header.attrs['stop_time'] = stop_time
+        self._header.attrs['time_format'] = 'mjd'
+        self._header.attrs['time_scale'] = 'utc'
         
         # Set stokes count
         self.nstokes = len(stokes_params.split(','))
@@ -274,11 +276,16 @@ class OrvilleImageHDF5:
             img_group.attrs[key] = value
             
         # Store the image data with compression
-        img_group.create_dataset('data', data=data, chunks=True, compression=self.compression)
+        d = img_group.create_dataset('data', data=data, chunks=True, compression=self.compression)
+        d.attrs['axis0'] = 'channel'
+        d.attrs['axis1'] = 'stokes'
+        d.attrs['axis2'] = 'x'
+        d.attrs['axis3'] = 'y'
         
         # Store mask if provided
         if mask is not None:
-            img_group.create_dataset('mask', data=mask, compression=self.compression)
+            m = img_group.create_dataset('mask', data=mask, compression=self.compression)
+            m.attrs['axis0'] = 'channel'
             
         # Update header time range if needed
         self._update_time_range(info)

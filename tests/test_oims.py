@@ -145,7 +145,11 @@ class oims_tests(unittest.TestCase):
                                             
         # Fill it
         for rec in db:
-            nf.add_image(*rec)
+            hdr, img = rec
+            for key in hdr:
+                if isinstance(hdr[key], bytes):
+                    hdr[key] = hdr[key].decode()
+            nf.add_image(hdr, img)
             
         # Done
         db.close()
@@ -158,7 +162,10 @@ class oims_tests(unittest.TestCase):
         # Validate
         ## File header
         for attr in ('imager_version', 'station', 'stokes_params', 'ngrid', 'nchan', 'flags'):
-            self.assertEqual(getattr(db0.header, attr, None), getattr(db1.header, attr, None))
+            attr0 = getattr(db0.header, attr, None)
+            if isinstance(attr0, bytes):
+                attr0 = attr0.decode()
+            self.assertEqual(attr0, getattr(db1.header, attr, None))
         for attr in ('pixel_size', 'start_time', 'stop_time'):
             self.assertAlmostEqual(getattr(db0.header, attr, None), getattr(db1.header, attr, None), 6)
         ## First image
@@ -166,7 +173,10 @@ class oims_tests(unittest.TestCase):
         hdr0, img0 = db0.read_image()
         hdr1, img1 = db1.read_image()
         for attr in ('stokes_params', 'ngrid', 'pixel_size', 'ngrid'):
-            self.assertEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None))
+            attr0 = getattr(hdr0, attr, None)
+            if isinstance(attr0, bytes):
+                attr0 = attr0.decode()
+            self.assertEqual(attr0, getattr(hdr1, attr, None))
         for attr in ('start_time', 'int_len', 'lst', 'start_freq', 'stop_freq', 'bandwidth', 'fill', 'center_ra', 'center_dec'):
             self.assertAlmostEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None), 6)
         ### Image

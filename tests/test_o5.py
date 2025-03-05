@@ -16,6 +16,7 @@ __author__    = "Jayce Dowell"
 
 
 oimsFile = os.path.join(os.path.dirname(__file__), 'data', 'test.oims')
+o5File = os.path.join(os.path.dirname(__file__), 'data', 'test.o5')
 
 
 class o5_tests(unittest.TestCase):
@@ -29,6 +30,52 @@ class o5_tests(unittest.TestCase):
 
         numpy.seterr(all='ignore')
         self.testPath = tempfile.mkdtemp(prefix='test-oims-', suffix='.tmp')
+        
+    def test_o5_read(self):
+        """Test reading in an image from a OrvilleImage file."""
+
+        db = OrvilleImageHDF5(o5File, 'r')
+        
+        # Read in the first image with the correct number of elements
+        hdr, data = db.read_image()
+        ## Image
+        self.assertEqual(data.shape[0], db.header.nchan)
+        self.assertEqual(data.shape[1], len(db.header.stokes_params.split(b',')))
+        self.assertEqual(data.shape[2], db.header.ngrid)
+        self.assertEqual(data.shape[3], db.header.ngrid)
+        
+        db.close()
+        
+    def test_o5_context_manager(self):
+        """Test reading in an image from a OrvilleImage file using the context manager."""
+
+        with OrvilleImageHDF5(o5File, 'r') as db:
+            # Read in the first image with the correct number of elements
+            hdr, data = db.read_image()
+            ## Image
+            self.assertEqual(data.shape[0], db.header.nchan)
+            self.assertEqual(data.shape[1], len(db.header.stokes_params.split(b',')))
+            self.assertEqual(data.shape[2], db.header.ngrid)
+            self.assertEqual(data.shape[3], db.header.ngrid)
+            
+    def test_o5_read_all(self):
+        """Test reading in all images from a OrvilleImage file."""
+
+        db = OrvilleImageHDF5(o5File, 'r')
+        
+        # Read in the first image with the correct number of elements
+        hdrs, data = db.read_all()
+        ## Count
+        self.assertEqual(len(hdrs), 13)
+        self.assertEqual(len(hdrs), len(data))
+        ## Image
+        for d in data:
+            self.assertEqual(d.shape[0], db.header.nchan)
+            self.assertEqual(d.shape[1], len(db.header.stokes_params.split(b',')))
+            self.assertEqual(d.shape[2], db.header.ngrid)
+            self.assertEqual(d.shape[3], db.header.ngrid)
+        
+        db.close()
         
     def test_o5_write(self):
         """Test saving data to the OrvilleImageHDF5 format."""

@@ -148,26 +148,30 @@ class o5_tests(unittest.TestCase):
         # Validate
         ## File header
         for attr in ('imager_version', 'station', 'stokes_params', 'ngrid', 'nchan', 'flags'):
-            attr0 = getattr(db0.header, attr, None)
-            if isinstance(attr0, bytes):
-                attr0 = attr0.decode()
-            self.assertEqual(attr0, getattr(db1.header, attr, None))
+            with self.subTest(file_header_attr=attr):
+                attr0 = getattr(db0.header, attr, None)
+                if isinstance(attr0, bytes):
+                    attr0 = attr0.decode()
+                self.assertEqual(attr0, getattr(db1.header, attr, None))
         for attr in ('pixel_size', 'start_time', 'stop_time'):
-            self.assertAlmostEqual(getattr(db0.header, attr, None), getattr(db1.header, attr, None), 6)
+            with self.subTest(file_header_attr=attr):
+                self.assertAlmostEqual(getattr(db0.header, attr, None), getattr(db1.header, attr, None), 6)
         ## First image
         ### Image header
         hdr0, img0 = db0.read_image()
         hdr1, img1 = db1.read_image(0)
         for attr in ('stokes_params', 'ngrid', 'pixel_size', 'ngrid'):
-            try:
-                attr0 = hdr0[attr]
-                if isinstance(attr0, bytes):
-                    attr0 = attr0.decode()
-            except KeyError:
-                attr0 = None
-            self.assertEqual(attr0, getattr(hdr1, attr, None))
+            with self.subTest(frame_header_attr=attr):
+                try:
+                    attr0 = hdr0[attr]
+                    if isinstance(attr0, bytes):
+                        attr0 = attr0.decode()
+                except KeyError:
+                    attr0 = None
+                self.assertEqual(attr0, getattr(hdr1, attr, None))
         for attr in ('start_time', 'int_len', 'lst', 'start_freq', 'stop_freq', 'bandwidth', 'fill', 'center_ra', 'center_dec'):
-            self.assertAlmostEqual(attr0, getattr(hdr1, attr, None), 6)
+            with self.subTest(frame_header_attr=attr):
+                self.assertAlmostEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None), 6)
         ### Image
         for i in range(img0.shape[0]):
             for j in range(img0.shape[1]):
@@ -177,15 +181,17 @@ class o5_tests(unittest.TestCase):
         ## First image another way
         hdr1, img1 = db1[0]
         for attr in ('stokes_params', 'ngrid', 'pixel_size', 'ngrid'):
-            try:
-                attr0 = hdr0[attr]
-                if isinstance(attr0, bytes):
-                    attr0 = attr0.decode()
-            except KeyError:
-                attr0 = None
-            self.assertEqual(attr0, getattr(hdr1, attr, None))
+            with self.subTest(frame_header_attr=attr):
+                try:
+                    attr0 = hdr0[attr]
+                    if isinstance(attr0, bytes):
+                        attr0 = attr0.decode()
+                except KeyError:
+                    attr0 = None
+                self.assertEqual(attr0, getattr(hdr1, attr, None))
         for attr in ('start_time', 'int_len', 'lst', 'start_freq', 'stop_freq', 'bandwidth', 'fill', 'center_ra', 'center_dec'):
-            self.assertAlmostEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None), 6)
+            with self.subTest(frame_header_attr=attr):
+                self.assertAlmostEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None), 6)
         ### Image
         for i in range(img0.shape[0]):
             for j in range(img0.shape[1]):

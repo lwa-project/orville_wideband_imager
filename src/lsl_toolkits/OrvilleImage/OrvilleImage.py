@@ -10,8 +10,15 @@ K = TypeVar('K')
 V = TypeVar('V')
 
 class HeaderContainer(Dict[K, V]):
+    """
+    Sub-class of dict that supports access of keys as attributes.
+    """
+    
     def __getattr__(self, key: K) -> V:
-        """Support for attribute-style access: header.key"""
+        """
+        Support for attribute-style access: header.key
+        """
+        
         try:
             return self[key]
         except KeyError:
@@ -28,11 +35,11 @@ class OrvilleImageHDF5:
     
     _FORMAT_VERSION = 'OrvilleImageDBv006'
     
-    _REQUIRED_METADATA = ['start_time', 'int_len',
-                          'start_freq', 'stop_freq', 'bandwidth',
-                          'stokes_params',
-                          'pixel_size', 'center_ra', 'center_dec'
-                         ]
+    _REQUIRED_IMAGE_METADATA = ['start_time', 'int_len',
+                                'start_freq', 'stop_freq', 'bandwidth',
+                                'stokes_params',
+                                'pixel_size', 'center_ra', 'center_dec'
+                               ]
     
     def __init__(self, filename: str, mode: str='r',
                        imager_version: str='', station: str='',
@@ -157,7 +164,7 @@ class OrvilleImageHDF5:
         """
         
         missing = []
-        for key in self._REQUIRED_METADATA:
+        for key in self._REQUIRED_IMAGE_METADATA:
             if key not in info:
                 missing.append(key)
         if missing:
@@ -199,6 +206,9 @@ class OrvilleImageHDF5:
         
         if data_shape[0] != self._header.attrs['nchan']:
             raise ValueError(f"Channel count mismatch: got {data_shape[0]}, expected {self._header.attrs['nchan']}")
+            
+        if data_shape[1] != self.nstokes:
+            raise ValueError(f"Stokes parameter count mismatch: got {data_shape[1]}, expected {self.nstokes}")
             
         if data_shape[2] != self._header.attrs['ngrid']:
             raise ValueError(f"Grid size mismatch: got {data_shape[2]}, expected {self._header.attrs['ngrid']}")
@@ -252,6 +262,8 @@ class OrvilleImageHDF5:
         
         # Basic imput verification
         self._verify_metadata(info)
+        if len(data.shape) != 4:
+            raise RuntimeError(f"Expected 4D not {len(data.shape)}D data")
         if data.shape[2] != data.shape[3]:
             raise RuntimeError(f"Image data is not square: {data.shape[2]} != {data.shape[3]}")
             
@@ -280,7 +292,8 @@ class OrvilleImageHDF5:
             img_group.attrs[key] = value
             
         # Store the image data with optional compression
-        d = img_group.create_dataset('data', data=data, chunks=(1,)+data.shape[1:], compression=self.compression)
+        d = img_group.create_dataset('data', data=data, chunks=(1,)+data.shape[1:],
+                                     compression=self.compression)
         #d.attrs['axis0'] = 'channel'
         #d.attrs['axis1'] = 'stokes'
         #d.attrs['axis2'] = 'x'
@@ -288,7 +301,8 @@ class OrvilleImageHDF5:
         
         # Store mask if provided
         if mask is not None:
-            m = img_group.create_dataset('mask', data=mask, compression=self.compression)
+            m = img_group.create_dataset('mask', data=mask,
+                                         compression=self.compression)
             #m.attrs['axis0'] = 'channel'
             
         # Update header time range if needed
@@ -351,7 +365,7 @@ class OrvilleImageHDF5:
         if hasattr(self, 'file') and self.h5:
             self.h5.close()
             self.h5 = None
-    
+            
     def __del__(self):
         """Ensure file is closed on object deletion."""
         self.close()

@@ -6,6 +6,7 @@ import os
 import sys
 import glob
 import numpy
+import shutil
 import tempfile
 import unittest
 import subprocess
@@ -43,6 +44,12 @@ class OIMS2o5_tests(unittest.TestCase):
         numpy.seterr(all='ignore')
         self.testPath = tempfile.mkdtemp(prefix='test-OIMS2o5-', suffix='.tmp')
         
+    def tearDown(self):
+        try:
+            shutil.rmtree(self.testPath)
+        except OSError:
+            pass
+            
     def test_OIMS2o5_run(self):
         """Create fits from oims"""
         
@@ -54,20 +61,19 @@ class OIMS2o5_tests(unittest.TestCase):
                 except OSError:
                     pass
                     
-        with open('OIMS2o5.log', 'w') as logfile:
+        with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'w') as logfile:
             try:
                 cmd = [sys.executable, 'scripts/OIMS2o5.py', oimsFile]
-                status = subprocess.check_call(cmd, stdout=logfile)
+                status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
             except subprocess.CalledProcessError:
                 status = 1
                 
         if status == 1:
-            with open('OIMS2o5.log', 'r') as logfile:
+            with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'r') as logfile:
                 print(logfile.read())
-        os.unlink('OIMS2o5.log')
         self.assertEqual(status, 0)
         
-        o5File = glob.glob(oimsFile.replace(".oims", "*.o5"))
+        o5File = glob.glob(os.path.join(self.testPath, os.path.basename(oimsFile).replace(".oims", "*.o5"))
         for f in o5File:
             with OrvilleImageHDF5(f, 'r') as o5:
                 nchan = o5.header.nchan

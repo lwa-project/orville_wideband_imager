@@ -6,6 +6,7 @@ import os
 import sys
 import glob
 import numpy
+import shutil
 import tempfile
 import unittest
 import subprocess
@@ -45,6 +46,12 @@ class OIMS2fits_tests(unittest.TestCase):
         numpy.seterr(all='ignore')
         self.testPath = tempfile.mkdtemp(prefix='test-OIMS2fits-', suffix='.tmp')
         
+    def tearDown(self):
+        try:
+            shutil.rmtree(self.testPath)
+        except OSError:
+            pass
+            
     def test_OIMS2fits_oims_run(self):
         """Create fits from oims"""
         
@@ -59,7 +66,7 @@ class OIMS2fits_tests(unittest.TestCase):
         with open('OIMS2fits.log', 'w') as logfile:
             try:
                 cmd = [sys.executable, 'scripts/OIMS2fits.py', oimsFile]
-                status = subprocess.check_call(cmd, stdout=logfile)
+                status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
             except subprocess.CalledProcessError:
                 status = 1
                 
@@ -69,7 +76,7 @@ class OIMS2fits_tests(unittest.TestCase):
         os.unlink('OIMS2fits.log')
         self.assertEqual(status, 0)
         
-        fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))
+        fitsFile = glob.glob(os.path.join(self.testPath, os.path.basename(oimsFile).replace(".oims", "*.fits"))
         for f in fitsFile:
             with fits.open(f) as hdul:
                 nchan = len(fitsFile)
@@ -101,20 +108,19 @@ class OIMS2fits_tests(unittest.TestCase):
                 except OSError:
                     pass
                     
-        with open('OIMS2fits.log', 'w') as logfile:
+        with open(os.path.join(self.testPath, 'OIMS2fits.log'), 'w') as logfile:
             try:
                 cmd = [sys.executable, 'scripts/OIMS2fits.py', o5File]
-                status = subprocess.check_call(cmd, stdout=logfile)
+                status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
             except subprocess.CalledProcessError:
                 status = 1
                 
         if status == 1:
-            with open('OIMS2fits.log', 'r') as logfile:
+            with open(os.path.join(self.testPath, 'OIMS2fits.log'), 'r') as logfile:
                 print(logfile.read())
-        os.unlink('OIMS2fits.log')
         self.assertEqual(status, 0)
         
-        fitsFile = glob.glob(oimsFile.replace(".oims", "*.fits"))
+        fitsFile = glob.glob(os.path.join(self.testPath, os.path.basename(o5File).replace(".o5", "*.o5"))
         for f in fitsFile:
             with fits.open(f) as hdul:
                 nchan = len(fitsFile)

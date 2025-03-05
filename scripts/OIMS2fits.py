@@ -15,7 +15,8 @@ import sys
 import numpy
 import argparse
 
-from lsl_toolkits.OrvilleImage import OrvilleImageDB
+from lsl_toolkits.OrvilleImage import OrvilleImageHDF5
+from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
 
 def calcbeamprops(az,alt,header,freq):
 
@@ -63,7 +64,11 @@ def pbcorroims(header,imSize,chan):
 
 def main(args):
     for filename in args.filename:
-        with OrvilleImageDB(filename, 'r') as db:
+        OrvilleReader = OrvilleImageHDF5
+        if os.path.splitext(filename)[1] == '.oims':
+            OrvilleReader = OrvilleImageDB
+            
+        with OrvilleReader(filename, 'r') as db:
         
             # Get parameters from the input file
             

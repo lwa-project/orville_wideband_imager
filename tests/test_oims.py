@@ -7,7 +7,8 @@ import numpy
 import tempfile
 import unittest
 
-from lsl_toolkits.OrvilleImage import OrvilleImageDB, BAD_FREQ_LIST
+from lsl_toolkits.OrvilleImage import OrvilleImageHDF5, BAD_FREQ_LIST
+from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
 
 
 __version__  = "0.2"
@@ -107,6 +108,52 @@ class oims_tests(unittest.TestCase):
         # Re-open
         db0 = OrvilleImageDB(oimsFile, 'r')
         db1 = OrvilleImageDB(testFile, 'r')
+        
+        # Validate
+        ## File header
+        for attr in ('imager_version', 'station', 'stokes_params', 'ngrid', 'nchan', 'flags'):
+            self.assertEqual(getattr(db0.header, attr, None), getattr(db1.header, attr, None))
+        for attr in ('pixel_size', 'start_time', 'stop_time'):
+            self.assertAlmostEqual(getattr(db0.header, attr, None), getattr(db1.header, attr, None), 6)
+        ## First image
+        ### Image header
+        hdr0, img0 = db0.read_image()
+        hdr1, img1 = db1.read_image()
+        for attr in ('stokes_params', 'ngrid', 'pixel_size', 'ngrid'):
+            self.assertEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None))
+        for attr in ('start_time', 'int_len', 'lst', 'start_freq', 'stop_freq', 'bandwidth', 'fill', 'center_ra', 'center_dec'):
+            self.assertAlmostEqual(getattr(hdr0, attr, None), getattr(hdr1, attr, None), 6)
+        ### Image
+        for i in range(img0.shape[0]):
+            for j in range(img0.shape[1]):
+                for k in range(img0.shape[2]):
+                    for l in range(img0.shape[3]):
+                        self.assertAlmostEqual(img0[i,j,k,l], img1[i,j,k,l], 6)
+                        
+        db0.close()
+        db1.close()
+        
+    def test_o5_write(self):
+        """Test saving data to the OrvilleImageHDF5 format."""
+        
+        # Setup the file names
+        testFile = os.path.join(self.testPath, 'test.o5')
+        
+        db = OrvilleImageDB(oimsFile, 'r')
+        nf = OrvilleImageHDF5(testFile, 'w', imager_version=db.header.imager_version, 
+                              station=db.header.station)
+                                            
+        # Fill it
+        for rec in db:
+            nf.add_image(*rec)
+            
+        # Done
+        db.close()
+        nf.close()
+        
+        # Re-open
+        db0 = OrvilleImageDB(oimsFile, 'r')
+        db1 = OrvilleImageHDF5(testFile, 'r')
         
         # Validate
         ## File header

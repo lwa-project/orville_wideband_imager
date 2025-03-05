@@ -14,21 +14,26 @@ import sys
 import numpy
 import argparse
 
-from lsl_toolkits.OrvilleImage import OrvilleImageDB, BAD_FREQ_LIST as badfreqs
+from lsl_toolkits.OrvilleImage import OrvilleImageHDF5, BAD_FREQ_LIST as badfreqs
+from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
 
 def main(args):
     station = lwasv
     for filename in args.filename:
-        db = OrvilleImageDB(filename, 'r')
-        outname = filename.replace(".oims","-avg.oims")
+        OrvilleReader = OrvilleImageHDF5
+        if os.path.splitext(filename)[1] == '.oims':
+            OrvilleReader = OrvilleImageDB
+            
+        db = OrvilleReader(filename, 'r')
+        outname = filename.replace(".oims","-avg.o5")
         ints = db.nint 
         nchan = db.header.nchan # number of frequency channels
         ngrid = db.header.ngrid # image size
         if nchan > 6: # Data needs averaging
-            outname = filename.replace(".oims","-avg.oims")
+            outname = filename.replace(".oims","-avg.o5")
             if os.path.isfile(outname):
                 raise FileExistsError
-            newdb = OrvilleImageDB(outname, mode='w', station=station.name)
+            newdb = OrvilleImageHDF5(outname, mode='w', station=station.name)
             ints = db.nint 
             nchan = db.header.nchan # number of frequency channels
             ngrid = db.header.ngrid # image size

@@ -424,7 +424,7 @@ class OrvilleImageHDF5:
         
     def close(self):
         """Close the HDF5 file."""
-        if hasattr(self, 'file') and self.h5:
+        if hasattr(self, 'h5') and self.h5:
             self.h5.close()
             self.h5 = None
             

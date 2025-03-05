@@ -57,7 +57,7 @@ class OIMS2fits_tests(unittest.TestCase):
         
         with open(os.path.join(self.testPath, 'OIMS2fits.log'), 'w') as logfile:
             try:
-                cmd = [sys.executable, 'scripts/OIMS2fits.py', oimsFile]
+                cmd = [sys.executable, os.path.join(MODULE_BUILD, 'scripts', 'OIMS2fits.py'), oimsFile]
                 status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
             except subprocess.CalledProcessError:
                 status = 1
@@ -88,7 +88,7 @@ class OIMS2fits_tests(unittest.TestCase):
         
         with open(os.path.join(self.testPath, 'OIMS2fits.log'), 'w') as logfile:
             try:
-                cmd = [sys.executable, 'scripts/OIMS2fits.py', o5File]
+                cmd = [sys.executable, os.path.join(MODULE_BUILD, 'scripts', 'OIMS2fits.py'), o5File]
                 status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
             except subprocess.CalledProcessError:
                 status = 1

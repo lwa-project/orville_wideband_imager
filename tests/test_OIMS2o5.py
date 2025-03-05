@@ -55,7 +55,7 @@ class OIMS2o5_tests(unittest.TestCase):
         
         with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'w') as logfile:
             try:
-                cmd = [sys.executable, 'scripts/OIMS2o5.py', oimsFile]
+                cmd = [sys.executable, os.path.join(MODULE_BUILD, 'scripts', 'OIMS2o5.py'), oimsFile]
                 status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
             except subprocess.CalledProcessError:
                 status = 1

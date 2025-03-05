@@ -3,11 +3,14 @@ import numpy as np
 import os
 import time
 import json
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any, Optional, Tuple, List, TypeVar
 
 
-class HeaderContainer(dict):
-    def __getattr__(self, key):
+K = TypeVar('K')
+V = TypeVar('V')
+
+class HeaderContainer(Dict[K, V]):
+    def __getattr__(self, key: K) -> V:
         """Support for attribute-style access: header.key"""
         try:
             return self[key]
@@ -129,7 +132,7 @@ class OrvilleImageHDF5:
             self.nstokes = len(stokes_str.split(','))
             
     @property
-    def header(self) -> HeaderContainer:
+    def header(self) -> HeaderContainer[str, Any]:
         """
         The file header as a dictionary.
         """

@@ -37,10 +37,10 @@ class o5_tests(unittest.TestCase):
         db = OrvilleImageHDF5(o5File, 'r')
         
         # Read in the first image with the correct number of elements
-        hdr, data = db.read_image()
+        hdr, data = db.read_image(0)
         ## Image
         self.assertEqual(data.shape[0], db.header.nchan)
-        self.assertEqual(data.shape[1], len(db.header.stokes_params.split(b',')))
+        self.assertEqual(data.shape[1], len(db.header.stokes_params.split(',')))
         self.assertEqual(data.shape[2], db.header.ngrid)
         self.assertEqual(data.shape[3], db.header.ngrid)
         
@@ -51,10 +51,10 @@ class o5_tests(unittest.TestCase):
 
         with OrvilleImageHDF5(o5File, 'r') as db:
             # Read in the first image with the correct number of elements
-            hdr, data = db.read_image(0)
+            hdr, data = db[0]
             ## Image
             self.assertEqual(data.shape[0], db.header.nchan)
-            self.assertEqual(data.shape[1], len(db.header.stokes_params.split(b',')))
+            self.assertEqual(data.shape[1], len(db.header.stokes_params.split(',')))
             self.assertEqual(data.shape[2], db.header.ngrid)
             self.assertEqual(data.shape[3], db.header.ngrid)
             
@@ -71,7 +71,7 @@ class o5_tests(unittest.TestCase):
         ## Image
         for d in data:
             self.assertEqual(d.shape[0], db.header.nchan)
-            self.assertEqual(d.shape[1], len(db.header.stokes_params.split(b',')))
+            self.assertEqual(d.shape[1], len(db.header.stokes_params.split(',')))
             self.assertEqual(d.shape[2], db.header.ngrid)
             self.assertEqual(d.shape[3], db.header.ngrid)
         

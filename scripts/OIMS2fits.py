@@ -172,7 +172,9 @@ def main(args):
                     
                     ## Create the FITS HDU and fill in the header information
                     hdu = astrofits.ImageHDU(data=imdata)
-                    hdu.header['TELESCOP'] = station.decode()
+                    if isinstance(station, bytes):
+                        station = station.decode()
+                    hdu.header['TELESCOP'] = station
                     hdu.header['EXPTIME'] = tInt
                     ### Coordinates - sky
                     hdu.header['NAXIS'] = 3

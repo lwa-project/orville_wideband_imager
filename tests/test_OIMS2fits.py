@@ -11,6 +11,7 @@ import unittest
 import subprocess
 
 from lsl_toolkits.OrvilleImage import OrvilleImageDB
+from lsl_toolkits.OrvilleImage.pbtools import pbcorroims
 from astropy.io import fits
 
 currentDir = os.path.abspath(os.getcwd())
@@ -115,26 +116,40 @@ class OIMS2fits_tests(unittest.TestCase):
         status = self.run_OIMS2fits('-p', oimsFile)
         self.assertEqual(status, 0)
         
-        fitsFile = numpy.sort(glob.glob(os.path.join(self.testPath, '*.fits')))
-        knownpix = numpy.array([173.84442224017718,200.2454557769261,198.07150760209828,188.95354803841997,169.35453431526005,156.03151446855847])
-        testpix = numpy.zeros(knownpix.shape)
-        for i,f in enumerate(fitsFile):
-            with fits.open(f) as hdul:
-                nchan = len(fitsFile)
-                ints = len(hdul)
-                stokes = hdul[0].data.shape[0]
-                xdata = hdul[0].data.shape[1]
-                ydata = hdul[0].data.shape[2]
-                testpix[i] = hdul[0].data[0,ydata//4,xdata//4]
-
-            with OrvilleImageDB(oimsFile, 'r') as db:
-                self.assertEqual(nchan, db.header.nchan)
-                self.assertEqual(ints, db.nint)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
-                self.assertEqual(xdata, db.header.ngrid)
-                self.assertEqual(ydata, db.header.ngrid)
-                
-        numpy.testing.assert_allclose(testpix,knownpix)
+        with OrvilleImageDB(oimsFile, 'r') as db:
+            fitsFile = numpy.sort(glob.glob(os.path.join(self.testPath, '*.fits')))
+            db.seek(0)
+            hdr, data = db.read_image()
+            oimsfreqs = numpy.array([(hdr['start_freq'] + (c*hdr['bandwidth'])) for c in range(db.header.nchan)])
+            fitsfreqs = numpy.zeros(len(oimsfreqs))
+            nchan = len(fitsFile)
+            for c,f in enumerate(fitsFile):
+                with fits.open(f) as hdul:
+                    for i,hdu in enumerate(hdul):
+                        ints = len(hdul)
+                        stokes = hdu.data.shape[0]
+                        xdata = hdu.data.shape[1]
+                        ydata = hdu.data.shape[2]
+                        curfitsfreq = hdu.header['RESTFREQ']
+                        fitsfreqs[c] = curfitsfreq
+                        db.seek(i)
+                        hdr, data = db.read_image()
+                        data = numpy.copy(numpy.asarray(data))
+                        ## Zero outside of the horizon so avoid problems
+                        sRad   = 360.0/db.header.pixel_size/numpy.pi / 2
+                        x = numpy.arange(data.shape[-2]) - 0.5
+                        y = numpy.arange(data.shape[-1]) - 0.5
+                        x,y = numpy.meshgrid(x,y)
+                        invalid = numpy.where( ((x-db.header.ngrid/2.0)**2 + (y-db.header.ngrid/2.0)**2) > (sRad**2) )
+                        data[:,:,invalid[0], invalid[1]] = 0.0
+                        curoimsdata = numpy.squeeze(data[curfitsfreq==oimsfreqs,:,:,:])
+                        numpy.testing.assert_array_equal(hdu.data,curoimsdata)
+                        self.assertEqual(ints, db.nint)
+                        self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                        self.assertEqual(xdata, db.header.ngrid)
+                        self.assertEqual(ydata, db.header.ngrid)
+            self.assertEqual(nchan, db.header.nchan)
+            numpy.testing.assert_array_equal(numpy.sort(oimsfreqs),numpy.sort(fitsfreqs)) 
 
     def test_OIMS2fitsindex_run(self):
         """Create fits from oims with specified index"""

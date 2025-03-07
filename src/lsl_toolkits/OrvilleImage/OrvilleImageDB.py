@@ -5,7 +5,7 @@ except NameError:
     pass
     
 import os
-import numpy
+import numpy as np
 import ctypes
 import struct
 import shutil
@@ -459,7 +459,7 @@ class OrvilleImageDB(object):
         assert(data.shape[2] == data.shape[3])
         if self.include_mask:
             if mask is None:
-                mask = numpy.zeros(data.shape[0], dtype=numpy.uint8)
+                mask = np.zeros(data.shape[0], dtype=np.uint8)
             assert(mask.size == data.shape[0])
         self._check_header(info['stokes_params'], data.shape[2], 
                            info['pixel_size'], data.shape[0])
@@ -547,13 +547,13 @@ class OrvilleImageDB(object):
                 info[key] = -1
                 
         nchan, nstokes, ngrid = self.header.nchan, self.nstokes, self.header.ngrid
-        data = numpy.fromfile(self.file, '<f4', nchan*nstokes*ngrid*ngrid)
+        data = np.fromfile(self.file, '<f4', nchan*nstokes*ngrid*ngrid)
         data = data.reshape(nchan, nstokes, ngrid, ngrid)
         if self.include_mask:
-            mask = numpy.fromfile(self.file, 'u1', nchan)
-            reshaped_mask = numpy.full(data.shape, False, dtype=bool) # Create Bool array filled with False values
-            reshaped_mask[numpy.argwhere(mask),...] = True # Propagate True across rows of flagged channels
-            data = numpy.ma.masked_array(data, reshaped_mask, dtype=data.dtype) # Create masked array
+            mask = np.fromfile(self.file, 'u1', nchan)
+            reshaped_mask = np.full(data.shape, False, dtype=bool) # Create Bool array filled with False values
+            reshaped_mask[np.argwhere(mask),...] = True # Propagate True across rows of flagged channels
+            data = np.ma.masked_array(data, reshaped_mask, dtype=data.dtype) # Create masked array
             
         self.curr_int += 1
         return info, data
@@ -588,7 +588,7 @@ class OrvilleImageDB(object):
         
         self.seek(0)
         nchan, nstokes, ngrid = self.header.nchan, self.nstokes, self.header.ngrid
-        data_all = numpy.ma.zeros((self.nint, nchan, nstokes, ngrid, ngrid), dtype=numpy.float32)
+        data_all = np.ma.zeros((self.nint, nchan, nstokes, ngrid, ngrid), dtype=np.float32)
         hdr_list = []
         while self.curr_int < self.nint:
             hdr, data = self.read_image()
@@ -624,7 +624,7 @@ class OrvilleImageDB(object):
         
         # Loop through the input DB's images, saving their image times.
         # Determine the sort order of those times.
-        times = numpy.array([
+        times = np.array([
                 struct.unpack_from('<d', data, offset=i)[0] for i in
                 range(inDB._TIME_OFFSET,
                       int_size * inDB.nint, int_size)])

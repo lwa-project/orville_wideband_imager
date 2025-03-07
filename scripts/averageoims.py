@@ -11,7 +11,7 @@ from astropy.time import Time
 from datetime import datetime, timedelta
 import os
 import sys
-import numpy
+import numpy as np
 import argparse
 
 from lsl_toolkits.OrvilleImage import OrvilleImageDB, BAD_FREQ_LIST as badfreqs
@@ -32,20 +32,20 @@ def main(args):
             ints = db.nint 
             nchan = db.header.nchan # number of frequency channels
             ngrid = db.header.ngrid # image size
-            data = numpy.zeros((ints,6,4,ngrid,ngrid))
+            data = np.zeros((ints,6,4,ngrid,ngrid))
 
             binchan = int(nchan/6)
             for i in range(ints):
                 db.seek(i)
                 hdr,alldata = db.read_image()
-                oldbw = numpy.copy(hdr['bandwidth'])
+                oldbw = np.copy(hdr['bandwidth'])
                 hdr['bandwidth'] = hdr['bandwidth']*binchan
                 start_freq = hdr['start_freq'] 
                 for c1 in range(6):
                     masked = 0
                     for c2 in range(int(binchan)):
                         thisfreq = start_freq + (c1*hdr['bandwidth']) + (c2*oldbw) + (oldbw/2)
-                        if round(thisfreq*1e-6,2) in numpy.round(badfreqs,2):
+                        if round(thisfreq*1e-6,2) in np.round(badfreqs,2):
                             masked +=1 
                         else:
                             data[i,c1]+= alldata[(c1*binchan)+c2]

@@ -54,7 +54,7 @@ def pbcorroims(header,imSize,chan,station):
     negalt = alt < 0
     alt[negalt] *= -1
     az[negalt] += 180
-    freq = (int(header['start_freq'])  + (chan*header['bandwidth'])
+    freq = int(header['start_freq'])  + (chan*header['bandwidth'])
     XX,YY = calcbeamprops(az,alt,header,freq)
     return XX,YY
 

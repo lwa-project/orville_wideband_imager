@@ -74,25 +74,40 @@ class OIMS2fits_tests(unittest.TestCase):
         status = self.run_OIMS2fits(oimsFile)
         self.assertEqual(status, 0)
         
-        fitsFile = numpy.sort(glob.glob(os.path.join(self.testPath, '*.fits')))
-        knownpix = numpy.array([-19.186431884765625,-27.860015869140625,-37.22902297973633,-33.82817840576172,-28.67790412902832,-21.941648483276367])
-        testpix = numpy.zeros(knownpix.shape)
-        for i,f in enumerate(fitsFile):
-            with fits.open(f) as hdul:
-                nchan = len(fitsFile)
-                ints = len(hdul)
-                stokes = hdul[0].data.shape[0]
-                xdata = hdul[0].data.shape[1]
-                ydata = hdul[0].data.shape[2]
-                testpix[i] = hdul[0].data[0,ydata//2,xdata//2]
-            with OrvilleImageDB(oimsFile, 'r') as db:
-                self.assertEqual(nchan, db.header.nchan)
-                self.assertEqual(ints, db.nint)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
-                self.assertEqual(xdata, db.header.ngrid)
-                self.assertEqual(ydata, db.header.ngrid)
-                
-        numpy.testing.assert_array_equal(testpix,knownpix)
+        with OrvilleImageDB(oimsFile, 'r') as db:
+            fitsFile = numpy.sort(glob.glob(os.path.join(self.testPath, '*.fits')))
+            db.seek(0)
+            hdr, data = db.read_image()
+            oimsfreqs = numpy.array([(hdr['start_freq'] + (c*hdr['bandwidth'])) for c in range(db.header.nchan)])
+            fitsfreqs = numpy.zeros(len(oimsfreqs))
+            nchan = len(fitsFile)
+            for c,f in enumerate(fitsFile):
+                with fits.open(f) as hdul:
+                    for i,hdu in enumerate(hdul):
+                        ints = len(hdul)
+                        stokes = hdu.data.shape[0]
+                        xdata = hdu.data.shape[1]
+                        ydata = hdu.data.shape[2]
+                        curfitsfreq = hdu.header['RESTFREQ']
+                        fitsfreqs[c] = curfitsfreq
+                        db.seek(i)
+                        hdr, data = db.read_image()
+                        data = numpy.copy(numpy.asarray(data))
+                        ## Zero outside of the horizon so avoid problems
+                        sRad   = 360.0/db.header.pixel_size/numpy.pi / 2
+                        x = numpy.arange(data.shape[-2]) - 0.5
+                        y = numpy.arange(data.shape[-1]) - 0.5
+                        x,y = numpy.meshgrid(x,y)
+                        invalid = numpy.where( ((x-db.header.ngrid/2.0)**2 + (y-db.header.ngrid/2.0)**2) > (sRad**2) )
+                        data[:,:,invalid[0], invalid[1]] = 0.0
+                        curoimsdata = numpy.squeeze(data[curfitsfreq==oimsfreqs,:,:,:])
+                        numpy.testing.assert_array_equal(hdu.data,curoimsdata)
+                        self.assertEqual(ints, db.nint)
+                        self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                        self.assertEqual(xdata, db.header.ngrid)
+                        self.assertEqual(ydata, db.header.ngrid)
+            self.assertEqual(nchan, db.header.nchan)
+            numpy.testing.assert_array_equal(numpy.sort(oimsfreqs),numpy.sort(fitsfreqs)) 
         
     def test_OIMS2fitspbcor_run(self):
         """Create fits from oims with pbcorr"""

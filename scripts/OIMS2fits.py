@@ -54,7 +54,7 @@ def pbcorroims(header,imSize,chan,station):
     negalt = alt < 0
     alt[negalt] *= -1
     az[negalt] += 180
-    freq = (int(header['start_freq'])  + ((int(chan)+1)*int(header['bandwidth'])/2))
+    freq = (int(header['start_freq'])  + (chan*header['bandwidth'])
     XX,YY = calcbeamprops(az,alt,header,freq)
     return XX,YY
 
@@ -164,7 +164,7 @@ def main(args):
                     hdu.header['END_UTC'] = dateEnd.strftime("%Y-%m-%dT%H:%M:%S")
                     hdu.header['EXPTIME'] = tInt
                     ### LWA1 approximate beam size
-                    midfreq = (hdr['start_freq']  + ((chan)*hdr['bandwidth']) + (hdr['bandwidth']/2))
+                    midfreq = (hdr['start_freq']  + ((chan)*hdr['bandwidth']) )
                     beamSize = 2.2*74e6/midfreq
                     hdu.header['BMAJ'] = beamSize/psize
                     hdu.header['BMIN'] = beamSize/psize

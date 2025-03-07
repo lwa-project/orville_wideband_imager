@@ -5,7 +5,7 @@ from astropy.io import fits as astrofits
 from datetime import datetime, timedelta
 import os
 import sys
-import numpy
+import numpy as np
 import argparse
 
 from lsl_toolkits.OrvilleImage import OrvilleImageDB
@@ -34,34 +34,34 @@ def main(args):
             hdrlist = []
             if args.index is not None:
                 if not args.diff:
-                    data = numpy.zeros((1,nchan,4,ngrid,ngrid))
+                    data = np.zeros((1,nchan,4,ngrid,ngrid))
                     db.seek(args.index)
                     hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
-                    data[0] = numpy.asarray(alldata.data)
+                    data[0] = np.asarray(alldata.data)
                 else:
-                    data = numpy.zeros((1,nchan,4,ngrid,ngrid))
+                    data = np.zeros((1,nchan,4,ngrid,ngrid))
                     # FIRST do the next image
                     db.seek(args.index+1)
                     hdr,alldata = db.read_image()
-                    data[0] = numpy.asarray(alldata.data)
+                    data[0] = np.asarray(alldata.data)
                     # Next subtract our image
                     db.seek(args.index)
                     hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
-                    data[0] = data[0] - numpy.asarray(alldata.data)
+                    data[0] = data[0] - np.asarray(alldata.data)
                 hdr = hdrlist[0]
             else:    
-                data = numpy.zeros((ints,nchan,4,ngrid,ngrid))
+                data = np.zeros((ints,nchan,4,ngrid,ngrid))
                 for i in range(ints):
                     db.seek(i)
                     hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
-                    data[i] = numpy.asarray(alldata.data)
+                    data[i] = np.asarray(alldata.data)
                 hdr = hdrlist[0]
                 if args.diff:
-                    tmpdata = numpy.copy(data)
-                    data = numpy.zeros((len(data)-1,nchan,4,ngrid,ngrid))
+                    tmpdata = np.copy(data)
+                    data = np.zeros((len(data)-1,nchan,4,ngrid,ngrid))
                     for i in range(len(data)):
                         data[i] = tmpdata[i+1] - tmpdata[i]
             for chan in range(nchan):
@@ -79,11 +79,11 @@ def main(args):
                     
                     ## Zero outside of the horizon so avoid problems
                     pScale = psize
-                    sRad   = 360.0/pScale/numpy.pi / 2
-                    x = numpy.arange(data.shape[-2]) - 0.5
-                    y = numpy.arange(data.shape[-1]) - 0.5
-                    x,y = numpy.meshgrid(x,y)
-                    invalid = numpy.where( ((x-imSize/2.0)**2 + (y-imSize/2.0)**2) > (sRad**2) )
+                    sRad   = 360.0/pScale/np.pi / 2
+                    x = np.arange(data.shape[-2]) - 0.5
+                    y = np.arange(data.shape[-1]) - 0.5
+                    x,y = np.meshgrid(x,y)
+                    invalid = np.where( ((x-imSize/2.0)**2 + (y-imSize/2.0)**2) > (sRad**2) )
                     imdata[:,invalid[0], invalid[1]] = 0.0
                     ext = imSize/(2*sRad)
                     if args.pbcorr:

@@ -34,13 +34,13 @@ def main(args):
             hdrlist = []
             if args.index is not None:
                 if not args.diff:
-                    data = np.zeros((1,nchan,4,ngrid,ngrid))
+                    data = np.zeros((1,nchan,4,ngrid,ngrid), dtype=np.float32)
                     db.seek(args.index)
                     hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
                     data[0] = np.asarray(alldata.data)
                 else:
-                    data = np.zeros((1,nchan,4,ngrid,ngrid))
+                    data = np.zeros((1,nchan,4,ngrid,ngrid), dtype=np.float32)
                     # FIRST do the next image
                     db.seek(args.index+1)
                     hdr,alldata = db.read_image()
@@ -52,7 +52,7 @@ def main(args):
                     data[0] = data[0] - np.asarray(alldata.data)
                 hdr = hdrlist[0]
             else:    
-                data = np.zeros((ints,nchan,4,ngrid,ngrid))
+                data = np.zeros((ints,nchan,4,ngrid,ngrid), dtype=np.float32)
                 for i in range(ints):
                     db.seek(i)
                     hdr,alldata = db.read_image()
@@ -61,7 +61,7 @@ def main(args):
                 hdr = hdrlist[0]
                 if args.diff:
                     tmpdata = np.copy(data)
-                    data = np.zeros((len(data)-1,nchan,4,ngrid,ngrid))
+                    data = np.zeros((len(data)-1,nchan,4,ngrid,ngrid), dtype=np.float32)
                     for i in range(len(data)):
                         data[i] = tmpdata[i+1] - tmpdata[i]
             for chan in range(nchan):

@@ -143,6 +143,7 @@ class OIMS2fits_tests(unittest.TestCase):
                         invalid = numpy.where( ((x-db.header.ngrid/2.0)**2 + (y-db.header.ngrid/2.0)**2) > (sRad**2) )
                         data[:,:,invalid[0], invalid[1]] = 0.0
                         curoimsdata = numpy.squeeze(data[curfitsfreq==oimsfreqs,:,:,:])
+                        curoimsdata = curoimsdata.astype(numpy.float64)
                         XX,YY = pbcorroims(hdr,db.header.ngrid,c,db.header.station)
                         curoimsdata[0]/=((XX+YY)/2)
                         numpy.testing.assert_array_equal(hdu.data,curoimsdata)

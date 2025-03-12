@@ -5,7 +5,7 @@ Unit test for OrvilleImageDB module.
 import os
 import sys
 import glob
-import numpy
+import numpy as np
 import tempfile
 import unittest
 import subprocess
@@ -39,7 +39,7 @@ class OIMS2fits_tests(unittest.TestCase):
     def setUp(self):
         """Turn off all numpy warnings and create the temporary file directory."""
 
-        numpy.seterr(all='ignore')
+        np.seterr(all='ignore')
         self.testPath = tempfile.mkdtemp(prefix='test-OIMS2fits-', suffix='.tmp')
     def test_OIMS2fits_run(self):
         """Create fits from oims"""

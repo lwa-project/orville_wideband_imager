@@ -1,15 +1,11 @@
-from __future__ import print_function, division, absolute_import
-try:
-    range = xrange
-except NameError:
-    pass
-    
 import os
 import numpy as np
 import ctypes
 import struct
 import shutil
 import tempfile
+
+from typing import Dict, Any, Optional, List, Tuple
 
 
 class PrintableLittleEndianStructure(ctypes.LittleEndianStructure):
@@ -18,7 +14,7 @@ class PrintableLittleEndianStructure(ctypes.LittleEndianStructure):
     method for accessing all of the fields as a dictionary.
     """
     
-    def as_dict(self):
+    def as_dict(self) -> Dict[str, Any]:
         """
         Return all of the structure fields as a dictionary.
         """
@@ -158,7 +154,7 @@ class OrvilleImageDB(object):
     _TIME_OFFSET_v4 = _TIME_OFFSET_v3
     _TIME_OFFSET_v5 = _TIME_OFFSET_v4
     
-    def __init__(self, filename, mode='r', imager_version='', station=''):
+    def __init__(self, filename: str, mode: str='r', imager_version: str='', station: str=''):
         """
         Constructs a new OrvilleImageDB.
         
@@ -318,16 +314,16 @@ class OrvilleImageDB(object):
         self.file.close()
         self.curr_int = -1
         
-    def closed(self):
+    def closed(self) -> bool:
         return self.file is None or self.file.closed
         
-    def getpos(self):
+    def getpos(self) -> int:
         return self.curr_int
         
-    def eof(self):
+    def eof(self) -> bool:
         return self.curr_int >= self.nint
         
-    def seek(self, index):
+    def seek(self, index: int):
         if index < 0:
             index += self.nint
         if index < 0 or index >= self.nint:
@@ -344,7 +340,7 @@ class OrvilleImageDB(object):
             self.file.seek(headerSize + int_size * index, os.SEEK_SET)
             self.curr_int = index
             
-    def _check_header(self, stokes_params, ngrid, pixel_size, nchan):
+    def _check_header(self, stokes_params: str, ngrid: int, pixel_size: int, nchan: int):
         """
         For new files, adds the given information to the file header and
         writes the header to disk.  For existing files, compares the given
@@ -403,7 +399,7 @@ class OrvilleImageDB(object):
                     'match this file\'s channel count (%d).'
                     % (nchan, self.header.nchan))
                 
-    def _update_file_header(self, interval):
+    def _update_file_header(self, interval: List[float]):
         """
         To be called at the end of the add_image functions.  Updates the header
         information to reflect the new data.
@@ -427,7 +423,7 @@ class OrvilleImageDB(object):
             self.header.flags &= ~self.FLAG_SORTED
             self._is_outdated = True
             
-    def add_image(self, info, data, mask=None):
+    def add_image(self, info: Dict[str, Any], data: np.ndarray, mask: Optional[np.ndarray]=None):
         """
         Adds an integration to the database.  Returns the index of the newly
         added image.
@@ -500,7 +496,7 @@ class OrvilleImageDB(object):
         self._update_file_header(interval)
         return self.nint - 1
         
-    def read_image(self):
+    def read_image(self) -> Tuple[Dict[str, Any], np.ndarray]:
         """
         Reads an integration from the database.
         
@@ -558,7 +554,7 @@ class OrvilleImageDB(object):
         self.curr_int += 1
         return info, data
         
-    def read_all(self):
+    def read_all(self) -> Tuple[List[Dict[str, Any]], np.ndarray]:
         """
         Reads all integrations from the database.
         
@@ -597,7 +593,7 @@ class OrvilleImageDB(object):
         return hdr_list, data_all
         
     @staticmethod
-    def sort(filename):
+    def sort(filename: str):
         """
         Sorts the integrations in a DB file to be time-ordered.
         """
@@ -681,7 +677,7 @@ class OrvilleImageDB(object):
     def __next__(self):
         return self.next()
         
-    def next(self):
+    def next(self) -> Tuple[Dict[str, Any], np.ndarray]:
         if self.curr_int >= self.nint:
             raise StopIteration
         else:

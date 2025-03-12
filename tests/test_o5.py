@@ -3,7 +3,7 @@ Unit test for OrvilleImageHDF5 module.
 """
 
 import os
-import numpy
+import numpy as np
 import tempfile
 import unittest
 
@@ -28,7 +28,7 @@ class o5_tests(unittest.TestCase):
     def setUp(self):
         """Turn off all numpy warnings and create the temporary file directory."""
 
-        numpy.seterr(all='ignore')
+        np.seterr(all='ignore')
         self.testPath = tempfile.mkdtemp(prefix='test-o5-', suffix='.tmp')
         
     def test_o5_read(self):

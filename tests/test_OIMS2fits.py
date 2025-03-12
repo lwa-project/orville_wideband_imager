@@ -5,7 +5,7 @@ Unit test for OIMS2fits.py script.
 import os
 import sys
 import glob
-import numpy
+import numpy as np
 import shutil
 import tempfile
 import unittest
@@ -43,7 +43,7 @@ class OIMS2fits_tests(unittest.TestCase):
     def setUp(self):
         """Turn off all numpy warnings and create the temporary file directory."""
 
-        numpy.seterr(all='ignore')
+        np.seterr(all='ignore')
         self.testPath = tempfile.mkdtemp(prefix='test-OIMS2fits-', suffix='.tmp')
         
     def tearDown(self):

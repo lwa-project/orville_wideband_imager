@@ -3,7 +3,7 @@ from astropy.time import Time
 from lsl.sim.beam import beam_response
 from lsl_toolkits.OrvilleImage.wcs import WCS
 from astropy.wcs.utils import pixel_to_skycoord
-import numpy 
+import numpy as np
 
 def calcbeamprops(az,alt,header,freq):
 
@@ -17,12 +17,12 @@ def calcbeamprops(az,alt,header,freq):
 
 def pbcorroims(header,imSize,chan,station):
     pScale = header['pixel_size']
-    sRad   = 360.0/pScale/numpy.pi / 2
+    sRad   = 360.0/pScale/np.pi / 2
     w = WCS.from_orville_header(header)
     w = w.dropaxis(-1).dropaxis(-1)
-    x = numpy.arange(imSize) - 0.5
-    y = numpy.arange(imSize) - 0.5
-    x,y = numpy.meshgrid(x,y)
+    x = np.arange(imSize) - 0.5
+    y = np.arange(imSize) - 0.5
+    x,y = np.meshgrid(x,y)
     maskpix  = ((x-imSize/2.0)**2 + (y-imSize/2.0)**2) > ((0.98*sRad)**2)
     x[maskpix] = imSize/2
     y[maskpix] = imSize/2

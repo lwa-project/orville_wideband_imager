@@ -13,7 +13,7 @@ import subprocess
 
 from lsl_toolkits.OrvilleImage import OrvilleImageHDF5
 from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
-from lsl_toolkits.OrvilleImage.utils import get_primary_beam
+from lsl_toolkits.OrvilleImage.utils import get_pixel_mask, get_primary_beam
 from astropy.io import fits
 
 currentDir = os.path.abspath(os.getcwd())

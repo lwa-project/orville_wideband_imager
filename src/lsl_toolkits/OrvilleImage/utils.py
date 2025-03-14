@@ -13,6 +13,18 @@ from lsl.sim.beam import beam_response
 from .wcs import WCS
 
 
+def get_pixel_mask(header: Dict[str, Any], image_size: int) -> np.ndarray:
+    """
+    Given an Orville imager header returned by `OrvilleImageDB.read_image()`,
+    and an image size, return a Boolean array that marks valid sky pixels
+    True and pixel that are beyond the horizon as False.
+    """
+    
+    sky_rad = 360.0/header['pixel_size']/np.pi / 2
+    mask = ((x-image_size/2.0)**2 + (y-image_size/2.0)**2) > ((0.98*sky_rad)**2)
+    return mask
+
+
 def get_primary_beam(header: Dict[str, Any], image_size: int, chan: int,
                      station: Union[str, bytes]) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -44,13 +56,12 @@ def get_primary_beam(header: Dict[str, Any], image_size: int, chan: int,
     x, y = np.arange(image_size) - 0.5, np.arange(image_size) - 0.5
     x,y = np.meshgrid(x,y)
     
-    sky_rad = 360.0/header['pixel_size']/np.pi / 2
-    mask = ((x-image_size/2.0)**2 + (y-image_size/2.0)**2) > ((0.98*sky_rad)**2)
+    mask = get_pixel_mask(header, image_size) > ((0.98*sky_rad)**2)
     x[mask] = image_size/2
     y[mask] = image_size/2
     
     # Convert pixels to RA/dec and then on to Alt/Az
-    sc = w.pixel_to_world(sc)
+    sc = w.pixel_to_world(x, y)
     time = Time(header['start_time'], header['int_len']/2, format='mjd', scale='utc')
     aa_frame = AltAz(location=site, obstime=time)
     sc = sc.transform_to(aa_frame)

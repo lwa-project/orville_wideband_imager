@@ -67,7 +67,7 @@ class OIMS2fits_tests(unittest.TestCase):
                 cmd.extend(['-o', self.testPath])
                 cmd.extend(args)
                 
-                status = subprocess.check_call(cmd, stdout=logfile)
+                status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
                 
             except subprocess.CalledProcessError:
                 pass

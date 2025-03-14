@@ -41,7 +41,7 @@ class oims_tests(unittest.TestCase):
             hdr, data = db.read_image()
             ## Image
             self.assertEqual(data.shape[0], db.header.nchan)
-            self.assertEqual(data.shape[1], len(db.header.stokes_params.split(b',')))
+            self.assertEqual(data.shape[1], len(db.header.stokes_params.split(',')))
             self.assertEqual(data.shape[2], db.header.ngrid)
             self.assertEqual(data.shape[3], db.header.ngrid)
             
@@ -56,7 +56,7 @@ class oims_tests(unittest.TestCase):
                 hdr, data = db.read_image()
                 ## Image
                 self.assertEqual(data.shape[0], db.header.nchan)
-                self.assertEqual(data.shape[1], len(db.header.stokes_params.split(b',')))
+                self.assertEqual(data.shape[1], len(db.header.stokes_params.split(',')))
                 self.assertEqual(data.shape[2], db.header.ngrid)
                 self.assertEqual(data.shape[3], db.header.ngrid)
                 
@@ -74,7 +74,7 @@ class oims_tests(unittest.TestCase):
             ## Image
             for d in data:
                 self.assertEqual(d.shape[0], db.header.nchan)
-                self.assertEqual(d.shape[1], len(db.header.stokes_params.split(b',')))
+                self.assertEqual(d.shape[1], len(db.header.stokes_params.split(',')))
                 self.assertEqual(d.shape[2], db.header.ngrid)
                 self.assertEqual(d.shape[3], db.header.ngrid)
             

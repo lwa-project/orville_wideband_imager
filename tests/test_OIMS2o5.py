@@ -50,19 +50,34 @@ class OIMS2o5_tests(unittest.TestCase):
         except OSError:
             pass
             
-    def test_OIMS2o5_run(self):
-        """Create o5 from oims"""
+    def run_OIMS2o5(self, *args, print_on_failure=True):
+        """
+        Run OIMS2o5.py with the specified arguements and return the subprocess
+        status code.
+        """
         
-        with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'w') as logfile:
+        status = 1
+        with open('OIMS2o5.log', 'w') as logfile:
             try:
-                cmd = [sys.executable, os.path.join(MODULE_BUILD, 'scripts', 'OIMS2o5.py'), oimsFile]
+                cmd = [sys.executable, os.path.join(MODULE_BUILD, 'scripts/OIMS2o5.py')]
+                cmd.extend(['-o', self.testPath])
+                cmd.extend(args)
+                
                 status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
+                
             except subprocess.CalledProcessError:
-                status = 1
+                pass
                 
         if status == 1:
             with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'r') as logfile:
                 print(logfile.read())
+                
+        return status
+        
+    def test_OIMS2o5_run(self):
+        """Create o5 from oims"""
+        
+        status = self.run_OIMS2o5(oimsFile)
         self.assertEqual(status, 0)
         
         o5File = glob.glob(os.path.join(self.testPath, "*.o5"))
@@ -78,23 +93,14 @@ class OIMS2o5_tests(unittest.TestCase):
             with OrvilleImageDB(oimsFile, 'r') as db:
                 self.assertEqual(nchan, db.header.nchan)
                 self.assertEqual(ints, db.nint)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
                 self.assertEqual(xdata, db.header.ngrid)
                 self.assertEqual(ydata, db.header.ngrid)
                 
     def test_OIMS2o5_compression_run(self):
         """Create compressed o5 from oims"""
         
-        with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'w') as logfile:
-            try:
-                cmd = [sys.executable, os.path.join(MODULE_BUILD, 'scripts', 'OIMS2o5.py'), '--compression', oimsFile]
-                status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
-            except subprocess.CalledProcessError:
-                status = 1
-                
-        if status == 1:
-            with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'r') as logfile:
-                print(logfile.read())
+        status = self.run_OIMS2o5('--compression', oimsFile)
         self.assertEqual(status, 0)
         
         o5File = glob.glob(os.path.join(self.testPath, "*.o5"))
@@ -110,23 +116,14 @@ class OIMS2o5_tests(unittest.TestCase):
             with OrvilleImageDB(oimsFile, 'r') as db:
                 self.assertEqual(nchan, db.header.nchan)
                 self.assertEqual(ints, db.nint)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
                 self.assertEqual(xdata, db.header.ngrid)
                 self.assertEqual(ydata, db.header.ngrid)
                 
     def test_OIMS2o5_compression_level_run(self):
         """Create compressed o5 from oims with a specific compression level"""
         
-        with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'w') as logfile:
-            try:
-                cmd = [sys.executable, os.path.join(MODULE_BUILD, 'scripts', 'OIMS2o5.py'), '--compression', '--compression-level=9', oimsFile]
-                status = subprocess.check_call(cmd, stdout=logfile, cwd=self.testPath)
-            except subprocess.CalledProcessError:
-                status = 1
-                
-        if status == 1:
-            with open(os.path.join(self.testPath, 'OIMS2o5.log'), 'r') as logfile:
-                print(logfile.read())
+        status = self.run_OIMS2o5('--compression', '--compression-level=9', oimsFile)
         self.assertEqual(status, 0)
         
         o5File = glob.glob(os.path.join(self.testPath, "*.o5"))
@@ -142,7 +139,7 @@ class OIMS2o5_tests(unittest.TestCase):
             with OrvilleImageDB(oimsFile, 'r') as db:
                 self.assertEqual(nchan, db.header.nchan)
                 self.assertEqual(ints, db.nint)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
                 self.assertEqual(xdata, db.header.ngrid)
                 self.assertEqual(ydata, db.header.ngrid)
 

@@ -5,26 +5,9 @@ import struct
 import shutil
 import tempfile
 
-from typing import Dict, Any, Optional, List, Tuple, TypeVar, Union
+from typing import Dict, Any, Optional, List, Tuple, Union
 
-
-K = TypeVar('K')
-V = TypeVar('V')
-
-class HeaderContainer(Dict[K, V]):
-    """
-    Sub-class of dict that supports access of keys as attributes.
-    """
-    
-    def __getattr__(self, key: K) -> V:
-        """
-        Support for attribute-style access: header.key
-        """
-        
-        try:
-            return self[key]
-        except KeyError:
-            raise AttributeError(f"Header has no attribute '{key}'")
+from ..OrvilleImage import HeaderContainer
 
 
 class PrintableLittleEndianStructure(ctypes.LittleEndianStructure):
@@ -320,6 +303,10 @@ class OrvilleImageDB(object):
             
     @property
     def header(self) -> HeaderContainer[str, Any]:
+        """
+        The file header as a dictionary.
+        """
+        
         hdr = HeaderContainer(self._header.as_dict())
         for k in hdr:
             if isinstance(hdr[k], bytes):

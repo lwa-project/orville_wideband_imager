@@ -542,6 +542,8 @@ class OrvilleImageDB(object):
         info = {}
         for key in ('station', 'stokes_params', 'ngrid', 'pixel_size'):
             info[key] = getattr(self.header, key, None)
+        info['time_format'] = 'mjd'
+        info['time_scale'] = 'utc'
         for key in ('start_time', 'int_len', 'fill', 'lst', 'start_freq', 'stop_freq',
                     'bandwidth', 'weighting', 'center_ra', 'center_dec', 'center_az', 'center_alt',
                     'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s'):

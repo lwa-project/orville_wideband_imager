@@ -396,8 +396,10 @@ class OrvilleImageHDF5:
             raise IndexError("Requested index is out of range")
             
         img_group = self.h5['images'][f"int_{idx}"]
-        info = HeaderContainer({'stokes_params': self._header.attrs['stokes_params'],
+        info = HeaderContainer({'station': self._header.attrs['station'],
+                                'stokes_params': self._header.attrs['stokes_params'],
                                 'pixel_size': self._header.attrs['pixel_size'],
+                                'ngrid': self._header.attrs['ngrid'],
                                 'time_format': self._header.attrs['time_format'],
                                 'time_scale': self._header.attrs['time_scale']
                                })

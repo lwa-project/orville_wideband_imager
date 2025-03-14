@@ -1,9 +1,4 @@
-from __future__ import print_function, division, absolute_import
-try:
-    range = xrange
-except NameError:
-    pass
-    
+
 import os
 import numpy as np
 import ctypes
@@ -457,10 +452,17 @@ class OrvilleImageDB(object):
         """
         
         assert(data.shape[2] == data.shape[3])
-        if self.include_mask:
-            if mask is None:
-                mask = np.zeros(data.shape[0], dtype=np.uint8)
-            assert(mask.size == data.shape[0])
+        if isinstance(data, np.ma.MaskedArray):
+            if self.include_mask:
+                if mask is None:
+                    mask = data.mask[:,0,0,0]
+                assert(mask.size == data.shape[0])
+            data = data.data
+        else:
+            if self.include_mask:
+                if mask is None:
+                    mask = np.zeros(data.shape[0], dtype=np.uint8)
+                assert(mask.size == data.shape[0])
         self._check_header(info['stokes_params'], data.shape[2], 
                            info['pixel_size'], data.shape[0])
         
@@ -522,6 +524,8 @@ class OrvilleImageDB(object):
             asp_atten_1 -- ASP first attenuator setting
             asp_atten_2 -- ASP second attenuator setting
             asp_atten_s -- ASP split attenuator setting
+            station -- Name of the LWA station where the data are from
+            ngrid --  x/y size of the image in pixels
             pixel_size -- Real-world size of a pixel, in degrees
             stokes_params -- a list or comma-delimited string of Stokes params
         data -- a 4D float array of image data indexed as [chan, stokes, x, y]
@@ -535,7 +539,7 @@ class OrvilleImageDB(object):
         if entry_header.sync_word != 0xC0DECAFE:
             raise RuntimeError("Database corrupted")
         info = {}
-        for key in ('stokes_params', 'pixel_size'):
+        for key in ('station', 'stokes_params', 'ngrid', 'pixel_size'):
             info[key] = getattr(self.header, key, None)
         for key in ('start_time', 'int_len', 'fill', 'lst', 'start_freq', 'stop_freq',
                     'bandwidth', 'weighting', 'center_ra', 'center_dec', 'center_az', 'center_alt',
@@ -580,6 +584,8 @@ class OrvilleImageDB(object):
             asp_atten_1 -- ASP first attenuator setting
             asp_atten_2 -- ASP second attenuator setting
             asp_atten_s -- ASP split attenuator setting
+            station -- Name of the LWA station where the data are from
+            ngrid --  x/y size of the image in pixels
             pixel_size -- Real-world size of a pixel, in degrees
             stokes_params -- a list or comma-delimited string of Stokes params
         data_all -- a 5D masked float32 array of image data indexed as 

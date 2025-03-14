@@ -45,7 +45,7 @@ def get_primary_beam(header: Dict[str, Any], image_size: int, chan: int,
     x,y = np.meshgrid(x,y)
     
     sky_rad = 360.0/header['pixel_size']/np.pi / 2
-    mask = ((x-image_size/2.0)**2 + (y-image_size/2.0)**2) > ((0.98*sRad)**2)
+    mask = ((x-image_size/2.0)**2 + (y-image_size/2.0)**2) > ((0.98*sky_rad)**2)
     x[mask] = image_size/2
     y[mask] = image_size/2
     

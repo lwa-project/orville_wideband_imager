@@ -85,10 +85,10 @@ class OIMS2fits_tests(unittest.TestCase):
         self.assertEqual(status, 0)
         
         with OrvilleImageDB(oimsFile, 'r') as db:
-            fitsFile = np.sort(glob.glob(os.path.join(self.testPath, '*.fits')))
-            db.seek(0)
             hdr, data = db.read_image()
-            oimsfreqs = np.array([(hdr['start_freq'] + (c*hdr['bandwidth'])) for c in range(db.header.nchan)])
+            oimsfreqs = hdr['start_freq'] + hdr['bandwidth']*np.arange(db.header.nchan)
+            
+            fitsFile = sorted(glob.glob(os.path.join(self.testPath, '*.fits')))
             fitsfreqs = np.zeros(len(oimsfreqs))
             nchan = len(fitsFile)
             for c,f in enumerate(fitsFile):
@@ -126,7 +126,7 @@ class OIMS2fits_tests(unittest.TestCase):
         self.assertEqual(status, 0)
         
         with OrvilleImageDB(oimsFile, 'r') as db:
-            fitsFile = np.sort(glob.glob(os.path.join(self.testPath, '*.fits')))
+            fitsFile = sorted(glob.glob(os.path.join(self.testPath, '*.fits')))
             db.seek(0)
             hdr, data = db.read_image()
             oimsfreqs = np.array([(hdr['start_freq'] + (c*hdr['bandwidth'])) for c in range(db.header.nchan)])
@@ -168,7 +168,7 @@ class OIMS2fits_tests(unittest.TestCase):
         status = self.run_OIMS2fits('-i 2', oimsFile)
         self.assertEqual(status, 0)
         
-        fitsFile = np.sort(glob.glob(os.path.join(self.testPath, '*.fits')))
+        fitsFile = sorted(glob.glob(os.path.join(self.testPath, '*.fits')))
         knownpix = np.array([62.473182678222656,
                              75.6445083618164,
                              77.76968383789062,
@@ -201,7 +201,7 @@ class OIMS2fits_tests(unittest.TestCase):
         status = self.run_OIMS2fits('-d', oimsFile)
         self.assertEqual(status, 0)
         
-        fitsFile = sort(glob.glob(os.path.join(self.testPath, '*.fits')))
+        fitsFile = sorted(glob.glob(os.path.join(self.testPath, '*.fits')))
         knownpix = np.array([-3.5097122192382812,
                              -2.56549072265625,
                              -1.3171768188476562,
@@ -235,7 +235,7 @@ class OIMS2fits_tests(unittest.TestCase):
         status = self.run_OIMS2fits('--channel', '0', oimsFile)
         self.assertEqual(status, 0)
         
-        fitsFile = np.sort(glob.glob(os.path.join(self.testPath, '*.fits')))
+        fitsFile = sorted(glob.glob(os.path.join(self.testPath, '*.fits')))
         knownpix = np.array([69.75801086425781])
         testpix = np.zeros(knownpix.shape)
         for i,f in enumerate(fitsFile):
@@ -262,7 +262,7 @@ class OIMS2fits_tests(unittest.TestCase):
         status = self.run_OIMS2fits('-b 5', '-c 100', oimsFile)
         self.assertEqual(status, 0)
         
-        fitsFile = sort(glob.glob(os.path.join(self.testPath, '*.fits')))
+        fitsFile = sorted(glob.glob(os.path.join(self.testPath, '*.fits')))
         knownpix = np.array([6475.801086425781,
                              7563.559722900391,
                              7490.340423583984,
@@ -293,7 +293,7 @@ class OIMS2fits_tests(unittest.TestCase):
         status = self.run_OIMS2fits(o5File)
         self.assertEqual(status, 0)
         
-        fitsFile = glob.glob(os.path.join(self.testPath, "*.fits"))
+        fitsFile = sorted(glob.glob(os.path.join(self.testPath, "*.fits")))
         for f in fitsFile:
             with fits.open(f) as hdul:
                 nchan = len(fitsFile)

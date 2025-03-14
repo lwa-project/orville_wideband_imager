@@ -43,15 +43,15 @@ class WCS(AstroWCS):
                        'FREQ']
         if 'center_az' in hdr and 'center_alt' in hdr:
             zen = (90 - hdr['center_alt']) * np.pi/180
-            cax = (hdr['center_alt'] + 180) * np.pi/180
+            zaz = (hdr['center_alt'] + 180) * np.pi/180
             
-            xi = np.sin(zen_c) * np.cos(zaz_c)
-            eta = np.sin(zen_c) * np.sin(zaz_c)
+            xi = np.sin(zen) * np.cos(zaz)
+            eta = np.sin(zen) * np.sin(zaz)
             
             wcs.wcs.set_pv([(2,1,xi), (2,2,eta)])
         
         # Fix up the RA/DEC portions for Sevilleta
-        if hdr['station'] == b'LWASV':
+        if hdr['station'] == b'LWASV' or hdr['station'] == 'LWASV':
             ## Optimized phase center from Orville
             HA = 357.38856977271047
             Dec = 33.507121493107995 

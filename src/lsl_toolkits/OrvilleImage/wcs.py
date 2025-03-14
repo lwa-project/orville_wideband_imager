@@ -48,7 +48,7 @@ class WCS(AstroWCS):
             xi = np.sin(zen) * np.cos(zaz)
             eta = np.sin(zen) * np.sin(zaz)
             
-            wcs.wcs.set_pv([(2,1,xi), (2,2,eta)])
+            w.wcs.set_pv([(2,1,xi), (2,2,eta)])
         
         # Fix up the RA/DEC portions for Sevilleta
         if hdr['station'] == b'LWASV' or hdr['station'] == 'LWASV':

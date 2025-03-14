@@ -103,19 +103,20 @@ class OIMS2fits_tests(unittest.TestCase):
                         db.seek(i)
                         hdr, data = db.read_image()
                         data = np.copy(np.asarray(data))
+                        
                         ## Zero outside of the horizon so avoid problems
-                        sRad   = 360.0/db.header.pixel_size/np.pi / 2
-                        x = np.arange(data.shape[-2]) - 0.5
-                        y = np.arange(data.shape[-1]) - 0.5
-                        x,y = np.meshgrid(x,y)
-                        invalid = np.where( ((x-db.header.ngrid/2.0)**2 + (y-db.header.ngrid/2.0)**2) > (sRad**2) )
+                        mask = get_pixel_mask(hdr, data.shape[-1])
+                        invalid = np.where(~mask)
                         data[:,:,invalid[0], invalid[1]] = 0.0
+                        
                         curoimsdata = np.squeeze(data[curfitsfreq==oimsfreqs,:,:,:])
+                        
                         np.testing.assert_array_equal(hdu.data,curoimsdata)
                         self.assertEqual(ints, db.nint)
                         self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
                         self.assertEqual(xdata, db.header.ngrid)
                         self.assertEqual(ydata, db.header.ngrid)
+                        
             self.assertEqual(nchan, db.header.nchan)
             np.testing.assert_array_equal(np.sort(oimsfreqs),np.sort(fitsfreqs)) 
         
@@ -144,21 +145,23 @@ class OIMS2fits_tests(unittest.TestCase):
                         db.seek(i)
                         hdr, data = db.read_image()
                         data = np.copy(np.asarray(data))
+                        
                         ## Zero outside of the horizon so avoid problems
-                        sRad   = 360.0/db.header.pixel_size/np.pi / 2
-                        x = np.arange(data.shape[-2]) - 0.5
-                        y = np.arange(data.shape[-1]) - 0.5
-                        x,y = np.meshgrid(x,y)
-                        invalid = np.where( ((x-db.header.ngrid/2.0)**2 + (y-db.header.ngrid/2.0)**2) > (sRad**2) )
+                        mask = get_pixel_mask(hdr, data.shape[-1])
+                        invalid = np.where(~mask)
                         data[:,:,invalid[0], invalid[1]] = 0.0
+                        
                         curoimsdata = np.squeeze(data[curfitsfreq==oimsfreqs,:,:,:])
-                        XX,YY = get_primary_beam(hdr,db.header.ngrid,c,db.header.station)
-                        curoimsdata[0]/=((XX+YY)/2)
+                        XX, YY = get_primary_beam(hdr, db.header.ngrid,
+                                                  c, db.header.station)
+                        curoimsdata[0] /= (XX+YY) / 2.0
+                        
                         np.testing.assert_array_equal(hdu.data,curoimsdata)
                         self.assertEqual(ints, db.nint)
                         self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
                         self.assertEqual(xdata, db.header.ngrid)
                         self.assertEqual(ydata, db.header.ngrid)
+                        
             self.assertEqual(nchan, db.header.nchan)
             np.testing.assert_array_equal(np.sort(oimsfreqs),np.sort(fitsfreqs)) 
 

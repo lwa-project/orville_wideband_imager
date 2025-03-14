@@ -1,9 +1,9 @@
 import numpy as np
+from functools import lru_cache
+from typing import Dict, Any, Union, Tuple
 
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord
 from astropy.time import Time
-import numpy as np
-from typing import Dict, Any, Union, Tuple
 
 from astropy.wcs.utils import pixel_to_skycoord
 
@@ -13,15 +13,19 @@ from lsl.sim.beam import beam_response
 from .wcs import WCS
 
 
-def get_pixel_mask(header: Dict[str, Any], image_size: int) -> np.ndarray:
+@lru_cache(maxsize=16)
+def get_pixel_mask(header: Dict[str, Any], image_size: int, sky_factor: float=0.98) -> np.ndarray:
     """
     Given an Orville imager header returned by `OrvilleImageDB.read_image()`,
     and an image size, return a Boolean array that marks valid sky pixels
     True and pixel that are beyond the horizon as False.
     """
     
+    x, y = np.arange(image_size) - 0.5, np.arange(image_size) - 0.5
+    x,y = np.meshgrid(x,y)
+    
     sky_rad = 360.0/header['pixel_size']/np.pi / 2
-    mask = ((x-image_size/2.0)**2 + (y-image_size/2.0)**2) > ((0.98*sky_rad)**2)
+    mask = ((x-image_size/2.0)**2 + (y-image_size/2.0)**2) > ((sky_factor*sky_rad)**2)
     return mask
 
 
@@ -52,11 +56,10 @@ def get_primary_beam(header: Dict[str, Any], image_size: int, chan: int,
     w = WCS.from_orville_header(header)
     w = w.dropaxis(-1).dropaxis(-1)
     
-    # Build up a grid and mask out low altitude pixels
+    # Mask out low altitude pixels
     x, y = np.arange(image_size) - 0.5, np.arange(image_size) - 0.5
     x,y = np.meshgrid(x,y)
-    
-    mask = get_pixel_mask(header, image_size) > ((0.98*sky_rad)**2)
+    mask = get_pixel_mask(header, image_size)
     x[mask] = image_size/2
     y[mask] = image_size/2
     
@@ -66,6 +69,7 @@ def get_primary_beam(header: Dict[str, Any], image_size: int, chan: int,
     aa_frame = AltAz(location=site, obstime=time)
     sc = sc.transform_to(aa_frame)
     alt, az = sc.alt.deg, sc.az.deg
+    
     # Keep alt between 0 and 90, adjust az accordingly
     negalt = alt < 0
     alt[negalt] *= -1

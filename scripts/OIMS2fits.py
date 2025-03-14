@@ -13,7 +13,7 @@ from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
 
 from lsl_toolkits.OrvilleImage.wcs import WCS
 
-from lsl_toolkits.OrvilleImage.pbtools import pbcorroims
+from lsl_toolkits.OrvilleImage.pbtools import get_primary_beam
 
 
 def main(args):
@@ -104,7 +104,7 @@ def main(args):
                     imdata[:,invalid[0], invalid[1]] = 0.0
                     ext = imSize/(2*sRad)
                     if args.pbcorr:
-                        XX,YY = pbcorroims(hdrlist[myint],imSize,chan,station)
+                        XX,YY = get_primary_beam(hdrlist[myint], imSize, chan, station)
                         imdata[0]/=((XX+YY)/2)
                     
                     ## Convert the start MJD into a datetime instance and then use

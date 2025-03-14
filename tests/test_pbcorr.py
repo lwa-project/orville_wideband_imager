@@ -10,8 +10,8 @@ import tempfile
 import unittest
 import subprocess
 
-from lsl_toolkits.OrvilleImage import OrvilleImageDB
-from lsl_toolkits.OrvilleImage.pbtools import pbcorroims
+from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
+from lsl_toolkits.OrvilleImage.pbtools import get_primary_beam
 from astropy.io import fits
 
 currentDir = os.path.abspath(os.getcwd())
@@ -69,7 +69,7 @@ class pbcorr_tests(unittest.TestCase):
         'asp_atten_s': -1}
         ngrid = hdr['ngrid']
         pScale = hdr['pixel_size']
-        XX,YY = pbcorroims(hdr,ngrid,0,b'LWASV')
+        XX, YY = get_primary_beam(hdr,ngrid,0,b'LWASV')
         x = np.arange(ngrid)
         y = np.arange(ngrid)
         x ,y = np.meshgrid(x,y)

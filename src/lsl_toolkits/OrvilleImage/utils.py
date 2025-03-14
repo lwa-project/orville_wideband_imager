@@ -1,5 +1,4 @@
 import numpy as np
-from functools import lru_cache
 from typing import Dict, Any, Union, Tuple
 
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord
@@ -13,7 +12,6 @@ from lsl.sim.beam import beam_response
 from .wcs import WCS
 
 
-@lru_cache(maxsize=16)
 def get_pixel_mask(header: Dict[str, Any], image_size: int, sky_factor: float=0.98) -> np.ndarray:
     """
     Given an Orville imager header returned by `OrvilleImageDB.read_image()`,

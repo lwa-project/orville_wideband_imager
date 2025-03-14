@@ -5,7 +5,26 @@ import struct
 import shutil
 import tempfile
 
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, TypeVar, Union
+
+
+K = TypeVar('K')
+V = TypeVar('V')
+
+class HeaderContainer(Dict[K, V]):
+    """
+    Sub-class of dict that supports access of keys as attributes.
+    """
+    
+    def __getattr__(self, key: K) -> V:
+        """
+        Support for attribute-style access: header.key
+        """
+        
+        try:
+            return self[key]
+        except KeyError:
+            raise AttributeError(f"Header has no attribute '{key}'")
 
 
 class PrintableLittleEndianStructure(ctypes.LittleEndianStructure):
@@ -186,7 +205,7 @@ class OrvilleImageDB(object):
             fileSize = os.path.getsize(filename)
             if fileSize == 0:
                 self.version = self._FORMAT_VERSION
-                self.header = self._FileHeader()
+                self._header = self._FileHeader()
                 self.curr_int = 0
                 self.nint = 0
                 self.nstokes = 0
@@ -255,20 +274,20 @@ class OrvilleImageDB(object):
             
             else:
                 # It looks like we should have a good header, at least ....
-                self.header = self._FileHeader()
-                self.file.readinto(self.header)
-                self.nstokes = len(self.header.stokes_params.split(b','))
+                self._header = self._FileHeader()
+                self.file.readinto(self._header)
+                self.nstokes = len(self._header.stokes_params.split(b','))
                 
                 entry_header = self._EntryHeader()
                 int_size = ctypes.sizeof(entry_header) \
-                          + 4*self.header.nchan*(0 + self.nstokes*self.header.ngrid**2)
+                          + 4*self._header.nchan*(0 + self.nstokes*self._header.ngrid**2)
                 if self.version in ('OrvilleImageDBv003', 'OrvilleImageDBv004', 'OrvilleImageDBv005'):
-                    int_size += 1*self.header.nchan
-                if (fileSize - 24 - ctypes.sizeof(self.header)) % int_size != 0:
+                    int_size += 1*self._header.nchan
+                if (fileSize - 24 - ctypes.sizeof(self._header)) % int_size != 0:
                     raise RuntimeError('The file "%s" appears to be '
                                        'corrupted.' % filename)
                 self.nint = \
-                    (fileSize - 24 - ctypes.sizeof(self.header)) // int_size
+                    (fileSize - 24 - ctypes.sizeof(self._header)) // int_size
                 
                 if mode == 'r+b':
                     self.file.seek(0, os.SEEK_END)
@@ -281,16 +300,16 @@ class OrvilleImageDB(object):
             # receive the first image, which will fill in some information
             # (e.g., resolution) that isn't yet available.
             self.version = self._FORMAT_VERSION
-            self.header = self._FileHeader()
+            self._header = self._FileHeader()
             try:
-                self.header.imager_version = imager_version.encode()
+                self._header.imager_version = imager_version.encode()
             except AttributeError:
-                self.header.imager_version = imager_version
+                self._header.imager_version = imager_version
             try:
-                self.header.station = station.encode()
+                self._header.station = station.encode()
             except AttributeError:
-                self.header.station = station
-            self.header.flags = self.FLAG_SORTED     # Sorted until it's not
+                self._header.station = station
+            self._header.flags = self.FLAG_SORTED     # Sorted until it's not
             self.nint = 0
             
         self.include_mask = (self.version in ('OrvilleImageDBv003', 'OrvilleImageDBv004', 'OrvilleImageDBv005'))
@@ -299,6 +318,14 @@ class OrvilleImageDB(object):
         if self.file is not None and not self.file.closed:
             self.close()
             
+    @property
+    def header(self) -> HeaderContainer[str, Any]:
+        hdr = HeaderContainer(self._header.as_dict())
+        for k in hdr:
+            if isinstance(hdr[k], bytes):
+                hdr[k] = hdr[k].decode()
+        return hdr
+        
     def close(self):
         """
         Closes the database file.  If the header information is outdated, it
@@ -309,7 +336,7 @@ class OrvilleImageDB(object):
         
         if self._is_outdated:
             self.file.seek(24, os.SEEK_SET)
-            self.file.write(self.header)
+            self.file.write(self._header)
             
         self.file.close()
         self.curr_int = -1
@@ -332,9 +359,9 @@ class OrvilleImageDB(object):
         if self.curr_int != index:
             entry_header = self._EntryHeader()
             int_size = ctypes.sizeof(entry_header) \
-                       + 4*self.header.nchan*(0 + self.nstokes*self.header.ngrid**2)
+                       + 4*self._header.nchan*(0 + self.nstokes*self._header.ngrid**2)
             if self.include_mask:
-                int_size += 1*self.header.nchan
+                int_size += 1*self._header.nchan
             file_header = self._FileHeader()
             headerSize = 24 + ctypes.sizeof(file_header)
             self.file.seek(headerSize + int_size * index, os.SEEK_SET)
@@ -358,46 +385,46 @@ class OrvilleImageDB(object):
         if self._is_new:
             # If this is the file's first image, fill in values of the file
             # header based on the image properties, then write the header.
-            self.header.stokes_params = stokes_params
-            self.header.ngrid         = ngrid
-            self.header.pixel_size    = pixel_size
-            self.header.nchan         = nchan
+            self._header.stokes_params = stokes_params
+            self._header.ngrid         = ngrid
+            self._header.pixel_size    = pixel_size
+            self._header.nchan         = nchan
             try:
                 self.file.write(struct.pack('<24s', self.version.encode()))
             except AttributeError:
                 self.file.write(struct.pack('<24s', self.version))
-            self.file.write(self.header)
-            self.nstokes = len(self.header.stokes_params.split(b','))
+            self.file.write(self._header)
+            self.nstokes = len(self._header.stokes_params.split(b','))
             self._is_new = False
             
         else:
             # Make sure that the Stokes parameters match expectations.
-            if stokes_params != self.header.stokes_params:
+            if stokes_params != self._header.stokes_params:
                 raise ValueError(
                     'The Stokes parameters for this image (%s) do not match '
                     'this file\'s parameters (%s).' %
-                    (stokes_params, self.header.stokes_params))
+                    (stokes_params, self._header.stokes_params))
                 
             # Make sure that the dimensions of the data match expectations.
-            if ngrid != self.header.ngrid:
+            if ngrid != self._header.ngrid:
                 raise ValueError(
                     'The spatial resolution of this image (%d x %d) does not '
                      'match this file\'s resolution (%d x %d).' %
-                    (ngrid, ngrid, self.header.ngrid, self.header.ngrid))
+                    (ngrid, ngrid, self._header.ngrid, self._header.ngrid))
                 
-            if pixel_size != self.header.pixel_size:
+            if pixel_size != self._header.pixel_size:
                 raise ValueError(
                     'The pixel size of this image (%r deg x %r deg) does not '
                      'match this file\'s resolution (%r deg x %r deg).' %
                     (pixel_size, pixel_size,
-                     self.header.pixel_size, self.header.pixel_size))
+                     self._header.pixel_size, self._header.pixel_size))
                 
             # Make sure that the size of the images matches expectations.
-            if nchan != self.header.nchan:
+            if nchan != self._header.nchan:
                 raise ValueError(
                     'The channel count for this image (%d) does not '
                     'match this file\'s channel count (%d).'
-                    % (nchan, self.header.nchan))
+                    % (nchan, self._header.nchan))
                 
     def _update_file_header(self, interval: List[float]):
         """
@@ -408,19 +435,19 @@ class OrvilleImageDB(object):
         self.nint += 1
         
         # Has this image expanded the time range covered by the file?
-        if self.header.start_time == 0 or \
-           self.header.start_time > interval[0]:
-            self.header.start_time = interval[0]
+        if self._header.start_time == 0 or \
+           self._header.start_time > interval[0]:
+            self._header.start_time = interval[0]
             self._is_outdated = True
             
-        if self.header.stop_time < interval[1]:
-            self.header.stop_time = interval[1]
+        if self._header.stop_time < interval[1]:
+            self._header.stop_time = interval[1]
             self._is_outdated = True
             
         # If the new image isn't later than all the others, and the file is
         # currently marked as sorted, then remove the sorted flag.
-        elif self.header.flags & self.FLAG_SORTED:
-            self.header.flags &= ~self.FLAG_SORTED
+        elif self._header.flags & self.FLAG_SORTED:
+            self._header.flags &= ~self.FLAG_SORTED
             self._is_outdated = True
             
     def add_image(self, info: Dict[str, Any], data: np.ndarray, mask: Optional[np.ndarray]=None):
@@ -503,7 +530,7 @@ class OrvilleImageDB(object):
         self._update_file_header(interval)
         return self.nint - 1
         
-    def read_image(self) -> Tuple[Dict[str, Any], np.ndarray]:
+    def read_image(self) -> Tuple[HeaderContainer[str, Any], np.ndarray]:
         """
         Reads an integration from the database.
         
@@ -539,9 +566,9 @@ class OrvilleImageDB(object):
         self.file.readinto(entry_header)
         if entry_header.sync_word != 0xC0DECAFE:
             raise RuntimeError("Database corrupted")
-        info = {}
+        info = HeaderContainer()
         for key in ('station', 'stokes_params', 'ngrid', 'pixel_size'):
-            info[key] = getattr(self.header, key, None)
+            info[key] = getattr(self._header, key, None)
         info['time_format'] = 'mjd'
         info['time_scale'] = 'utc'
         for key in ('start_time', 'int_len', 'fill', 'lst', 'start_freq', 'stop_freq',
@@ -557,7 +584,7 @@ class OrvilleImageDB(object):
             if isinstance(info[key], bytes):
                 info[key] = info[key].decode()
                 
-        nchan, nstokes, ngrid = self.header.nchan, self.nstokes, self.header.ngrid
+        nchan, nstokes, ngrid = self._header.nchan, self.nstokes, self._header.ngrid
         data = np.fromfile(self.file, '<f4', nchan*nstokes*ngrid*ngrid)
         data = data.reshape(nchan, nstokes, ngrid, ngrid)
         if self.include_mask:
@@ -569,7 +596,7 @@ class OrvilleImageDB(object):
         self.curr_int += 1
         return info, data
         
-    def read_all(self) -> Tuple[List[Dict[str, Any]], np.ndarray]:
+    def read_all(self) -> Tuple[List[HeaderContainer[str, Any]], np.ndarray]:
         """
         Reads all integrations from the database.
         
@@ -600,7 +627,7 @@ class OrvilleImageDB(object):
         """
         
         self.seek(0)
-        nchan, nstokes, ngrid = self.header.nchan, self.nstokes, self.header.ngrid
+        nchan, nstokes, ngrid = self._header.nchan, self.nstokes, self._header.ngrid
         data_all = np.ma.zeros((self.nint, nchan, nstokes, ngrid, ngrid), dtype=np.float32)
         hdr_list = []
         while self.curr_int < self.nint:
@@ -694,7 +721,7 @@ class OrvilleImageDB(object):
     def __next__(self):
         return self.next()
         
-    def next(self) -> Tuple[Dict[str, Any], np.ndarray]:
+    def next(self) -> Tuple[HeaderContainer[str, Any], np.ndarray]:
         if self.curr_int >= self.nint:
             raise StopIteration
         else:

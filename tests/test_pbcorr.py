@@ -11,7 +11,7 @@ import unittest
 import subprocess
 
 from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
-from lsl_toolkits.OrvilleImage.pbtools import get_primary_beam
+from lsl_toolkits.OrvilleImage.utils import get_primary_beam
 from astropy.io import fits
 
 currentDir = os.path.abspath(os.getcwd())

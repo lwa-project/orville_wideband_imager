@@ -12,8 +12,7 @@ from lsl_toolkits.OrvilleImage import OrvilleImageHDF5
 from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
 
 from lsl_toolkits.OrvilleImage.wcs import WCS
-
-from lsl_toolkits.OrvilleImage.pbtools import get_primary_beam
+from lsl_toolkits.OrvilleImage.utils import get_primary_beam
 
 
 def main(args):

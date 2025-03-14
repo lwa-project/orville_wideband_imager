@@ -13,7 +13,7 @@ import subprocess
 
 from lsl_toolkits.OrvilleImage import OrvilleImageHDF5
 from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
-from lsl_toolkits.OrvilleImage.pbtools import pbcorroims
+from lsl_toolkits.OrvilleImage.utils import get_primary_beam
 from astropy.io import fits
 
 currentDir = os.path.abspath(os.getcwd())
@@ -152,7 +152,7 @@ class OIMS2fits_tests(unittest.TestCase):
                         invalid = np.where( ((x-db.header.ngrid/2.0)**2 + (y-db.header.ngrid/2.0)**2) > (sRad**2) )
                         data[:,:,invalid[0], invalid[1]] = 0.0
                         curoimsdata = np.squeeze(data[curfitsfreq==oimsfreqs,:,:,:])
-                        XX,YY = pbcorroims(hdr,db.header.ngrid,c,db.header.station)
+                        XX,YY = get_primary_beam(hdr,db.header.ngrid,c,db.header.station)
                         curoimsdata[0]/=((XX+YY)/2)
                         np.testing.assert_array_equal(hdu.data,curoimsdata)
                         self.assertEqual(ints, db.nint)

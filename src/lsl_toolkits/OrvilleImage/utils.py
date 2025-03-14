@@ -54,7 +54,7 @@ def get_primary_beam(header: Dict[str, Any], image_size: int, chan: int,
     time = Time(header['start_time'], header['int_len']/2, format='mjd', scale='utc')
     aa_frame = AltAz(location=site, obstime=time)
     sc = sc.transform_to(aa_frame)
-    alt, az = sc.alt.deg sc.az.deg
+    alt, az = sc.alt.deg, sc.az.deg
     # Keep alt between 0 and 90, adjust az accordingly
     negalt = alt < 0
     alt[negalt] *= -1

@@ -553,6 +553,10 @@ class OrvilleImageDB(object):
             elif key.startswith('asp_') and info[key] is None:
                 info[key] = -1
                 
+        for key in info:
+            if isinstance(info[key], bytes):
+                info[key] = info[key].decode()
+                
         nchan, nstokes, ngrid = self.header.nchan, self.nstokes, self.header.ngrid
         data = np.fromfile(self.file, '<f4', nchan*nstokes*ngrid*ngrid)
         data = data.reshape(nchan, nstokes, ngrid, ngrid)

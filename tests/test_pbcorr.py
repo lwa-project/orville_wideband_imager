@@ -55,8 +55,8 @@ class pbcorr_tests(unittest.TestCase):
     def test_pbcor_run(self):
         """Test running utils.get_primary_beam"""
 
-        hdr = {'station': b'LWASV',
-               'stokes_params': b'I,Q,U,V',
+        hdr = {'station': 'LWASV',
+               'stokes_params': 'I,Q,U,V',
                'ngrid': 144,
                'pixel_size': 0.9027777777777778,
                'start_time': 59430.09473379629,
@@ -66,7 +66,7 @@ class pbcorr_tests(unittest.TestCase):
                'start_freq': 38700000.0,
                'stop_freq': 55200000.0,
                'bandwidth': 3300000.0,
-               'weighting': b'natural',
+               'weighting': 'natural',
                'center_ra': 242.0902199689118,
                'center_dec': 33.3576388888889,
                'center_az': 90.97437629624612,
@@ -78,7 +78,7 @@ class pbcorr_tests(unittest.TestCase):
               }
         ngrid = hdr['ngrid']
         pScale = hdr['pixel_size']
-        XX, YY = get_primary_beam(hdr,ngrid,0,b'LWASV')
+        XX, YY = get_primary_beam(hdr, ngrid, 0, 'LWASV')
         x = np.arange(ngrid)
         y = np.arange(ngrid)
         x ,y = np.meshgrid(x,y)

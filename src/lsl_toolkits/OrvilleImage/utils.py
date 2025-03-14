@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Dict, Any, Union, Tuple
+from typing import Dict, Any, Tuple
 
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord
 from astropy.time import Time
@@ -15,8 +15,8 @@ from .wcs import WCS
 def get_pixel_mask(header: Dict[str, Any], image_size: int, sky_factor: float=0.98) -> np.ndarray:
     """
     Given an Orville imager header returned by `OrvilleImageDB.read_image()`,
-    and an image size, return a Boolean array that marks valid sky pixels
-    True and pixel that are beyond the horizon as False.
+    and an image size, return a Boolean array that masks pixel that lie outside
+    of the horizon.
     """
     
     x, y = np.arange(image_size) - 0.5, np.arange(image_size) - 0.5
@@ -28,7 +28,7 @@ def get_pixel_mask(header: Dict[str, Any], image_size: int, sky_factor: float=0.
 
 
 def get_primary_beam(header: Dict[str, Any], image_size: int, chan: int,
-                     station: Union[str, bytes]) -> Tuple[np.ndarray, np.ndarray]:
+                     station: str) -> Tuple[np.ndarray, np.ndarray]:
     """
     Given an Orville imager header returned by `OrvilleImageDB.read_image()`,
     an image size, a channel number/index, and a station name, return the
@@ -37,8 +37,6 @@ def get_primary_beam(header: Dict[str, Any], image_size: int, chan: int,
     """
     
     # Find the station
-    if isinstance(station, bytes):
-        station = station.decode()
     lstation = station.lower().replace('-', '')
     
     if lstation == 'lwa1':
@@ -57,7 +55,7 @@ def get_primary_beam(header: Dict[str, Any], image_size: int, chan: int,
     # Mask out low altitude pixels
     x, y = np.arange(image_size) - 0.5, np.arange(image_size) - 0.5
     x,y = np.meshgrid(x,y)
-    mask = get_pixel_mask(header, image_size)
+    mask = np.where( get_pixel_mask(header, image_size) )
     x[mask] = image_size/2
     y[mask] = image_size/2
     

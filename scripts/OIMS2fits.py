@@ -99,8 +99,7 @@ def main(args):
                     imSize = ngrid    
                     
                     ## Zero outside of the horizon so avoid problems
-                    mask = get_pixel_mask(hdr, data.shape[-1])
-                    invalid = np.where(~mask)
+                    invalid = np.where( get_pixel_mask(hdr, data.shape[-1]) )
                     imdata[:,invalid[0], invalid[1]] = 0.0
                     if args.pbcorr:
                         XX, YY = get_primary_beam(hdrlist[myint], imSize, chan, station)

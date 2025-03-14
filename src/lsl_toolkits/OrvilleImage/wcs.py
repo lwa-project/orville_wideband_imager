@@ -52,7 +52,7 @@ class WCS(AstroWCS):
             w.wcs.set_pv([(2,1,xi), (2,2,eta)])
         
         # Fix up the RA/DEC portions for Sevilleta
-        if hdr['station'] == b'LWASV' or hdr['station'] == 'LWASV':
+        if hdr['station'] == 'LWASV':
             ## Optimized phase center from Orville
             HA = 357.38856977271047
             Dec = 33.507121493107995 

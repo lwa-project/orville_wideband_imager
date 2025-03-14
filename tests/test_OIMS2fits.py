@@ -105,15 +105,14 @@ class OIMS2fits_tests(unittest.TestCase):
                         data = np.copy(np.asarray(data))
                         
                         ## Zero outside of the horizon so avoid problems
-                        mask = get_pixel_mask(hdr, data.shape[-1])
-                        invalid = np.where(~mask)
+                        invalid = np.where( get_pixel_mask(hdr, data.shape[-1]) )
                         data[:,:,invalid[0], invalid[1]] = 0.0
                         
                         curoimsdata = np.squeeze(data[curfitsfreq==oimsfreqs,:,:,:])
                         
                         np.testing.assert_array_equal(hdu.data,curoimsdata)
                         self.assertEqual(ints, db.nint)
-                        self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                        self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
                         self.assertEqual(xdata, db.header.ngrid)
                         self.assertEqual(ydata, db.header.ngrid)
                         
@@ -147,8 +146,7 @@ class OIMS2fits_tests(unittest.TestCase):
                         data = np.copy(np.asarray(data))
                         
                         ## Zero outside of the horizon so avoid problems
-                        mask = get_pixel_mask(hdr, data.shape[-1])
-                        invalid = np.where(~mask)
+                        invalid = np.where( get_pixel_mask(hdr, data.shape[-1]) )
                         data[:,:,invalid[0], invalid[1]] = 0.0
                         
                         curoimsdata = np.squeeze(data[curfitsfreq==oimsfreqs,:,:,:])
@@ -158,7 +156,7 @@ class OIMS2fits_tests(unittest.TestCase):
                         
                         np.testing.assert_array_equal(hdu.data,curoimsdata)
                         self.assertEqual(ints, db.nint)
-                        self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                        self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
                         self.assertEqual(xdata, db.header.ngrid)
                         self.assertEqual(ydata, db.header.ngrid)
                         
@@ -192,7 +190,7 @@ class OIMS2fits_tests(unittest.TestCase):
             with OrvilleImageDB(oimsFile, 'r') as db:
                 self.assertEqual(nchan, db.header.nchan)
                 self.assertEqual(ints, 1)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
                 self.assertEqual(xdata, db.header.ngrid)
                 self.assertEqual(ydata, db.header.ngrid)
                 
@@ -226,7 +224,7 @@ class OIMS2fits_tests(unittest.TestCase):
             with OrvilleImageDB(oimsFile, 'r') as db:
                 self.assertEqual(nchan, db.header.nchan)
                 self.assertEqual(ints, db.nint-1)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
                 self.assertEqual(xdata, db.header.ngrid)
                 self.assertEqual(ydata, db.header.ngrid)
                 
@@ -253,7 +251,7 @@ class OIMS2fits_tests(unittest.TestCase):
             with OrvilleImageDB(oimsFile, 'r') as db:
                 self.assertEqual(nchan, 1)
                 self.assertEqual(ints, db.nint)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
                 self.assertEqual(xdata, db.header.ngrid)
                 self.assertEqual(ydata, db.header.ngrid)
                
@@ -286,7 +284,7 @@ class OIMS2fits_tests(unittest.TestCase):
             with OrvilleImageDB(oimsFile, 'r') as db:
                 self.assertEqual(nchan, db.header.nchan)
                 self.assertEqual(ints, db.nint)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
                 self.assertEqual(xdata, db.header.ngrid)
                 self.assertEqual(ydata, db.header.ngrid)
                 
@@ -308,7 +306,7 @@ class OIMS2fits_tests(unittest.TestCase):
             with OrvilleImageHDF5(o5File, 'r') as db:
                 self.assertEqual(nchan, db.header.nchan)
                 self.assertEqual(ints, db.nint)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(b',')))
+                self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
                 self.assertEqual(xdata, db.header.ngrid)
                 self.assertEqual(ydata, db.header.ngrid)
 

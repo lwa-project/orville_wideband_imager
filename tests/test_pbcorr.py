@@ -13,6 +13,7 @@ import shutil
 
 from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
 from lsl_toolkits.OrvilleImage.utils import get_primary_beam
+from lsl_toolkits.OrvilleImage.wcs import TopocentricWCS
 from astropy.io import fits
 
 currentDir = os.path.abspath(os.getcwd())
@@ -78,18 +79,27 @@ class pbcorr_tests(unittest.TestCase):
               }
         ngrid = hdr['ngrid']
         pScale = hdr['pixel_size']
+        twcs = TopocentricWCS.from_orville_header(hdr)
+        twcs = twcs.dropaxis(-1).dropaxis(-1)
         XX, YY = get_primary_beam(hdr, ngrid, 0, 'LWASV')
+        
         x = np.arange(ngrid)
         y = np.arange(ngrid)
-        x ,y = np.meshgrid(x,y)
-        invbeam = 1/((XX+YY)/2)
-        sRad = 360.0/pScale/np.pi/2
-        rms = []
-        for i in range(1,10):
-            selpix  = (((x-ngrid/2.0)**2 + (y-ngrid/2.0)**2) > ((((i-1)/10)*sRad)**2)) & (((x-ngrid/2.0)**2 + (y-ngrid/2.0)**2) < (((i/10)*sRad)**2))
-            rms.append(np.sqrt(np.average(invbeam[selpix]**2)))
-        for r1,r2 in zip(rms[:-1],rms[1:]):
-            self.assertTrue(r2>r1)
+        x, y = np.meshgrid(x,y)
+        azalt = twcs.pixel_to_world(x, y)
+        az, alt = azalt.ra.deg, azalt.dec.deg
+        
+        # Check to make sure that the beam sensitivity decreases towards the
+        # horizon
+        invbeam = 2.0 / (XX + YY)
+        for ring in (80, 70, 60, 50, 40, 30, 20):
+            high_alt = np.where((alt > ring) & (alt < (ring + 5)))
+            low_alt= np.where((alt < ring) & (alt > (ring - 5)))
+            
+            high_invbeam = invbeam[high_alt].mean()
+            low_invbeam = invbeam[low_alt].mean()
+            
+            self.assertTrue(high_invbeam < low_invbeam)
 
 
 class pbcorr_test_suite(unittest.TestSuite):

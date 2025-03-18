@@ -37,6 +37,9 @@ class oims_tests(unittest.TestCase):
         for oimsFile in (oimsFileSV, oimsFileNA):
             db = OrvilleImageDB(oimsFile, 'r')
             
+            # File type
+            self.assertEqual(db.file_type, 'OrvilleImageDB')
+            
             # Read in the first image with the correct number of elements
             hdr, data = db.read_image()
             ## Image

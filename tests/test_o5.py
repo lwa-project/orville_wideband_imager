@@ -36,6 +36,9 @@ class o5_tests(unittest.TestCase):
 
         db = OrvilleImageHDF5(o5File, 'r')
         
+        # File type
+        self.assertEqual(db.file_type, 'OrvilleImageHDF5')
+        
         # Read in the first image with the correct number of elements
         hdr, data = db.read_image(0)
         ## Image

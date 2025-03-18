@@ -14,17 +14,12 @@ import sys
 import numpy as np
 import argparse
 
-from lsl_toolkits.OrvilleImage import OrvilleImageHDF5, BAD_FREQ_LIST as badfreqs
-from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
+from lsl_toolkits.OrvilleImage import OrvilleImageReader, BAD_FREQ_LIST as badfreqs
 
 def main(args):
     station = lwasv
     for filename in args.filename:
-        OrvilleReader = OrvilleImageHDF5
-        if os.path.splitext(filename)[1] == '.oims':
-            OrvilleReader = OrvilleImageDB
-            
-        db = OrvilleReader(filename, 'r')
+        db = OrvilleImageReader(filename, 'r')
         outname = filename.replace(".oims","-avg.o5")
         ints = db.nint 
         nchan = db.header.nchan # number of frequency channels

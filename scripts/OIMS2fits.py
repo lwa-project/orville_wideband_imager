@@ -8,8 +8,7 @@ import sys
 import numpy as np
 import argparse
 
-from lsl_toolkits.OrvilleImage import OrvilleImageHDF5
-from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
+from lsl_toolkits.OrvilleImage import OrvilleImageReader
 
 from lsl_toolkits.OrvilleImage.wcs import WCS
 from lsl_toolkits.OrvilleImage.utils import get_pixel_mask, get_primary_beam
@@ -17,11 +16,7 @@ from lsl_toolkits.OrvilleImage.utils import get_pixel_mask, get_primary_beam
 
 def main(args):
     for filename in args.filename:
-        OrvilleReader = OrvilleImageHDF5
-        if os.path.splitext(filename)[1] == '.oims':
-            OrvilleReader = OrvilleImageDB
-            
-        with OrvilleReader(filename, 'r') as db:
+        with OrvilleImageReader(filename, 'r') as db:
             # Get parameters from the input file
             ints = db.nint # number of integrations
             station =  db.header.station # station info

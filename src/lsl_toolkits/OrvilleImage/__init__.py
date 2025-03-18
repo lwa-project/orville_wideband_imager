@@ -3,7 +3,8 @@ import numpy as np
 
 __version__ = '0.6'
 
-from .OrvilleImage import OrvilleImageHDF5
+from .OrvilleImage import OrvilleImageReader
+from .OrvilleImageHDF5 import OrvilleImageHDF5
 
 _BAD_FREQ_PATH = os.path.dirname(os.path.abspath(__file__))
 _BAD_FREQ_PATH = os.path.join(_BAD_FREQ_PATH, 'data', 'bad_freq.txt')

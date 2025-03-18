@@ -7,7 +7,7 @@ import tempfile
 
 from typing import Dict, Any, Optional, List, Tuple, Union
 
-from ..OrvilleImage import HeaderContainer
+from ..OrvilleImageHDF5 import HeaderContainer
 
 
 class PrintableLittleEndianStructure(ctypes.LittleEndianStructure):

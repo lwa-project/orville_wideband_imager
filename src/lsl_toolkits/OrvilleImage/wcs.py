@@ -112,11 +112,11 @@ class TopocentricWCS(AstroWCS):
                        (hdr['ngrid'] + 1)/2.0,
                        1,
                        1]
-        w.wcs.cdelt = [-130/hdr['ngrid'],   # 130 degrees is what is visible to the dipoles
-                        130/hdr['ngrid'],
+        w.wcs.cdelt = [130/hdr['ngrid'],   # 130 degrees is what is visible to the dipoles
+                       130/hdr['ngrid'],
                        1 if hdr['stokes_params'] == b'I,Q,U,V' else -1, # Not strictly correct since FITS has XX,YY,XY,YX
                        hdr['bandwidth']] 
-        w.wcs.crval = [center_az,
+        w.wcs.crval = [center_az + 90,
                        center_alt,
                        1 if hdr['stokes_params'] == b'I,Q,U,V' else -5,
                        hdr['start_freq']]
@@ -126,9 +126,11 @@ class TopocentricWCS(AstroWCS):
                        'FREQ']
         
         zen = (90 - center_alt) * np.pi/180
-        az = (center_alt + 180) * np.pi/180
+        zaz = (center_alt + 180) * np.pi/180
         
         xi = np.sin(zen) * np.cos(zaz)
         eta = np.sin(zen) * np.sin(zaz)
         
         w.wcs.set_pv([(2,1,xi), (2,2,eta)])
+        
+        return w

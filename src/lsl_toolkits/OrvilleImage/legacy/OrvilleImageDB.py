@@ -306,7 +306,7 @@ class OrvilleImageDB(object):
             self.close()
             
     @property
-    def file_type(self):
+    def file_type(self) -> str:
         """
         Type of Orville image file.
         """

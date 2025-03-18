@@ -155,7 +155,7 @@ class OrvilleImageHDF5:
             self.nstokes = len(stokes_str.split(','))
             
     @property
-    def file_type(self):
+    def file_type(self) -> str:
         """
         Type of Orville image file.
         """

@@ -200,12 +200,16 @@ class OrvilleImageDB(object):
         # and some Unix implementations don't allow this with 'a' mode.
         # Otherwise, switch to write mode.
         elif mode == 'a':
+            raise RuntimeError("Writing to the legacy OrvilleImageDB format is no longer supported")
+            
             fileSize = os.path.getsize(filename) if os.path.isfile(filename) else 0
             self._is_new = (fileSize <= 24)
             mode = 'w' if self._is_new else 'r+'
             
         # Write mode: pretty straightforward.
         elif mode == 'w':
+            raise RuntimeError("Writing to the legacy OrvilleImageDB format is no longer supported")
+            
             self._is_new = True
             
         else:

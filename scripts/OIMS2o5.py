@@ -7,8 +7,7 @@ import argparse
 
 from lsl.common.progress import ProgressBarPlus
 
-from lsl_toolkits.OrvilleImage import OrvilleImageHDF5
-from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
+from lsl_toolkits.OrvilleImage import OrvilleImageReader, OrvilleImageHDF5
 
 
 def main(args):
@@ -20,7 +19,11 @@ def main(args):
         outname = os.path.join(args.output_dir, outname)
         
         print(f"Converting {os.path.basename(filename)} to {os.path.basename(outname)}...")
-        with OrvilleImageDB(filename, 'r') as db:
+        with OrvilleImageReader.open(filename) as db:
+            ## Make sure we have a .oims file first
+            if db.file_type == 'OrvilleImageHDF5':
+                raise RuntimeError("File already appears to be a .o5 file")
+                
             ## Make sure we scrub bytes from the .oims metadata
             imager_version = db.header.imager_version
             if isinstance(imager_version, bytes):

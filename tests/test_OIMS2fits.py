@@ -61,7 +61,7 @@ class OIMS2fits_tests(unittest.TestCase):
         """
         
         status = 1
-        with open('OIMS2fits.log', 'w') as logfile:
+        with open(os.path.join(self.testPath, 'OIMS2fits.log'), 'w') as logfile:
             try:
                 cmd = [sys.executable, os.path.join(MODULE_BUILD, 'scripts/OIMS2fits.py')]
                 cmd.extend(['-o', self.testPath])

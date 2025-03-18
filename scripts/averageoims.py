@@ -14,7 +14,7 @@ import sys
 import numpy as np
 import argparse
 
-from lsl_toolkits.OrvilleImage import OrvilleImageReader, OrvilleImageHDF5, BAD_FREQS as badfreqs
+from lsl_toolkits.OrvilleImage import OrvilleImageReader, OrvilleImageHDF5, BAD_FREQ_LIST as badfreqs
 
 def main(args):
     station = lwasv

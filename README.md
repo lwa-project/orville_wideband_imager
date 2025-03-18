@@ -22,12 +22,13 @@ seconds, the imager produces 4 Stokes (I, Q, U and V) images in 198 channels, ea
 ## Data Archive
 Orville data with reduced spectral resolution (six 3.3 MHz channels) are available at the [LWA data archive](https://lda10g.alliance.unm.edu/Orville/).
 
-## Reading OIMS Files
-You can use the `OrvilleImageDB.py` Python module to read the data stored in an OIMS file:
+## Reading Orville Image Files
+You can use the `OrvilleImageReader` Python class to read the data stored in an O5 or 
+OIMS file:
 ```
-from lsl_toolkits.OrvilleImager import OrvilleImageHDF5
+from lsl_toolkits.OrvilleImager import OrvilleImageReader
 
-db = OrvilleImageHDF5(oimsFile, 'r')
+db = OrvilleImageReader.open(oimsFile)
 
 # Get parameters from the input file
 

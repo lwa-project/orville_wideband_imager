@@ -16,7 +16,7 @@ from lsl_toolkits.OrvilleImage.utils import get_pixel_mask, get_primary_beam
 
 def main(args):
     for filename in args.filename:
-        with OrvilleImageReader(filename, 'r') as db:
+        with OrvilleImageReader.open(filename) as db:
             # Get parameters from the input file
             ints = db.nint # number of integrations
             station =  db.header.station # station info

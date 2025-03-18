@@ -7,7 +7,7 @@ import numpy as np
 import tempfile
 import unittest
 
-from lsl_toolkits.OrvilleImage import OrvilleImageHDF5, BAD_FREQ_LIST
+from lsl_toolkits.OrvilleImage import OrvilleImageReader, OrvilleImageHDF5, BAD_FREQ_LIST
 from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
 
 
@@ -50,6 +50,16 @@ class o5_tests(unittest.TestCase):
         """Test reading in an image from a OrvilleImage file using the context manager."""
 
         with OrvilleImageHDF5(o5File, 'r') as db:
+            # Read in the first image with the correct number of elements
+            hdr, data = db[0]
+            ## Image
+            self.assertEqual(data.shape[0], db.header.nchan)
+            self.assertEqual(data.shape[1], len(db.header.stokes_params.split(',')))
+            self.assertEqual(data.shape[2], db.header.ngrid)
+            self.assertEqual(data.shape[3], db.header.ngrid)
+            
+    def test_wrapped_o5_read(self):
+        with OrvilleImageReader.open(o5File) as db:
             # Read in the first image with the correct number of elements
             hdr, data = db[0]
             ## Image

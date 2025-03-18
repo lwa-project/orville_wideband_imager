@@ -170,14 +170,7 @@ class OIMS2fits_tests(unittest.TestCase):
         self.assertEqual(status, 0)
         
         fitsFile = sorted(glob.glob(os.path.join(self.testPath, '*.fits')))
-        knownpix = np.array([62.473182678222656,
-                             75.6445083618164,
-                             77.76968383789062,
-                             74.6494369506836,
-                             64.94345092773438,
-                             54.68968200683594
-                            ])
-        testpix = np.zeros(knownpix.shape)
+        testpix = np.zeros((len(fitsFile),))
         for i,f in enumerate(fitsFile):
             with fits.open(f) as hdul:
                 nchan = len(fitsFile)
@@ -187,14 +180,17 @@ class OIMS2fits_tests(unittest.TestCase):
                 ydata = hdul[0].data.shape[2]
                 testpix[i] = hdul[0].data[0, ydata//4, xdata//4]
 
-            with OrvilleImageDB(oimsFile, 'r') as db:
-                self.assertEqual(nchan, db.header.nchan)
-                self.assertEqual(ints, 1)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
-                self.assertEqual(xdata, db.header.ngrid)
-                self.assertEqual(ydata, db.header.ngrid)
-                
-        np.testing.assert_array_equal(testpix,knownpix)
+        with OrvilleImageDB(oimsFile, 'r') as db:
+            self.assertEqual(nchan, db.header.nchan)
+            self.assertEqual(ints, 1)
+            self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
+            self.assertEqual(xdata, db.header.ngrid)
+            self.assertEqual(ydata, db.header.ngrid)
+            
+            _, data = db[2]
+            refpix = data[:, 0, ydata//4, xdata//4]
+            
+        np.testing.assert_equal(testpix, refpix)
         
     def test_OIMS2fitsdiff_oims_run(self):
         """Create fits from oims with diff ims"""
@@ -203,15 +199,7 @@ class OIMS2fits_tests(unittest.TestCase):
         self.assertEqual(status, 0)
         
         fitsFile = sorted(glob.glob(os.path.join(self.testPath, '*.fits')))
-        knownpix = np.array([-3.5097122192382812,
-                             -2.56549072265625,
-                             -1.3171768188476562,
-                             -3.9064254760742188,
-                             -6.341712951660156,
-                             -10.29165267944336
-                            ])
-
-        testpix = np.zeros(knownpix.shape)
+        testpix = np.zeros((len(fitsFile),))
         for i,f in enumerate(fitsFile):
             with fits.open(f) as hdul:
                 nchan = len(fitsFile)
@@ -221,14 +209,18 @@ class OIMS2fits_tests(unittest.TestCase):
                 ydata = hdul[0].data.shape[2]
                 testpix[i] = hdul[0].data[0, ydata//4, xdata//4]
 
-            with OrvilleImageDB(oimsFile, 'r') as db:
-                self.assertEqual(nchan, db.header.nchan)
-                self.assertEqual(ints, db.nint-1)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
-                self.assertEqual(xdata, db.header.ngrid)
-                self.assertEqual(ydata, db.header.ngrid)
+        with OrvilleImageDB(oimsFile, 'r') as db:
+            self.assertEqual(nchan, db.header.nchan)
+            self.assertEqual(ints, db.nint-1)
+            self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
+            self.assertEqual(xdata, db.header.ngrid)
+            self.assertEqual(ydata, db.header.ngrid)
+            
+            _, data0 = db[0]
+            _, data1 = db[1]
+            refpix = data1[:, 0, ydata//4, xdata//4] - data0[:, 0, ydata//4, xdata//4]
                 
-        np.testing.assert_allclose(testpix, knownpix)
+        np.testing.assert_allclose(testpix, refpix)
 
     def test_OIMS2fitschan_oims_run(self):
         """Create fits from oims with specified channel"""
@@ -237,8 +229,6 @@ class OIMS2fits_tests(unittest.TestCase):
         self.assertEqual(status, 0)
         
         fitsFile = sorted(glob.glob(os.path.join(self.testPath, '*.fits')))
-        knownpix = np.array([69.75801086425781])
-        testpix = np.zeros(knownpix.shape)
         for i,f in enumerate(fitsFile):
             with fits.open(f) as hdul:
                 nchan = len(fitsFile)
@@ -246,7 +236,7 @@ class OIMS2fits_tests(unittest.TestCase):
                 stokes = hdul[0].data.shape[0]
                 xdata = hdul[0].data.shape[1]
                 ydata = hdul[0].data.shape[2]
-                testpix[i] = hdul[0].data[0, ydata//4, xdata//4]
+                testpix = hdul[0].data[0, ydata//4, xdata//4]
 
             with OrvilleImageDB(oimsFile, 'r') as db:
                 self.assertEqual(nchan, 1)
@@ -254,9 +244,12 @@ class OIMS2fits_tests(unittest.TestCase):
                 self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
                 self.assertEqual(xdata, db.header.ngrid)
                 self.assertEqual(ydata, db.header.ngrid)
+                
+                _, data = db[0]
+                refpix = data[0, 0, ydata//4, xdata//4]
                
-        np.testing.assert_array_equal(testpix, knownpix)
-        
+            np.testing.assert_equal(testpix, refpix)
+            
     def test_OIMS2fitscorrfacback_oims_run(self):
         """Create fits from oims with specified corrfac and background"""
         
@@ -264,14 +257,7 @@ class OIMS2fits_tests(unittest.TestCase):
         self.assertEqual(status, 0)
         
         fitsFile = sorted(glob.glob(os.path.join(self.testPath, '*.fits')))
-        knownpix = np.array([6475.801086425781,
-                             7563.559722900391,
-                             7490.340423583984,
-                             7126.630401611328,
-                             6334.429931640625,
-                             5794.603729248047
-                            ])
-        testpix = np.zeros(knownpix.shape)
+        testpix = np.zeros((len(fitsFile),))
         for i,f in enumerate(fitsFile):
             with fits.open(f) as hdul:
                 nchan = len(fitsFile)
@@ -281,13 +267,19 @@ class OIMS2fits_tests(unittest.TestCase):
                 ydata = hdul[0].data.shape[2]
                 testpix[i] = hdul[0].data[0, ydata//4, xdata//4]
 
-            with OrvilleImageDB(oimsFile, 'r') as db:
-                self.assertEqual(nchan, db.header.nchan)
-                self.assertEqual(ints, db.nint)
-                self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
-                self.assertEqual(xdata, db.header.ngrid)
-                self.assertEqual(ydata, db.header.ngrid)
-                
+        with OrvilleImageDB(oimsFile, 'r') as db:
+            self.assertEqual(nchan, db.header.nchan)
+            self.assertEqual(ints, db.nint)
+            self.assertEqual(stokes, len(db.header.stokes_params.split(',')))
+            self.assertEqual(xdata, db.header.ngrid)
+            self.assertEqual(ydata, db.header.ngrid)
+            
+            _, data = db[0]
+            refpix = data[:, 0,ydata//4, xdata//4]
+            refpix = (refpix - 5) * 100
+            
+        np.testing.assert_equal(testpix, refpix)
+        
     def test_OIMS2fits_o5_run(self):
         """Create fits from o5"""
         

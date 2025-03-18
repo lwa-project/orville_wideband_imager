@@ -8,19 +8,16 @@ import sys
 import numpy as np
 import argparse
 
-from lsl_toolkits.OrvilleImage import OrvilleImageDB
+from lsl_toolkits.OrvilleImage import OrvilleImageReader
 
 from lsl_toolkits.OrvilleImage.wcs import WCS
-
-from lsl_toolkits.OrvilleImage.pbtools import pbcorroims
+from lsl_toolkits.OrvilleImage.utils import get_pixel_mask, get_primary_beam
 
 
 def main(args):
     for filename in args.filename:
-        with OrvilleImageDB(filename, 'r') as db:
-        
+        with OrvilleImageReader.open(filename) as db:
             # Get parameters from the input file
-            
             ints = db.nint # number of integrations
             station =  db.header.station # station info
             stokes = db.header.stokes_params # Stokes parameter info
@@ -30,44 +27,63 @@ def main(args):
             ngrid = db.header.ngrid # image size (x-axis)
             psize = db.header.pixel_size # angular size of a pixel (at zenith)
             nchan = db.header.nchan # number of frequency channels
+            
             # Collect header and data from the whole file
             hdrlist = []
             if args.index is not None:
                 if not args.diff:
                     data = np.zeros((1,nchan,4,ngrid,ngrid), dtype=np.float32)
-                    db.seek(args.index)
-                    hdr,alldata = db.read_image()
+                    try:
+                        hdr,alldata = db.read_image(args.index)
+                    except TypeError:
+                        db.seek(args.index)
+                        hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
                     data[0] = np.asarray(alldata.data)
+                    
                 else:
                     data = np.zeros((1,nchan,4,ngrid,ngrid), dtype=np.float32)
                     # FIRST do the next image
-                    db.seek(args.index+1)
-                    hdr,alldata = db.read_image()
+                    try:
+                        hdr,alldata = db.read_image(args.index+1)
+                    except TypeError:
+                        db.seek(args.index+1)
+                        hdr,alldata = db.read_image()
                     data[0] = np.asarray(alldata.data)
                     # Next subtract our image
-                    db.seek(args.index)
-                    hdr,alldata = db.read_image()
+                    try:
+                        hdr,alldata = db.read_image(args.index)
+                    except TypeError:
+                        db.seek(args.index)
+                        hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
                     data[0] = data[0] - np.asarray(alldata.data)
+                    
                 hdr = hdrlist[0]
+                
             else:    
                 data = np.zeros((ints,nchan,4,ngrid,ngrid), dtype=np.float32)
                 for i in range(ints):
-                    db.seek(i)
-                    hdr,alldata = db.read_image()
+                    try:
+                        hdr,alldata = db.read_image(i)
+                    except TypeError:
+                        db.seek(i)
+                        hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
                     data[i] = np.asarray(alldata.data)
+                    
                 hdr = hdrlist[0]
                 if args.diff:
                     tmpdata = np.copy(data)
                     data = np.zeros((len(data)-1,nchan,4,ngrid,ngrid), dtype=np.float32)
                     for i in range(len(data)):
                         data[i] = tmpdata[i+1] - tmpdata[i]
+                        
             for chan in range(nchan):
                 if args.channel is not None:
                     if chan!=args.channel:
                         continue
+                        
                 hdulist = astrofits.HDUList()
                 for myint in range(len(data)):
                     hdr = hdrlist[myint]
@@ -78,18 +94,12 @@ def main(args):
                     imSize = ngrid    
                     
                     ## Zero outside of the horizon so avoid problems
-                    pScale = psize
-                    sRad   = 360.0/pScale/np.pi / 2
-                    x = np.arange(data.shape[-2]) - 0.5
-                    y = np.arange(data.shape[-1]) - 0.5
-                    x,y = np.meshgrid(x,y)
-                    invalid = np.where( ((x-imSize/2.0)**2 + (y-imSize/2.0)**2) > (sRad**2) )
+                    invalid = np.where( get_pixel_mask(hdr, data.shape[-1]) )
                     imdata[:,invalid[0], invalid[1]] = 0.0
-                    ext = imSize/(2*sRad)
                     if args.pbcorr:
-                        XX,YY = pbcorroims(hdrlist[myint],imSize,chan,station)
+                        XX, YY = get_primary_beam(hdrlist[myint], imSize, chan, station)
                         imdata[0]/=((XX+YY)/2)
-                    
+                        
                     ## Convert the start MJD into a datetime instance and then use
                     ## that to come up with a stop time
                     mjd = int(hdr['start_time'])
@@ -109,7 +119,9 @@ def main(args):
                         
                     ## Create the FITS HDU and fill in the header information
                     hdu = astrofits.ImageHDU(data=imdata)
-                    hdu.header['TELESCOP'] = station.decode()
+                    if isinstance(station, bytes):
+                        station = station.decode()
+                    hdu.header['TELESCOP'] = station
                     hdu.header['EXPTIME'] = tInt
                     ### Coordinates
                     w = WCS.from_orville_header(hdr)
@@ -134,6 +146,7 @@ def main(args):
                     
                     ## Write it to disk
                     hdulist.append(hdu)
+                    
                 filedir,filebase = os.path.split(os.path.abspath(os.path.expanduser(filename)))
                 if args.output_dir is not None:
                     filedir = args.output_dir
@@ -145,6 +158,7 @@ def main(args):
                 if args.index is not None:
                     outName = outName.replace(".fits",f"-{args.index}.fits")
                 hdulist.writeto(outName, overwrite=args.force)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

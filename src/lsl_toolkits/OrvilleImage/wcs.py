@@ -1,29 +1,33 @@
-import numpy as np 
+import numpy as np
+import warnings
+from typing import Dict, Any
 
 import astropy.units as u
 from astropy.wcs import WCS as AstroWCS
-from astropy.time import Time as AstroTime
+from astropy.time import Time
 from astropy.coordinates import Angle as AstroAngle, EarthLocation, HADec, FK5
+
+from lsl.common.stations import lwasv
 
 
 class WCS(AstroWCS):
     @classmethod
-    def from_orville_header(kls, hdr):
+    def from_orville_header(kls, hdr: Dict[str, Any]) -> 'WCS':
         """
         Given an Orville imager header returned by `OrvilleImageDB.read_image()`,
         build a astropy.wcs.WCS object that represents all four axes in the image.
         """
         
         # Observation time
-        t_obs = AstroTime(hdr['start_time'], format='mjd', scale='utc') # Time of observation
+        t_obs = Time(hdr['start_time'], format='mjd', scale='utc') # Time of observation
         
         # First, start off with a generic four axis WCS - RA, dec, Stokes, and frequency
         w = kls(naxis=4)
         w.wcs.radesys = 'FK5'
         w.wcs.specsys = 'TOPOCENT'
         w.wcs.equinox = t_obs.jyear
-        w.wcs.crpix = [hdr['ngrid']/2 + 0.5 * ((hdr['ngrid']+1)%2),
-                       hdr['ngrid']/2 + 0.5 * ((hdr['ngrid']+1)%2),
+        w.wcs.crpix = [(hdr['ngrid'] + 1)/2.0,
+                       (hdr['ngrid'] + 1)/2.0,
                        1,
                        1]
         w.wcs.cdelt = [-130/hdr['ngrid'],   # 130 degrees is what is visible to the dipoles
@@ -38,15 +42,23 @@ class WCS(AstroWCS):
                        'DEC--SIN',
                        'STOKES',
                        'FREQ']
+        if 'center_az' in hdr and 'center_alt' in hdr:
+            zen = (90 - hdr['center_alt']) * np.pi/180
+            zaz = (hdr['center_alt'] + 180) * np.pi/180
+            
+            xi = np.sin(zen) * np.cos(zaz)
+            eta = np.sin(zen) * np.sin(zaz)
+            
+            w.wcs.set_pv([(2,1,xi), (2,2,eta)])
         
         # Fix up the RA/DEC portions for Sevilleta
-        if hdr['station'] == b'LWASV':
+        if hdr['station'] == 'LWASV':
             ## Optimized phase center from Orville
             HA = 357.38856977271047
             Dec = 33.507121493107995 
             
             ## Assume the HA/Dec are measured in the epoch-of-date
-            SV = EarthLocation(lat=34.348358*u.deg, lon=-106.885783*u.deg, height=1477.8*u.m)
+            SV = lwasv.earth_location
             hc = HADec(HA*u.deg, Dec*u.deg, location=SV, obstime=t_obs)
             ec = hc.transform_to(FK5(equinox=t_obs))
             
@@ -67,37 +79,58 @@ class WCS(AstroWCS):
         return w
 
 
-def getSVwcs(header, imSize):
-    w = AstroWCS(naxis=2)
-    w.wcs.crpix = [imSize/2 + 0.5 * ((imSize+1)%2),imSize/2  + 0.5 * ((imSize+1)%2)]
-    # 130 degrees is what is visible to the dipoles
-    w.wcs.cdelt = np.array([-130/imSize,130/imSize]) 
-    HA = 357.38856977271047
-    Dec = 33.507121493107995 
-    
-    SV = EarthLocation(lat=34.348358*u.deg, lon=-106.885783*u.deg, height=1477.8*u.m)
-    t_obs = AstroTime(header['start_time'], format='mjd',location=SV) #time of observation
-    
-    # assume the HA/Dec are measured in the epoch-of-date
-    LST = t_obs.sidereal_time("apparent").degree
-    RA = AstroAngle(LST-HA, u.deg).wrap_at(360*u.deg).degree
-
-    w.wcs.crval = [RA, Dec]
-
-    theta_c = (89.17548407142988)*np.pi/180
-    phi_c = (55.292881400599846)*np.pi/180
-    xi = np.sin(phi_c)/np.tan(theta_c)
-    eta = -np.cos(phi_c)/np.tan(theta_c)
-    w.wcs.set_pv([(2,1,xi),(2,2,eta)])
-    w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
-    w.wcs.lonpole = 179.21441725378727
-    return w
-
-def getGENERICwcs(header, imSize):
-    w = AstroWCS(naxis=2)
-    w.wcs.crpix = [imSize/2 + 0.5 * ((imSize+1)%2),imSize/2  + 0.5 * ((imSize+1)%2)]
-    # 130 degrees is what is visible to the dipoles
-    w.wcs.cdelt = np.array([-130/imSize,130/imSize]) 
-    w.wcs.crval = [header['center_ra'],header['center_dec']]
-    w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
-    return w
+class TopocentricWCS(AstroWCS):
+    @classmethod
+    def from_orville_header(kls, hdr: Dict[str, Any]) -> 'TopocentricWCS':
+        """
+        Given an Orville imager header returned by `OrvilleImageDB.read_image()`,
+        build a astropy.wcs.WCS object that represents all four axes in the image
+        in topocentric coordinates.
+        
+        .. note:: This works by mapping azimuth to RA and altitude to declination.
+                  The object will report things as RA and dec. but they are really
+                  az and alt.
+        """
+        
+        center_az = center_alt = 90.0
+        if 'center_az' in hdr and 'center_alt' in hdr:
+            center_az = hdr['center_az']
+            center_alt = hdr['center_alt']
+        else:
+            warings.warn("No center_az or center_alt found in the header, assuming zenith",
+                         RuntimeWarning)
+            
+        # Observation time
+        t_obs = Time(hdr['start_time'], format='mjd', scale='utc') # Time of observation
+        
+        # First, start off with a generic four axis WCS - RA, dec, Stokes, and frequency
+        w = kls(naxis=4)
+        w.wcs.radesys = 'FK5'
+        w.wcs.specsys = 'TOPOCENT'
+        w.wcs.equinox = t_obs.jyear
+        w.wcs.crpix = [(hdr['ngrid'] + 1)/2.0,
+                       (hdr['ngrid'] + 1)/2.0,
+                       1,
+                       1]
+        w.wcs.cdelt = [130/hdr['ngrid'],   # 130 degrees is what is visible to the dipoles
+                       130/hdr['ngrid'],
+                       1 if hdr['stokes_params'] == b'I,Q,U,V' else -1, # Not strictly correct since FITS has XX,YY,XY,YX
+                       hdr['bandwidth']] 
+        w.wcs.crval = [center_az + 90,
+                       center_alt,
+                       1 if hdr['stokes_params'] == b'I,Q,U,V' else -5,
+                       hdr['start_freq']]
+        w.wcs.ctype = ['RA---SIN',
+                       'DEC--SIN',
+                       'STOKES',
+                       'FREQ']
+        
+        zen = (90 - center_alt) * np.pi/180
+        zaz = (center_alt + 180) * np.pi/180
+        
+        xi = np.sin(zen) * np.cos(zaz)
+        eta = np.sin(zen) * np.sin(zaz)
+        
+        w.wcs.set_pv([(2,1,xi), (2,2,eta)])
+        
+        return w

@@ -7,7 +7,7 @@ import numpy as np
 import tempfile
 import unittest
 
-from lsl_toolkits.OrvilleImage import BAD_FREQ_LIST
+from lsl_toolkits.OrvilleImage import OrvilleImageReader, BAD_FREQ_LIST
 from lsl_toolkits.OrvilleImage.legacy import OrvilleImageDB
 
 

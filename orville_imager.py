@@ -59,6 +59,11 @@ import PIL.Image, PIL.ImageDraw, PIL.ImageFont
 
 from lsl_toolkits.OrvilleImage import OrvilleImageDB
 
+try:
+    from oarfish.client import PredictionClient
+except ImportError:
+    PredictionClient = None
+
 
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 CAL_PATH = os.path.join(BASE_PATH, 'calibration')
@@ -1335,6 +1340,21 @@ class WriterOp(object):
         self.core = core
         self.gpu = gpu
         
+        self.oarfish = None
+        if PredictionClient is not None:
+            try:
+                self.oarfish = PredictionClient(timeout=0.5, logger=self.log)
+            except Exception as e:
+                self.log.warning("Failed to create oarfish client: %s", str(e))
+                
+            if self.oarfish is not None:
+                try:
+                    self.oarfish.start()
+                    info = self.oarfish.identify()
+                    self.log.info("Connected to oarfish server with %s", info)
+                except Exception as e:
+                    self.log.warning("Failed to start oarfish client: %s", str(e))
+                    
         if not os.path.exists(base_dir):
             os.makedirs(base_dir, exist_ok=True)
         if not os.path.exists(self.output_dir_images):
@@ -1407,6 +1427,8 @@ class WriterOp(object):
         except Exception as e:
             self.log.warning("Failed to add integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
             
+        return info
+            
     def _save_archive_image(self, station, time_tag, hdr, freq, data, weighting='natural'):
         # Get the fill level as a fraction
         global FILL_QUEUE
@@ -1456,6 +1478,8 @@ class WriterOp(object):
             self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
         except Exception as e:
             self.log.warning("Failed to add archive integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
+            
+        return info
             
     def main(self):
         cpu_affinity.set_core(self.core)
@@ -1583,7 +1607,11 @@ class WriterOp(object):
                     if mask_mean[band,0,0,0] < 0.5:
                         arc_mask[band,:,:,:,:] = 0
                 arc_data = (arc_data*arc_mask).sum(axis=1) / arc_mask.sum(axis=1)
-                self._save_archive_image(self.station, time_tag, ihdr, arc_freq, arc_data, weighting=weighting)
+                metadata = self._save_archive_image(self.station, time_tag, ihdr,
+                                                    arc_freq, arc_data, weighting=weighting)
+                for key in metadata:
+                    if isinstance(metadata[key], bytes):
+                        metadata[key] = metadata[key].decode()
                 self.log.debug('Archive save time%s: %.3f s', self.label, time.time()-tArchive)
                 
                 ## Timetag stuff
@@ -1606,7 +1634,13 @@ class WriterOp(object):
                     plane_y = np.array(plane_y)
                     
                 ## Plot
-                for lsc,c in zip(lchans,ichans):
+                results = None
+                if self.oarfish is not None:
+                    results = self.oarfish.send(metadata, idata[ichans,:,:,:])
+                if results is None:
+                    results = [{'quality_score': -1.0, 'final_label': ''} for c in ichans]
+                    
+                for lsc,c,r in zip(lchans,ichans,results):
                     for i,p,l in ((0,0,'I'), (1,3,'V')):
                         ### Pull out the data and get it ready for plotting
                         img = idata[c,p,:,:]
@@ -1657,6 +1691,11 @@ class WriterOp(object):
                     ax[1].text(0.99, 0.99, '%.3f MHz' % (freq[c]/1e6,), verticalalignment='top',
                             horizontalalignment='right', color='white',
                             fontsize=14, transform=fig.transFigure)
+                    
+                    ### Add in quality info
+                    ax[1].text(0.99,0.01, r['final_label'], verticalalignment='bottom',
+                               horizontalalignment='right', color='white',
+                               fontsize=14, transform=fig.transFigure)
                     
                     ## Save
                     mjd, h, m, s = timetag_to_mjdatetime(time_tag)

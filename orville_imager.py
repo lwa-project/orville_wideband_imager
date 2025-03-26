@@ -28,7 +28,7 @@ from scipy.stats import scoreatpercentile as percentile
 from astropy.constants import c as speedOfLight
 speedOfLight = speedOfLight.to('m/s').value
 
-from lsl.common.stations import lwana, parse_ssmif
+from lsl.common.stations import lwa1, lwasv, lwana, parse_ssmif
 from lsl.correlator import uvutils
 from lsl.imaging import utils
 from lsl.common.adp import fS
@@ -64,13 +64,6 @@ BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 CAL_PATH = os.path.join(BASE_PATH, 'calibration')
 if not os.path.exists(CAL_PATH):
     os.makedirs(CAL_PATH, exist_ok=True)
-
-
-STATION = lwana
-ANTENNAS = STATION.antennas
-
-
-W_STEP = 0.3
 
 
 SUPPORT_SIZE = 7
@@ -269,10 +262,11 @@ class CaptureOp(object):
         del capture
 
 class SpectraOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, station, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
+        self.station = station
         self.output_dir = os.path.join(base_dir, 'spectra')
         self.uploader_dir = uploader_dir
         self.core = core
@@ -376,8 +370,8 @@ class SpectraOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
         
-        labels = [ant.stand.id for ant in ANTENNAS]
-        status = [ant.combined_status for ant in ANTENNAS]
+        labels = [ant.stand.id for ant in self.station.antennas]
+        status = [ant.combined_status for ant in self.station.antennas]
         
         for iseq,mseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())
@@ -459,9 +453,10 @@ class SpectraOp(object):
 
 
 class BaselineOp(object):
-    def __init__(self, log, iring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
+    def __init__(self, log, iring, station, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
+        self.station = station
         self.output_dir = os.path.join(base_dir, 'baselines')
         self.uploader_dir = uploader_dir
         self.core = core
@@ -482,8 +477,6 @@ class BaselineOp(object):
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
         self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
-        
-        self.station = STATION
         
     def _plot_baselines(self, time_tag, freq, dist, baselines, valid):
         # Plotting setup
@@ -587,7 +580,7 @@ class BaselineOp(object):
                 dist = np.load(distname)
             except IOError:
                 print('dist cache failed')
-                uvw = uvutils.compute_uvw(ANTENNAS[0::2], HA=0, dec=self.station.lat*180/np.pi,
+                uvw = uvutils.compute_uvw(self.station.antennas[0::2], HA=0, dec=self.station.lat*180/np.pi,
                                             freq=freq[0], site=self.station.get_observer(), include_auto=True)
                 print('uvw.shape', uvw.shape)
                 dist = np.sqrt(uvw[:,0,0]**2 + uvw[:,1,0]**2)
@@ -638,10 +631,11 @@ class BaselineOp(object):
         self.log.info("BaselineOp - Done")
 
 class MatrixOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, station, base_dir=os.getcwd(), core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
+        self.station = station
         self.output_dir = os.path.join(base_dir, 'matrices')
         self.core = core
         self.gpu = gpu
@@ -658,8 +652,6 @@ class MatrixOp(object):
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
         self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
-        
-        self.station = STATION
         
     def main(self):
         cpu_affinity.set_core(self.core)
@@ -1001,10 +993,11 @@ class SubbandSplitterOp(object):
                     
         
 class ImagingOp(object):
-    def __init__(self, log, iring, oring, label='', config=None, decimation=1, core=-1, gpu=-1):
+    def __init__(self, log, iring, oring, station, label='', config=None, decimation=1, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.oring = oring
+        self.station = copy.deepcopy(station)
         self.label = label
         self.config = config
         self.decimation = decimation
@@ -1020,8 +1013,6 @@ class ImagingOp(object):
         
         self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
         self.out_proclog.update({'nring':1, 'ring0':self.oring.name})
-        
-        self.station = copy.deepcopy(STATION)
         
         self.phase_center_ha = 0.0                  # radians
         self.phase_center_dec = self.station.lat    # radians
@@ -1134,7 +1125,7 @@ class ImagingOp(object):
                 except IOError:
                     print('uvw cache failed')
                     uvw = np.zeros((3,nchan,nstand,nstand,1,1), dtype=np.float32)
-                    uvwT = uvutils.compute_uvw(ANTENNAS[0::2], HA=self.phase_center_ha*12/np.pi, dec=self.phase_center_dec*180/np.pi,
+                    uvwT = uvutils.compute_uvw(self.station.antennas[0::2], HA=self.phase_center_ha*12/np.pi, dec=self.phase_center_dec*180/np.pi,
                                               freq=freq, site=self.station.get_observer(), include_auto=True).transpose(1,2,0)
                     uvwT.shape += (1,1)
                     k = 0
@@ -1160,33 +1151,33 @@ class ImagingOp(object):
                     k = 0
                     for i in range(nstand):
                         ## X
-                        a = ANTENNAS[2*i + 0]
+                        a = self.station.antennas[2*i + 0]
                         delayX0 = a.cable.delay(freq) - np.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
                         gainX0 = a.cable.gain(freq)
                         cgainX0 = np.exp(2j*np.pi*freq*delayX0) / np.sqrt(gainX0)
                         ## Y
-                        a = ANTENNAS[2*i + 1]
+                        a = self.station.antennas[2*i + 1]
                         delayY0 = a.cable.delay(freq) - np.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
                         gainY0 = a.cable.gain(freq)
                         cgainY0 = np.exp(2j*np.pi*freq*delayY0) / np.sqrt(gainY0)
                         ## Goodness check
-                        if ANTENNAS[2*i + 0].combined_status != 33 or ANTENNAS[2*i + 1].combined_status != 33:
+                        if self.station.antennas[2*i + 0].combined_status != 33 or self.station.antennas[2*i + 1].combined_status != 33:
                             cgainX0 *= 0.0
                             cgainY0 *= 0.0
                             
                         for j in range(i, nstand):
                             ## X
-                            a = ANTENNAS[2*j + 0]
+                            a = self.station.antennas[2*j + 0]
                             delayX1 = a.cable.delay(freq) - np.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
                             gainX1 = a.cable.gain(freq)
                             cgainX1 = np.exp(2j*np.pi*freq*delayX1) / np.sqrt(gainX1)
                             ## Y
-                            a = ANTENNAS[2*j + 1]
+                            a = self.station.antennas[2*j + 1]
                             delayY1 = a.cable.delay(freq) - np.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
                             gainY1 = a.cable.gain(freq)
                             cgainY1 = np.exp(2j*np.pi*freq*delayY1) / np.sqrt(gainY1)
                             ## Goodness check
-                            if ANTENNAS[2*j + 0].combined_status != 33 or ANTENNAS[2*j + 1].combined_status != 33:
+                            if self.station.antennas[2*j + 0].combined_status != 33 or self.station.antennas[2*j + 1].combined_status != 33:
                                 cgainX1 *= 0.0
                                 cgainY1 *= 0.0
                                 
@@ -1209,9 +1200,9 @@ class ImagingOp(object):
                 weights = np.ones((nchan,nstand,nstand,npol,npol), dtype=np.complex64)
                 for i in range(nstand):
                     # Mask out bad antennas
-                    if ANTENNAS[2*i+0].combined_status != 33 or ANTENNAS[2*i+1].combined_status != 33:
+                    if self.station.antennas[2*i+0].combined_status != 33 or self.station.antennas[2*i+1].combined_status != 33:
                         weights[:,i,:,:,:] = 0.0
-                    if ANTENNAS[2*i+0].combined_status != 33 or ANTENNAS[2*i+1].combined_status != 33:
+                    if self.station.antennas[2*i+0].combined_status != 33 or self.station.antennas[2*i+1].combined_status != 33:
                         weights[:,:,i,:,:] = 0.0
                         
                     for j in range(nstand):
@@ -1296,7 +1287,7 @@ class ImagingOp(object):
                                 except NameError:
                                     bfdg = Gridder()
                                     bfdg.init(self.guvws, self.gwgts, self.gkernel, 
-                                            grid_size, grid_res, W_STEP, SUPPORT_OVERSAMPLE, 
+                                            grid_size, grid_res, self.config['w_step'], SUPPORT_OVERSAMPLE, 
                                             polmajor=False)
                                     #bfdg.set_stream(stream)
                                     bfdg.execute(self.sdata, self.grid, weighting=weighting)
@@ -1328,10 +1319,11 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1e6, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, station, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1e6, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
+        self.station = copy.deepcopy(station)
         self.label = label
         self.output_dir_images = os.path.join(base_dir, 'images')
         self.output_dir_archive = os.path.join(base_dir, 'archive')
@@ -1364,8 +1356,6 @@ class WriterOp(object):
         self.in_proclog.update({'nring':2,
                                 'ring0':self.iring.name,
                                 'ring1':self.mring.name})
-        
-        self.station = copy.deepcopy(STATION)
         
     def _save_image(self, station, time_tag, hdr, freq, data, mask=None, weighting='natural'):
         # Get the fill level as a fraction
@@ -1709,9 +1699,10 @@ class WriterOp(object):
 
 
 class UploaderOp(object):
-    def __init__(self, log, uploader_dir=None, core=-1, gpu=-1):
+    def __init__(self, log, uploader_dir=None, lwatv_channel='', core=-1, gpu=-1):
         self.log = log
         self.uploader_dir = uploader_dir
+        self.lwatv_channel = lwatv_channel
         self.core = core
         self.gpu = gpu
         
@@ -1743,12 +1734,12 @@ class UploaderOp(object):
             prev_time = curr_time
             
             ## Upload and make active
-            if self.uploader_dir is not None:
+            if self.uploader_dir is not None and self.lwatv_channel != '':
                 if os.listdir(self.uploader_dir):
                     try:
                         ## Upload and stage
                         p = subprocess.Popen(['timeout', '2', 'rsync', '-e', 'ssh', '-a', self.uploader_dir+os.path.sep,
-                                              'mcsdr@lwalab.phys.unm.edu:/var/www/lwatv4/'],
+                                              f"mcsdr@lwalab.phys.unm.edu:/var/www{self.lwatv_channel}/"],
                                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                         _, error = p.communicate()
                         if p.returncode != 0:
@@ -1769,8 +1760,9 @@ class UploaderOp(object):
 
 
 class AnalogSettingsOp(object):
-    def __init__(self, log, core=-1, gpu=-1):
+    def __init__(self, log, station_name, core=-1, gpu=-1):
         self.log = log
+        self.name = station_name
         self.core = core
         self.gpu = gpu
         
@@ -1808,7 +1800,7 @@ class AnalogSettingsOp(object):
                           'asp_atten_s': -1}
             
             try:
-                with urlopen('https://lwalab.phys.unm.edu/OpScreen/lwana/arx.json', timeout=5) as uh:
+                with urlopen(f"https://lwalab.phys.unm.edu/OpScreen/{self.station_name}/arx.json", timeout=5) as uh:
                     config = json.load(uh)
                     
                 for entry in config:
@@ -1871,12 +1863,15 @@ def main(args):
         log.info("  %s: %s", arg, getattr(args, arg))
         
     # Read in the configuration file (if provided)
-    orville_config = {'diameter':        100, # m
+    orville_config = {'name':            'lwa1',
+                      'diameter':        100, # m
                       'min_grid_size':   128,
-                      'phase_center':    ["00:00:00.000", str(STATION.lat)], # HA (hours str), dec (deg str)
+                      'w_step':          0.3,
+                      'phase_center':    ["00:00:00.000", str(lwa1.lat)], # HA (hours str), dec (deg str)
                       'nsub':            1,
                       'max_packet_size': 9000, # B
-                      'buffer_factor':   6}
+                      'buffer_factor':   6,
+                      'lwatv_channel':   ''}
     if args.configfile is not None:
         with open(args.configfile, 'r') as fh:
             config = json.loads(json_minify.json_minify(fh.read()))
@@ -1935,7 +1930,15 @@ def main(args):
         
     # Setup the processing blocks
     ## A reader
-    nBL = len(ANTENNAS)//2*(len(ANTENNAS)//2+1)//2
+    if orville_config['name'] == 'lwa1':
+        station = lwa1
+    elif orville_config['name'] == 'lwasv':
+        station = lwasv
+    elif orville_config['name'] == 'lwana':
+        station = lwana
+    else:
+        raise RuntimeError(f"Unknown station '{orville_config['name']}'")
+    nBL = len(station.antennas)//2*(len(station.antennas)//2+1)//2
     iaddr = Address(args.address, args.port)
     isock = UDPSocket()
     isock.bind(iaddr)
@@ -1948,14 +1951,14 @@ def main(args):
     ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring,
                          core=cores.pop(0)))
     ## The correlation matrix
-    ops.append(MatrixOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
+    ops.append(MatrixOp(log, capture_ring, rfimask_ring, station, base_dir=args.output_dir,
                         core=cores.pop(0), gpu=gpus.pop(0)))
     ## The spectra plotter
-    ops.append(SpectraOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
+    ops.append(SpectraOp(log, capture_ring, rfimask_ring, station, base_dir=args.output_dir,
                          uploader_dir=uploader_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The radial (u,v) plotter
-    ops.append(BaselineOp(log, capture_ring, base_dir=args.output_dir,
+    ops.append(BaselineOp(log, capture_ring, station, base_dir=args.output_dir,
                           uploader_dir=uploader_dir,
                           core=cores.pop(0), gpu=gpus.pop(0)))
     ## The subband splitters
@@ -1965,18 +1968,19 @@ def main(args):
                                  label='Mask', core=cores.pop(0)))
     for i in range(orville_config['nsub']):
         ## The subband imager
-        ops.append(ImagingOp(log, sub_capture_rings[i], writer_rings[i],
+        ops.append(ImagingOp(log, sub_capture_rings[i], writer_rings[i], station,
                              decimation=args.decimation, config=orville_config,
                              label=str(i), core=cores.pop(0), gpu=gpus.pop(0)))
         ## The subband image writer and plotter for LWA TV
-        ops.append(WriterOp(log, writer_rings[i], sub_rfimask_rings[i], base_dir=args.output_dir,
+        ops.append(WriterOp(log, writer_rings[i], sub_rfimask_rings[i], station, base_dir=args.output_dir,
                              uploader_dir=uploader_dir, lwatv_freq=args.lwatv_freq,
                              label=str(i), core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
     ops.append(UploaderOp(log, uploader_dir=uploader_dir,
+                          lwatv_channel=orville_config['lwatv_channel'],
                           core=cores.pop(0), gpu=gpus.pop(0)))
     ## The ASP settings getter
-    ops.append(AnalogSettingsOp(log,
+    ops.append(AnalogSettingsOp(log, orville_config['name'],
                                 core=cores.pop(0), gpu=gpus.pop(0)))
     
     # Launch everything and wait

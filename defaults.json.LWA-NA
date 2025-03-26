@@ -1,9 +1,15 @@
 {
+  /* Station name */
+  "name": "lwana",
+  
   /* Station diameter in m */
   "diameter": 50,
   
   /* Minimum image grid size in pixels */
   "min_grid_size": 64,
+  
+  /* Step size in w */
+  "w_step": 0.3,
   
   /* Phase center to minimize the w term (HA in hours; dec in deg) */
   "phase_center": ["-0:00:43.72", "34:00:43.8"],
@@ -15,5 +21,8 @@
   "max_packet_size": 6500,
   
   /* Ring buffer factor (should be related to the number of DRX pipelines) */
-  "buffer_factor": 4
+  "buffer_factor": 4,
+  
+  /* LWATV channel */
+  "lwatv_channel": "lwatv4"
 }

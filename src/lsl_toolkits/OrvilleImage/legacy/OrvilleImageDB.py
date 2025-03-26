@@ -1,0 +1,727 @@
+import os
+import numpy as np
+import ctypes
+import struct
+import shutil
+import tempfile
+
+from typing import Dict, Any, Optional, List, Tuple, Union
+
+from ..OrvilleImageHDF5 import HeaderContainer
+
+
+class PrintableLittleEndianStructure(ctypes.LittleEndianStructure):
+    """
+    Sub-class of ctypes.LittleEndianStructure that adds a as_dict()
+    method for accessing all of the fields as a dictionary.
+    """
+    
+    def as_dict(self) -> Dict[str, Any]:
+        """
+        Return all of the structure fields as a dictionary.
+        """
+        
+        out = {}
+        for field in self._fields_:
+            out[field[0]] = getattr(self, field[0], None)
+        return out
+        
+    def __repr__(self):
+        return repr(self.as_dict())
+
+
+class OrvilleImageDB(object):
+    """
+    Encapsulates a OrvilleImageDB binary file.
+    
+    This class can be used for both reading and writing OrvilleImageDB files.
+    For reading, initialize with mode = "r" and use the read_image() function.  
+    For writing, use mode = "a" or "w" and the add_image() function.  Be sure 
+    to always call the close() method after adding images in order to update 
+    the file's header information.
+    
+    Public module variables:
+      header -- a class with member variables describing the data, including:
+        imager_version, imager version used to create the images
+        station, the station name
+        stokes_params, the comma-delimited parameters (e.g., 'I,Q,U,V')
+        ngrid, the dimensions of the image in pixels
+        pixel_size, the physical size of a pixel, in degrees
+        nchan, the number of channels for each image
+        flags, a bitfield: 0x1 = sorted; others zero
+        start_time, the earliest time of data covered by this file, in MJD UTC
+        stop_time, the latest time of data, in MJD UTC
+    """
+    
+    # The OrvilleImageDB files start with a 24 byte string that specifies the
+    # data file's format version.  Following it is that format's header block,
+    # defined by the _FileHeader structure.  After the header are the 
+    # integration blocks.  An integration block starts with a header, defined
+    # by the _EntryHeader structure.  Following that are the images, packed as 
+    # [chan, stokes, x, y] and float32s.  The alignment of the images is little 
+    # endian.
+    #
+    # All absolute times are in MJD UTC, LSTs are in days (i.e., from 0 to
+    # 0.99726957), and integration lengths are in days.  Sky directions
+    # (including RA) and pixel sizes are in degrees.  All other entries are in
+    # standard mks units.
+    
+    _FORMAT_VERSION = 'OrvilleImageDBv005'
+    
+    class _FileHeader_v1(PrintableLittleEndianStructure):
+        _pack_   = 1
+        _fields_ = [('imager_version', ctypes.c_char*24),
+                    ('station',        ctypes.c_char*24),
+                    ('stokes_params',  ctypes.c_char*24),
+                    ('ngrid',          ctypes.c_int),
+                    ('pixel_size',     ctypes.c_double),
+                    ('nchan',          ctypes.c_int),
+                    ('flags',          ctypes.c_uint),
+                    ('start_time',     ctypes.c_double),
+                    ('stop_time',      ctypes.c_double)]
+    _FileHeader_v2 = _FileHeader_v1
+    _FileHeader_v3 = _FileHeader_v2
+    _FileHeader_v4 = _FileHeader_v3
+    _FileHeader_v5 = _FileHeader_v4
+    
+    FLAG_SORTED = 0x0001
+    
+    class _EntryHeader_v1(PrintableLittleEndianStructure):
+        _pack_   = 1
+        _fields_ = [('sync_word',  ctypes.c_uint),
+                    ('start_time', ctypes.c_double),
+                    ('int_len',    ctypes.c_double),
+                    ('lst',        ctypes.c_double),
+                    ('start_freq', ctypes.c_double),
+                    ('stop_freq',  ctypes.c_double),
+                    ('bandwidth',  ctypes.c_double),
+                    ('center_ra',  ctypes.c_double),
+                    ('center_dec', ctypes.c_double)]
+    class _EntryHeader_v2(PrintableLittleEndianStructure):
+        _pack_   = 1
+        _fields_ = [('sync_word',  ctypes.c_uint),
+                    ('start_time', ctypes.c_double),
+                    ('int_len',    ctypes.c_double),
+                    ('fill',       ctypes.c_double),
+                    ('lst',        ctypes.c_double),
+                    ('start_freq', ctypes.c_double),
+                    ('stop_freq',  ctypes.c_double),
+                    ('bandwidth',  ctypes.c_double),
+                    ('center_ra',  ctypes.c_double),
+                    ('center_dec', ctypes.c_double),
+                    ('center_az',  ctypes.c_double),
+                    ('center_alt', ctypes.c_double)]
+    _EntryHeader_v3 = _EntryHeader_v2
+    class _EntryHeader_v4(PrintableLittleEndianStructure):
+        _pack_   = 1
+        _fields_ = [('sync_word',   ctypes.c_uint),
+                    ('start_time',  ctypes.c_double),
+                    ('int_len',     ctypes.c_double),
+                    ('fill',        ctypes.c_double),
+                    ('lst',         ctypes.c_double),
+                    ('start_freq',  ctypes.c_double),
+                    ('stop_freq',   ctypes.c_double),
+                    ('bandwidth',   ctypes.c_double),
+                    ('center_ra',   ctypes.c_double),
+                    ('center_dec',  ctypes.c_double),
+                    ('center_az',   ctypes.c_double),
+                    ('center_alt',  ctypes.c_double),
+                    ('asp_filter',  ctypes.c_int),
+                    ('asp_atten_1', ctypes.c_int),
+                    ('asp_atten_2', ctypes.c_int),
+                    ('asp_atten_s', ctypes.c_int)]
+    class _EntryHeader_v5(PrintableLittleEndianStructure):
+        _pack_   = 1
+        _fields_ = [('sync_word',   ctypes.c_uint),
+                    ('start_time',  ctypes.c_double),
+                    ('int_len',     ctypes.c_double),
+                    ('fill',        ctypes.c_double),
+                    ('lst',         ctypes.c_double),
+                    ('start_freq',  ctypes.c_double),
+                    ('stop_freq',   ctypes.c_double),
+                    ('bandwidth',   ctypes.c_double),
+                    ('weighting',   ctypes.c_char*24),
+                    ('center_ra',   ctypes.c_double),
+                    ('center_dec',  ctypes.c_double),
+                    ('center_az',   ctypes.c_double),
+                    ('center_alt',  ctypes.c_double),
+                    ('asp_filter',  ctypes.c_int),
+                    ('asp_atten_1', ctypes.c_int),
+                    ('asp_atten_2', ctypes.c_int),
+                    ('asp_atten_s', ctypes.c_int)]
+    
+    _TIME_OFFSET_v1 = 4
+    _TIME_OFFSET_v2 = _TIME_OFFSET_v1
+    _TIME_OFFSET_v3 = _TIME_OFFSET_v2
+    _TIME_OFFSET_v4 = _TIME_OFFSET_v3
+    _TIME_OFFSET_v5 = _TIME_OFFSET_v4
+    
+    def __init__(self, filename: str, mode: str='r', imager_version: str='', station: str=''):
+        """
+        Constructs a new OrvilleImageDB.
+        
+        Optional arguments specify the file mode (must be 'r', 'w', or, 'a';
+        defaults to 'r') and strings providing the imager version and the 
+        station name, all of which are truncated at 24 bytes.  These optional 
+        strings are only relevant when opening a file for writing.
+        """
+        
+        self.name = ''
+        self.file = None
+        self.curr_int = -1
+        
+        self._FileHeader = self._FileHeader_v5
+        self._EntryHeader = self._EntryHeader_v5
+        self._TIME_OFFSET = self._TIME_OFFSET_v5
+        
+        # 'station' is a required keyword
+        if mode[0] == 'w' and (station == '' or station == b''):
+            raise RuntimeError("'station' is a required keyword for 'mode=w'")
+            
+        # For read mode, we do not create a new file.  Raise an error if it
+        # does not exist, and create an empty OrvilleImageDB object if its length
+        # is zero.
+        if mode == 'r':
+            self._is_new = False
+            if not os.path.isfile(filename):
+                raise OSError('The specified file, "%s", does not exist.' % filename)
+            fileSize = os.path.getsize(filename)
+            if fileSize == 0:
+                self.version = self._FORMAT_VERSION
+                self._header = self._FileHeader()
+                self.curr_int = 0
+                self.nint = 0
+                self.nstokes = 0
+                return
+                
+        # For append mode, check if the file exists and is at least longer
+        # than the initial 24 byte version string.  If that's the case, switch
+        # to 'r+' mode, since we may need to read and/or write to the header,
+        # and some Unix implementations don't allow this with 'a' mode.
+        # Otherwise, switch to write mode.
+        elif mode == 'a':
+            raise RuntimeError("Writing to the legacy OrvilleImageDB format is no longer supported")
+            
+            fileSize = os.path.getsize(filename) if os.path.isfile(filename) else 0
+            self._is_new = (fileSize <= 24)
+            mode = 'w' if self._is_new else 'r+'
+            
+        # Write mode: pretty straightforward.
+        elif mode == 'w':
+            raise RuntimeError("Writing to the legacy OrvilleImageDB format is no longer supported")
+            
+            self._is_new = True
+            
+        else:
+            raise ValueError("Mode must be 'r', 'w', or 'a'.")
+            
+        # Now read or create the file header.
+        mode += 'b'
+        self.name = filename
+        self.file = open(filename, mode)
+        self._is_outdated = False
+        
+        if not self._is_new:
+            self.version = self.file.read(24).rstrip(b'\x00')
+            try:
+                self.version = self.version.decode()
+            except AttributeError:
+                pass
+            if self.version != self._FORMAT_VERSION:
+                if self.version == 'OrvilleImageDBv001':
+                    self._FileHeader = self._FileHeader_v1
+                    self._EntryHeader = self._EntryHeader_v1
+                    self._TIME_OFFSET = self._TIME_OFFSET_v1
+                elif self.version == 'OrvilleImageDBv002':
+                    self._FileHeader = self._FileHeader_v2
+                    self._EntryHeader = self._EntryHeader_v2
+                    self._TIME_OFFSET = self._TIME_OFFSET_v2
+                elif self.version == 'OrvilleImageDBv003':
+                    self._FileHeader = self._FileHeader_v3
+                    self._EntryHeader = self._EntryHeader_v3
+                    self._TIME_OFFSET = self._TIME_OFFSET_v3
+                elif self.version == 'OrvilleImageDBv004':
+                    self._FileHeader = self._FileHeader_v4
+                    self._EntryHeader = self._EntryHeader_v4
+                    self._TIME_OFFSET = self._TIME_OFFSET_v4
+                else:
+                    raise KeyError('The file "%s" does not appear to be a '
+                                   'OrvilleImageDB file.  Initial string: "%s"' %
+                                   (filename, self.version))
+            
+            file_header = self._FileHeader()
+            
+            if mode != 'r' and fileSize <= 24 + ctypes.sizeof(file_header):
+                # If the file is too short to have any data in it, close it
+                # and start a new one.  This one is probably corrupt.
+                self.file.close()
+                self._is_new = True
+                mode = 'w'
+                self.file = open(filename, mode)
+            
+            else:
+                # It looks like we should have a good header, at least ....
+                self._header = self._FileHeader()
+                self.file.readinto(self._header)
+                self.nstokes = len(self._header.stokes_params.split(b','))
+                
+                entry_header = self._EntryHeader()
+                int_size = ctypes.sizeof(entry_header) \
+                          + 4*self._header.nchan*(0 + self.nstokes*self._header.ngrid**2)
+                if self.version in ('OrvilleImageDBv003', 'OrvilleImageDBv004', 'OrvilleImageDBv005'):
+                    int_size += 1*self._header.nchan
+                if (fileSize - 24 - ctypes.sizeof(self._header)) % int_size != 0:
+                    raise RuntimeError('The file "%s" appears to be '
+                                       'corrupted.' % filename)
+                self.nint = \
+                    (fileSize - 24 - ctypes.sizeof(self._header)) // int_size
+                
+                if mode == 'r+b':
+                    self.file.seek(0, os.SEEK_END)
+                    self.curr_int = self.nint
+                else:
+                    self.curr_int = 0
+                    
+        if self._is_new:
+            # Start preparing a file header, but don't write it until we
+            # receive the first image, which will fill in some information
+            # (e.g., resolution) that isn't yet available.
+            self.version = self._FORMAT_VERSION
+            self._header = self._FileHeader()
+            try:
+                self._header.imager_version = imager_version.encode()
+            except AttributeError:
+                self._header.imager_version = imager_version
+            try:
+                self._header.station = station.encode()
+            except AttributeError:
+                self._header.station = station
+            self._header.flags = self.FLAG_SORTED     # Sorted until it's not
+            self.nint = 0
+            
+        self.include_mask = (self.version in ('OrvilleImageDBv003', 'OrvilleImageDBv004', 'OrvilleImageDBv005'))
+        
+    def __del__(self):
+        if self.file is not None and not self.file.closed:
+            self.close()
+            
+    @property
+    def file_type(self) -> str:
+        """
+        Type of Orville image file.
+        """
+        
+        return type(self).__name__
+        
+    @property
+    def header(self) -> HeaderContainer[str, Any]:
+        """
+        The file header as a dictionary.
+        """
+        
+        hdr = HeaderContainer(self._header.as_dict())
+        for k in hdr:
+            if isinstance(hdr[k], bytes):
+                hdr[k] = hdr[k].decode()
+        return hdr
+        
+    def close(self):
+        """
+        Closes the database file.  If the header information is outdated, it
+        writes the new file header.
+        """
+        
+        if self.file is None or self.file.closed:  return
+        
+        if self._is_outdated:
+            self.file.seek(24, os.SEEK_SET)
+            self.file.write(self._header)
+            
+        self.file.close()
+        self.curr_int = -1
+        
+    def closed(self) -> bool:
+        return self.file is None or self.file.closed
+        
+    def getpos(self) -> int:
+        return self.curr_int
+        
+    def eof(self) -> bool:
+        return self.curr_int >= self.nint
+        
+    def seek(self, index: int):
+        if index < 0:
+            index += self.nint
+        if index < 0 or index >= self.nint:
+            raise IndexError('OrvilleImageDB index %d outside of range [0, %d)' %
+                             (index, self.nint))
+        if self.curr_int != index:
+            entry_header = self._EntryHeader()
+            int_size = ctypes.sizeof(entry_header) \
+                       + 4*self._header.nchan*(0 + self.nstokes*self._header.ngrid**2)
+            if self.include_mask:
+                int_size += 1*self._header.nchan
+            file_header = self._FileHeader()
+            headerSize = 24 + ctypes.sizeof(file_header)
+            self.file.seek(headerSize + int_size * index, os.SEEK_SET)
+            self.curr_int = index
+            
+    def _check_header(self, stokes_params: str, ngrid: int, pixel_size: int, nchan: int):
+        """
+        For new files, adds the given information to the file header and
+        writes the header to disk.  For existing files, compares the given
+        information to the expected values and raises a ValueError if there's
+        a mismatch.
+        """
+        
+        if type(stokes_params) is list:
+            stokes_params = ','.join(stokes_params)
+        try:
+            stokes_params = stokes_params.encode()
+        except AttributeError:
+            pass
+            
+        if self._is_new:
+            # If this is the file's first image, fill in values of the file
+            # header based on the image properties, then write the header.
+            self._header.stokes_params = stokes_params
+            self._header.ngrid         = ngrid
+            self._header.pixel_size    = pixel_size
+            self._header.nchan         = nchan
+            try:
+                self.file.write(struct.pack('<24s', self.version.encode()))
+            except AttributeError:
+                self.file.write(struct.pack('<24s', self.version))
+            self.file.write(self._header)
+            self.nstokes = len(self._header.stokes_params.split(b','))
+            self._is_new = False
+            
+        else:
+            # Make sure that the Stokes parameters match expectations.
+            if stokes_params != self._header.stokes_params:
+                raise ValueError(
+                    'The Stokes parameters for this image (%s) do not match '
+                    'this file\'s parameters (%s).' %
+                    (stokes_params, self._header.stokes_params))
+                
+            # Make sure that the dimensions of the data match expectations.
+            if ngrid != self._header.ngrid:
+                raise ValueError(
+                    'The spatial resolution of this image (%d x %d) does not '
+                     'match this file\'s resolution (%d x %d).' %
+                    (ngrid, ngrid, self._header.ngrid, self._header.ngrid))
+                
+            if pixel_size != self._header.pixel_size:
+                raise ValueError(
+                    'The pixel size of this image (%r deg x %r deg) does not '
+                     'match this file\'s resolution (%r deg x %r deg).' %
+                    (pixel_size, pixel_size,
+                     self._header.pixel_size, self._header.pixel_size))
+                
+            # Make sure that the size of the images matches expectations.
+            if nchan != self._header.nchan:
+                raise ValueError(
+                    'The channel count for this image (%d) does not '
+                    'match this file\'s channel count (%d).'
+                    % (nchan, self._header.nchan))
+                
+    def _update_file_header(self, interval: List[float]):
+        """
+        To be called at the end of the add_image functions.  Updates the header
+        information to reflect the new data.
+        """
+        
+        self.nint += 1
+        
+        # Has this image expanded the time range covered by the file?
+        if self._header.start_time == 0 or \
+           self._header.start_time > interval[0]:
+            self._header.start_time = interval[0]
+            self._is_outdated = True
+            
+        if self._header.stop_time < interval[1]:
+            self._header.stop_time = interval[1]
+            self._is_outdated = True
+            
+        # If the new image isn't later than all the others, and the file is
+        # currently marked as sorted, then remove the sorted flag.
+        elif self._header.flags & self.FLAG_SORTED:
+            self._header.flags &= ~self.FLAG_SORTED
+            self._is_outdated = True
+            
+    def add_image(self, info: Dict[str, Any], data: np.ndarray, mask: Optional[np.ndarray]=None):
+        """
+        Adds an integration to the database.  Returns the index of the newly
+        added image.
+        
+        Arguments:
+        info -- a dictionary with the following keys defined:
+            start_time -- MJD UTC at which this integration began
+            int_len -- integration length, in days
+            fill -- packet fill fraction
+            lst -- mean local sidereal time of the observation, in days
+            start_freq -- frequency of first channel in the integration, in Hz
+            stop_freq -- frequency of last channel in the integration, in Hz
+            bandwidth -- bandwidth of each channel in the integrated data, in Hz
+            weighting -- string indicating the weighting used during imaging
+            center_ra -- RA of the image phase center, in degrees
+            center_dec -- Declination of image phase center, in degrees
+            center_az -- azimuth of the image phase center, in degrees
+            center_alt -- altitude of image phase center, in degrees
+            asp_filter -- (optional) ASP filter code (0=split, 1=full, ...)
+            asp_atten_1 -- (optional) ASP first attenuator setting
+            asp_atten_2 -- (optional) ASP second attenuator setting
+            asp_atten_s -- (optional) ASP split attenuator setting
+            pixel_size -- Real-world size of a pixel, in degrees
+            stokes_params -- a list or comma-delimited string of Stokes params
+        data -- a 4D float array of image data indexed as [chan, stokes, x, y]
+        mask -- (optional) a 1D uint8 of frequency masking flags as [chan,]
+        """
+        
+        assert(data.shape[2] == data.shape[3])
+        if isinstance(data, np.ma.MaskedArray):
+            if self.include_mask:
+                if mask is None:
+                    mask = data.mask[:,0,0,0]
+                assert(mask.size == data.shape[0])
+            data = data.data
+        else:
+            if self.include_mask:
+                if mask is None:
+                    mask = np.zeros(data.shape[0], dtype=np.uint8)
+                assert(mask.size == data.shape[0])
+        self._check_header(info['stokes_params'], data.shape[2], 
+                           info['pixel_size'], data.shape[0])
+        
+        # Write it out.
+        entry_header = self._EntryHeader()
+        entry_header.sync_word = 0xC0DECAFE
+        for key in ('start_time', 'int_len', 'fill', 'lst', 'start_freq', 'stop_freq',
+                    'bandwidth', 'weighting', 'center_ra', 'center_dec', 'center_az', 'center_alt',
+                    'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s'):
+            if key in ('weighting', 'fill', 'center_az', 'center_alt') and self.version != self._FORMAT_VERSION:
+                continue
+            if key == 'weighting':
+                if self.version != self._FORMAT_VERSION:
+                    continue
+                elif key not in info:
+                    info[key] = b'natural'
+                else:
+                    try:
+                        info[key] = info[key].encode()
+                    except AttributeError:
+                        # Already bytes
+                        pass
+            elif key.startswith('asp_'):
+                if self.version != self._FORMAT_VERSION:
+                    continue
+                elif key not in info:
+                    info[key] = -1
+            setattr(entry_header, key, info[key])
+        self.file.write(entry_header)
+        data.astype('<f4').tofile(self.file)
+        self.file.flush()
+        if self.include_mask:
+            mask.astype('u1').tofile(self.file)
+            self.file.flush()
+            
+        interval = [info['start_time'], info['start_time'] + info['int_len']]
+        self._update_file_header(interval)
+        return self.nint - 1
+        
+    def read_image(self) -> Tuple[HeaderContainer[str, Any], np.ndarray]:
+        """
+        Reads an integration from the database.
+        
+        Returns a 2-tuple containing:
+        info -- a dictionary with the following keys defined:
+            start_time -- MJD UTC at which this integration began
+            int_len -- integration length, in days
+            fill -- packet fill fraction, if available
+            lst -- mean local sidereal time of the observation, in days
+            start_freq -- frequency of first channel in the integration, in Hz
+            stop_freq -- frequency of last channel in the integration, in Hz
+            bandwidth -- bandwidth of each channel in the integrated data, in Hz
+            weighting - image weighting used
+            center_ra -- RA of the image phase center, in degrees
+            center_dec -- Declination of image phase center, in degrees
+            center_az -- azimuth of the image phase center, in degrees
+            center_alt -- altitude of image phase center, in degrees
+            asp_filter -- ASP filter code (0=split, 1=full, ...)
+            asp_atten_1 -- ASP first attenuator setting
+            asp_atten_2 -- ASP second attenuator setting
+            asp_atten_s -- ASP split attenuator setting
+            station -- Name of the LWA station where the data are from
+            ngrid --  x/y size of the image in pixels
+            pixel_size -- Real-world size of a pixel, in degrees
+            stokes_params -- a list or comma-delimited string of Stokes params
+        data -- a 4D float array of image data indexed as [chan, stokes, x, y]
+        """
+        
+        if self.curr_int >= self.nint:
+            raise IOError("end of file reached")
+            
+        entry_header = self._EntryHeader()
+        self.file.readinto(entry_header)
+        if entry_header.sync_word != 0xC0DECAFE:
+            raise RuntimeError("Database corrupted")
+        info = HeaderContainer()
+        for key in ('station', 'stokes_params', 'ngrid', 'pixel_size'):
+            info[key] = getattr(self._header, key, None)
+        info['time_format'] = 'mjd'
+        info['time_scale'] = 'utc'
+        for key in ('start_time', 'int_len', 'fill', 'lst', 'start_freq', 'stop_freq',
+                    'bandwidth', 'weighting', 'center_ra', 'center_dec', 'center_az', 'center_alt',
+                    'asp_filter', 'asp_atten_1', 'asp_atten_2', 'asp_atten_s'):
+            info[key] = getattr(entry_header, key, None)
+            if key == 'weighting' and info[key] is None:
+                    info[key] = b'natural'
+            elif key.startswith('asp_') and info[key] is None:
+                info[key] = -1
+                
+        for key in info:
+            if isinstance(info[key], bytes):
+                info[key] = info[key].decode()
+                
+        nchan, nstokes, ngrid = self._header.nchan, self.nstokes, self._header.ngrid
+        data = np.fromfile(self.file, '<f4', nchan*nstokes*ngrid*ngrid)
+        data = data.reshape(nchan, nstokes, ngrid, ngrid)
+        if self.include_mask:
+            mask = np.fromfile(self.file, 'u1', nchan)
+            reshaped_mask = np.full(data.shape, False, dtype=bool) # Create Bool array filled with False values
+            reshaped_mask[np.argwhere(mask),...] = True # Propagate True across rows of flagged channels
+            data = np.ma.masked_array(data, reshaped_mask, dtype=data.dtype) # Create masked array
+            
+        self.curr_int += 1
+        return info, data
+        
+    def read_all(self) -> Tuple[List[HeaderContainer[str, Any]], np.ndarray]:
+        """
+        Reads all integrations from the database.
+        
+        Returns a 2-tuple containing:
+        hdr_list -- a list of dictionaries with the following keys defined:
+            start_time -- MJD UTC at which this integration began
+            int_len -- integration length, in days
+            fill -- packet fill fraction, if available
+            lst -- mean local sidereal time of the observation, in days
+            start_freq -- frequency of first channel in the integration, in Hz
+            stop_freq -- frequency of last channel in the integration, in Hz
+            bandwidth -- bandwidth of each channel in the integrated data, in Hz
+            weighting - image weighting used
+            center_ra -- RA of the image phase center, in degrees
+            center_dec -- Declination of image phase center, in degrees
+            center_az -- azimuth of the image phase center, in degrees
+            center_alt -- altitude of image phase center, in degrees
+            asp_filter -- ASP filter code (0=split, 1=full, ...)
+            asp_atten_1 -- ASP first attenuator setting
+            asp_atten_2 -- ASP second attenuator setting
+            asp_atten_s -- ASP split attenuator setting
+            station -- Name of the LWA station where the data are from
+            ngrid --  x/y size of the image in pixels
+            pixel_size -- Real-world size of a pixel, in degrees
+            stokes_params -- a list or comma-delimited string of Stokes params
+        data_all -- a 5D masked float32 array of image data indexed as 
+            [integration, chan, stokes, x, y]
+        """
+        
+        self.seek(0)
+        nchan, nstokes, ngrid = self._header.nchan, self.nstokes, self._header.ngrid
+        data_all = np.ma.zeros((self.nint, nchan, nstokes, ngrid, ngrid), dtype=np.float32)
+        hdr_list = []
+        while self.curr_int < self.nint:
+            hdr, data = self.read_image()
+            hdr_list.append(hdr)
+            data_all[self.curr_int-1] = data
+        return hdr_list, data_all
+        
+    @staticmethod
+    def sort(filename: str):
+        """
+        Sorts the integrations in a DB file to be time-ordered.
+        """
+        
+        # Open the input database.  If it's already sorted, stop.
+        inDB = OrvilleImageDB(filename, 'r')
+        if inDB.header.flags & OrvilleImageDB.FLAG_SORTED:
+            inDB.close()
+            return
+            
+        # Read the entire input database into memory.
+        inIntHeaderStruct = inDB._EntryHeader()
+        headerSize = ctypes.sizeof(inIntHeaderStruct)
+        dataSize = 4*inDB.header.nchan*(0 + inDB.nstokes*inDB.header.ngrid**2)
+        if inDB.include_mask:
+            dataSize += 1*inDB.header.nchan
+        int_size = headerSize + dataSize
+        
+        data = inDB.file.read()
+        inDB.file.close()
+        if len(data) != int_size * inDB.nint:
+            raise RuntimeError('The file "%s" appears to be corrupted.' %
+                               filename)
+        
+        # Loop through the input DB's images, saving their image times.
+        # Determine the sort order of those times.
+        times = np.array([
+                struct.unpack_from('<d', data, offset=i)[0] for i in
+                range(inDB._TIME_OFFSET,
+                      int_size * inDB.nint, int_size)])
+        
+        intOrder = times.argsort()
+        
+        # Write the sorted file.  Note that we write it using the most recent
+        # header version, which may differ from the version of the input file.
+        # After writing the updated file header, loop through the intervals
+        # and copy (in sorted order) from the input data to the output file.
+        inDB.header.flags |= OrvilleImageDB.FLAG_SORTED
+        
+        with tempfile.NamedTemporaryFile(mode='wb', prefix='orville-', suffix='.oims') as outFile:
+            outVersion = inDB.version
+            outFileHeaderStruct = inDB.header
+            outFile.write(struct.pack('<24s', outVersion))
+            outFile.write(outFileHeaderStruct)
+            outFile.flush()
+            
+            outEntryHeaderStruct = inDB._EntryHeader()
+            for iOut in range(inDB.nint):
+                i = intOrder[iOut] * int_size
+                entry_header = data[i:i+headerSize]
+                entry_data = data[i+headerSize:i+int_size]
+                
+                ctypes.memmove(ctypes.addressof(outEntryHeaderStruct), entry_header, headerSize)
+                outFile.write(outEntryHeaderStruct)
+                outFile.write(entry_data)
+                outFile.flush()
+                
+            # Overwrite the original file
+            shutil.copy(outFile.name, filename)
+            
+    # Implement some built-ins to make reading images more "Pythonic" ...
+    def __enter__(self):
+        return self
+        
+    def __exit__(self, type, value, tb):
+        self.close()
+        
+    def __len__(self):
+        return self.nint
+        
+    def __getitem__(self, index):
+        if index >= self.nint:
+            raise IndexError("image index out of range")
+            
+        self.seek(index)
+        return self.read_image()
+        
+    def __iter__(self):
+        return self
+        
+    def __next__(self):
+        return self.next()
+        
+    def next(self) -> Tuple[HeaderContainer[str, Any], np.ndarray]:
+        if self.curr_int >= self.nint:
+            raise StopIteration
+        else:
+            return self.read_image()

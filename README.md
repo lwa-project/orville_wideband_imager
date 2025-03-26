@@ -9,7 +9,7 @@
 The Orville Wideband Imager is a realtime GPU-based all-sky imager for the output
 of the Advanced Digitial Processor (ADP) broadband correlator that runs at LWA-SV.
 Orville receives visibility data from ADP for 32,896 baselines, images the data,
-and writes the images to the disk in a [binary frame-based format called "OIMS"](https://github.com/lwa-project/orville_wideband_imager/blob/main/src/lsl_toolkits/OrvilleImage/OrvilleImageDB.py).
+and writes the images to the disk in a [HDF5-based format called "O5"](https://github.com/lwa-project/orville_wideband_imager/blob/main/src/lsl_toolkits/OrvilleImage/OrvilleImage.py).
 The imaging is performed using a _w_-stacking algorithm for the non-coplanarity of
 the array.  For each image, the sky is projected onto the two dimensional plane using
 orthographic sine projection.  To reduce the number of _w_-planes needed during _w_-stacking,
@@ -22,12 +22,13 @@ seconds, the imager produces 4 Stokes (I, Q, U and V) images in 198 channels, ea
 ## Data Archive
 Orville data with reduced spectral resolution (six 3.3 MHz channels) are available at the [LWA data archive](https://lda10g.alliance.unm.edu/Orville/).
 
-## Reading OIMS Files
-You can use the `OrvilleImageDB.py` Python module to read the data stored in an OIMS file:
+## Reading Orville Image Files
+You can use the `OrvilleImageReader` Python class to read the data stored in an O5 or 
+OIMS file:
 ```
-from lsl_toolkits.OrvilleImager import OrvilleImageDB
+from lsl_toolkits.OrvilleImager import OrvilleImageReader
 
-db = OrvilleImageDB(oimsFile, 'r')
+db = OrvilleImageReader.open(oimsFile)
 
 # Get parameters from the input file
 
@@ -48,7 +49,7 @@ nchan = db.header.nchan # number of frequency channels
 # 1. Reading a particular image integration
 #    (Usually 720 integrations (each 5 seconds) in an hour) 
 
-hdr, dat = db.__getitem__(710) # collecting header and data from the 710 th integration
+hdr, dat = db[710] # collecting header and data from the 711 th integration
 
 # The dat array contains the image data in a four dimensional array of the form [nchan,stokes,xgrid,ygrid]
 # where nchan = 198 frequency channels, stokes = 4 [stokes (I, Q, U,V)], xgrid = grid size in the x direction,

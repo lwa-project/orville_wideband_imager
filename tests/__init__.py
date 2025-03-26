@@ -17,4 +17,4 @@ sys.path.append(os.path.abspath(os.path.join(os.path.basename(__file__), '..')))
 __version__   = "0.1"
 __author__    = "Jayce Dowell"
 
-from . import test_oims
+from . import test_oims, test_o5, test_OIMS2fits

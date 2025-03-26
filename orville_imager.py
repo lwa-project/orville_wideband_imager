@@ -54,7 +54,7 @@ BFNoSpinZone()
 
 import PIL.Image, PIL.ImageDraw, PIL.ImageFont
 
-from lsl_toolkits.OrvilleImage import OrvilleImageDB
+from lsl_toolkits.OrvilleImage import OrvilleImageHDF5
 
 
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -1267,11 +1267,11 @@ class WriterOp(object):
         outname = os.path.join(self.output_dir_images, str(mjd))
         if not os.path.exists(outname):
             os.makedirs(outname, exist_ok=True)
-        filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
+        filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.o5' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
         outname = os.path.join(outname, filename)
         
         try:
-            with OrvilleImageDB(outname, mode='a', station=station.name) as db:
+            with OrvilleImageHDF5(outname, mode='a', station=station.name) as db:
                 db.add_image(info, data, mask=mask)
             self.log.debug("Added integration to disk as part of '%s'", os.path.basename(outname))
         except Exception as e:
@@ -1317,11 +1317,11 @@ class WriterOp(object):
         outname = os.path.join(self.output_dir_archive, str(mjd))
         if not os.path.exists(outname):
             os.makedirs(outname, exist_ok=True)
-        filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
+        filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.o5' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
         outname = os.path.join(outname, filename)
         
         try:
-            with OrvilleImageDB(outname, mode='a', station=station.name) as db:
+            with OrvilleImageHDF5(outname, mode='a', station=station.name) as db:
                 db.add_image(info, data)
             self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
         except Exception as e:

@@ -14,21 +14,21 @@ import sys
 import numpy as np
 import argparse
 
-from lsl_toolkits.OrvilleImage import OrvilleImageDB, BAD_FREQ_LIST as badfreqs
+from lsl_toolkits.OrvilleImage import OrvilleImageReader, OrvilleImageHDF5, BAD_FREQ_LIST as badfreqs
 
 def main(args):
     station = lwasv
     for filename in args.filename:
-        db = OrvilleImageDB(filename, 'r')
-        outname = filename.replace(".oims","-avg.oims")
+        db = OrvilleImageReader.open(filename)
+        outname = filename.replace(".oims","-avg.o5")
         ints = db.nint 
         nchan = db.header.nchan # number of frequency channels
         ngrid = db.header.ngrid # image size
         if nchan > 6: # Data needs averaging
-            outname = filename.replace(".oims","-avg.oims")
+            outname = filename.replace(".oims","-avg.o5")
             if os.path.isfile(outname):
                 raise FileExistsError
-            newdb = OrvilleImageDB(outname, mode='w', station=station.name)
+            newdb = OrvilleImageHDF5(outname, mode='w', station=station.name)
             ints = db.nint 
             nchan = db.header.nchan # number of frequency channels
             ngrid = db.header.ngrid # image size
@@ -36,8 +36,11 @@ def main(args):
 
             binchan = int(nchan/6)
             for i in range(ints):
-                db.seek(i)
-                hdr,alldata = db.read_image()
+                try:
+                    hdr,alldata = db.read_image(i)
+                except TypeError:
+                    db.seek(i)
+                    hdr,alldata = db.read_image()
                 oldbw = np.copy(hdr['bandwidth'])
                 hdr['bandwidth'] = hdr['bandwidth']*binchan
                 start_freq = hdr['start_freq'] 

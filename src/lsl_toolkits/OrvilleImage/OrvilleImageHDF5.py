@@ -392,6 +392,34 @@ class OrvilleImageHDF5:
         self.h5.flush()
         
         return self.nint - 1
+    
+    def update_image_metadata(self, idx: int, info: Dict[str, Any]) -> int:
+        """
+        Update the metadata associated with the image at the specified index.
+        Returns the number of metadata items updated.
+        """
+        
+        if idx < 0:
+            idx = self.nint - idx
+        elif idx >= self.nint:
+            raise IndexError("Requested index is out of range")
+            
+        # Grab the image group
+        img_group = self.h5['images'][f'int_{self.nint}']
+        
+        # Store image metadata
+        nupdated = 0
+        for key, value in info.items():
+            if key in ('stokes_params', 'pixel_size'):
+                continue  # These are global attributes
+            if key in ('start_time', 'int_len', 'start_freq', 'stop_freq', 'bandwidth', 'pixel_size', 'stokes_params'):
+                continue  # These are fixed
+            if isinstance(value, (list, tuple, dict)):
+                value = json.dumps(value)
+            img_group.attrs[key] = value
+            nupdated += 1
+            
+        return nupdated
         
     def read_image(self, idx: int) -> Tuple[HeaderContainer[str, Any], np.ndarray]:
         """

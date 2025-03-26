@@ -273,6 +273,36 @@ class o5_tests(unittest.TestCase):
                         
         db0.close()
         db1.close()
+        
+    def test_o5_update(self):
+        """Test updating image metadata in the OrvilleImageHDF5 format."""
+        
+        # Setup the file names
+        testFile = os.path.join(self.testPath, 'test.o5')
+        
+        db = OrvilleImageDB(oimsFile, 'r')
+        nf = OrvilleImageHDF5(testFile, 'w', imager_version=db.header.imager_version, 
+                              station=db.header.station, compression='gzip')
+                                            
+        # Fill it
+        for i,rec in enumerate(db):
+            hdr, img = rec
+            for key in hdr:
+                if isinstance(hdr[key], bytes):
+                    hdr[key] = hdr[key].decode()
+            nf.add_image(hdr, img)
+            
+            nupdated = nf.update_image_metadata(i, {'new_entry': 'some_data'})
+            self.assertEqual(nupdated, 1)
+            
+            nupdated = nf.update_image_metadata(i, {'new_entry': [{'harder': 'test'}]})
+            self.assertEqual(nupdated, 1)
+            
+            nupdated = nf.update_image_metadata(-1, {'start_time': 23434.12323})
+            self.assertEqual(nupdated, 0)
+            
+        db.close()
+        nf.close()
 
 
 class o5_test_suite(unittest.TestSuite):

@@ -1739,7 +1739,7 @@ class UploaderOp(object):
                     try:
                         ## Upload and stage
                         p = subprocess.Popen(['timeout', '2', 'rsync', '-e', 'ssh', '-a', self.uploader_dir+os.path.sep,
-                                              f"mcsdr@lwalab.phys.unm.edu:/var/www{self.lwatv_channel}/"],
+                                              f"mcsdr@lwalab.phys.unm.edu:/var/www/{self.lwatv_channel}/"],
                                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                         _, error = p.communicate()
                         if p.returncode != 0:

@@ -1609,6 +1609,7 @@ class WriterOp(object):
                 arc_data = (arc_data*arc_mask).sum(axis=1) / arc_mask.sum(axis=1)
                 metadata = self._save_archive_image(self.station, time_tag, ihdr,
                                                     arc_freq, arc_data, weighting=weighting)
+                metadata['station'] = self.station.name.lower().replace('-', '')
                 for key in metadata:
                     if isinstance(metadata[key], bytes):
                         metadata[key] = metadata[key].decode()

@@ -400,7 +400,7 @@ class OrvilleImageHDF5:
         """
         
         if idx < 0:
-            idx = self.nint - idx
+            idx = self.nint + idx
         elif idx >= self.nint:
             raise IndexError("Requested index is out of range")
             
@@ -427,7 +427,7 @@ class OrvilleImageHDF5:
         """
         
         if idx < 0:
-            idx = self.nint - idx
+            idx = self.nint + idx
         elif idx >= self.nint:
             raise IndexError("Requested index is out of range")
             

@@ -405,7 +405,7 @@ class OrvilleImageHDF5:
             raise IndexError("Requested index is out of range")
             
         # Grab the image group
-        img_group = self.h5['images'][f'int_{self.nint}']
+        img_group = self.h5['images'][f"int_{idx}"]
         
         # Store image metadata
         nupdated = 0

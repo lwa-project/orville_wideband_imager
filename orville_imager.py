@@ -1645,7 +1645,7 @@ class WriterOp(object):
                 idata = ispan.data_view(np.float32).reshape(ishape)
                 mdata = mspan.data_view(np.uint8).reshape(mshape)
                 mdata = mdata.copy()
-                sdata = sdata.data_view(np.float32).reshape(sshape)
+                sdata = sspan.data_view(np.float32).reshape(sshape)
                 
                 ## Write the full image set to disk
                 tSave = time.time()

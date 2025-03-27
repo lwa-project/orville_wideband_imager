@@ -670,7 +670,7 @@ class MatrixOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
         
-        warnings.filterwarnings("ignore", category=RuntimeWarning, message="divide by zero")
+        warnings.filterwarnings("ignore", category=RuntimeWarning, message="invalid value encountered in divide")
         
         for iseq,mseq in zip(self.iring.read(guarantee=True),self.mring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())

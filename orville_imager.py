@@ -21,6 +21,7 @@ from datetime import datetime
 from collections import deque
 from contextlib import ExitStack
 from urllib.request import urlopen
+import warnings
 
 from scipy.special import pro_ang1, iv
 from scipy.stats import scoreatpercentile as percentile
@@ -374,6 +375,8 @@ class SpectraOp(object):
                                   'core0': cpu_affinity.get_core(),
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
+        
+        warnings.filterwarnings("ignore", category=RuntimeWarning, message="divide by zero")
         
         labels = [ant.stand.id for ant in self.station.antennas]
         status = [ant.combined_status for ant in self.station.antennas]
@@ -857,7 +860,7 @@ class FlaggerOp(object):
                                 except ValueError:
                                     pass
                     except OSError as err:
-                        self.log.warn("Cannot load frequency flag file: %s", str(err))
+                        self.log.warning("Cannot load frequency flag file: %s", str(err))
                         
                 ## Report
                 self.log.info("Frequency flag file is '%s'", str(self.flagfile))
@@ -897,7 +900,7 @@ class FlaggerOp(object):
                             adata = adata[:,:,[0,1],[0,1]]
                             
                             ## Average the spectr together
-                            mean_spec = (adata*weights).mean(axis=1).mean(axis=1)
+                            mean_spec = (adata*weights).mean(axis=2).mean(axis=0)
                             
                             ## Save
                             odata[...] = mask
@@ -984,7 +987,7 @@ class SubbandSplitterOp(object):
                         ishape = (nchan,1,1,1)
                         ogulp_size = igulp_size // nsub
                         oshape = (nchan//nsub,1,1,1)
-                        dtype = np.uint8
+                        dtype = np.float32
                 self.iring.resize(igulp_size, igulp_size*10)
                 for o in self.orings:
                     o.resize(ogulp_size, ogulp_size*10)
@@ -1556,6 +1559,9 @@ class WriterOp(object):
         lax = fig.add_axes([0.01, 0, 0.12, 0.10], frameon=False)
         lax.set_axis_off()
         lax.imshow(logo, origin='upper', cmap='gray')
+        ## Spectrum
+        sax = fig.add_axes([0.45, 0.85, 0.1, 0.1], facecolor='black', frameon=False)
+        sax.set_axis_off()
         
         # Setup the A Team sources, plus the Sun and Jupiter
         srcs = [ephem.Sun(), ephem.Jupiter()]
@@ -1754,6 +1760,11 @@ class WriterOp(object):
                                horizontalalignment='right', color='white',
                                fontsize=14, transform=fig.transFigure)
                     
+                    ## Add the spectrum
+                    sax.cla()
+                    sax.semilogy(freq, sdata[:,0,0,0], color='white')
+                    sax.scatter(freq[c], sdata[c,0,0,0], marker='o', color='red')
+                    
                     ## Save
                     mjd, h, m, s = timetag_to_mjdatetime(time_tag)
                     outname = os.path.join(self.output_dir_lwatv, str(mjd))
@@ -1905,9 +1916,9 @@ class AnalogSettingsOp(object):
                         if entry['value'] is not None:
                             new_config[mapping[setting]] = entry['value']
                     except KeyError as err:
-                        self.log.warn("Failed to load ASP configuration setting '%s': %s", setting, str(err))
+                        self.log.warning("Failed to load ASP configuration setting '%s': %s", setting, str(err))
             except Exception as err:
-                self.log.warn('Failed to download ASP configuration: %s', str(err))
+                self.log.warning('Failed to download ASP configuration: %s', str(err))
                 
             ASP_CONFIG.append(new_config)
             self.log.debug('ASP configuration set to: %s', str(ASP_CONFIG[0]))

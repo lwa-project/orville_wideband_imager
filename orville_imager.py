@@ -19,6 +19,7 @@ import subprocess
 from datetime import datetime
 from collections import deque
 from urllib.request import urlopen
+from contextlib import ExitStack
 
 from scipy.special import pro_ang1, iv
 from scipy.stats import scoreatpercentile as percentile
@@ -57,9 +58,9 @@ import PIL.Image, PIL.ImageDraw, PIL.ImageFont
 from lsl_toolkits.OrvilleImage import OrvilleImageDB
 
 try:
-    from oarfish import client as classification_client
+    from oarfish.client import PredictionClient
 except ImportError:
-    classification_client = None
+    PredictionClient = None
 
 
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -754,12 +755,14 @@ class MatrixOp(object):
 
         self.log.info("MatrixOp - Done")
 
+
 class FlaggerOp(object):
-    def __init__(self, flagfile, log, iring, oring, clip=3, core=-1, gpu=-1):
+    def __init__(self, flagfile, log, iring, oring, sring, clip=3, core=-1, gpu=-1):
         self.flagfile = flagfile
         self.log = log
         self.iring = iring
         self.oring = oring
+        self.sring = sring
         self.clip = clip
         self.core = core
         self.gpu = gpu
@@ -772,7 +775,9 @@ class FlaggerOp(object):
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
         self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
-        self.out_proclog.update({'nring':1, 'ring0':self.oring.name})
+        self.out_proclog.update({'nring':2,
+                                 'ring0':self.oring.name,
+                                 'ring1':self.sring.name})
         
     def main(self):
         cpu_affinity.set_core(self.core)
@@ -783,7 +788,10 @@ class FlaggerOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
  
-        with self.oring.begin_writing() as oring:
+        with ExitStack() as oring_stack:
+            oring, sring = [oring_stack.enter_context(o.begin_writing()) \
+                            for o in (self.oring, self.sring)]
+            
             for iseq in self.iring.read(guarantee=True):
                 ihdr = json.loads(iseq.header.tostring())
                 
@@ -804,15 +812,31 @@ class FlaggerOp(object):
                 ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
                 ogulp_size = nchan*1              # uint8
                 oshape = (nchan,)
+                sgulp_size = nchan*4              # float32
+                sshape = (nchan,)
                 self.iring.resize(igulp_size, igulp_size*10)
                 self.oring.resize(ogulp_size, ogulp_size*10)
+                self.sring.resize(sgulp_size, sgulp_size*10)
                 
                 ohdr = ihdr.copy()
                 ohdr['type'] = 'mask'
                 ohdr_str = json.dumps(ohdr)
                 
+                shdr = ohdr.copy()
+                shdr['type'] = 'spectrum'
+                shdr_str = json.dumps(shdr)
+                
                 autos = [i*(2*(nstand-1)+1-i)//2+i for i in range(nstand)]
                 
+                weights = np.ones((nstand, nchan, npol), dtype=np.float32)
+                for i in range(nstand):
+                    # Mask out bad antennas
+                    if ANTENNAS[2*i+0].combined_status != 33 or ANTENNAS[2*i+1].combined_status != 33:
+                        weights[i,:,:] = 0.0
+                        
+                    if i == (nstand-1):
+                        weights[i,:,:] = 0.0
+                        
                 # Setup the mask
                 freq = chan0*fC + np.arange(nchan)*4*fC
                 mask = np.zeros(freq.size, dtype=np.uint8)
@@ -832,7 +856,7 @@ class FlaggerOp(object):
                                 except ValueError:
                                     pass
                     except OSError as err:
-                        self.log.warn("Cannot load frequency flag file: %s", str(err))
+                        self.log.warning"Cannot load frequency flag file: %s", str(err))
                         
                 ## Report
                 self.log.info("Frequency flag file is '%s'", str(self.flagfile))
@@ -843,7 +867,10 @@ class FlaggerOp(object):
                 mask = 1 - mask
                     
                 prev_time = time.time()
-                with oring.begin_sequence(time_tag=iseq.time_tag, header=ohdr_str) as oseq:
+                with ExitStack() as oseq_stack:
+                    oseq, sseq = [oseq_stack.enter_context(o.begin_sequence(time_tag=iseq.time_tag, header=h)) \
+                                  for o,h in zip((oring, sring), (ohdr_str, shdr_str))]
+                    
                     for ispan in iseq.read(igulp_size):
                         if ispan.size < igulp_size:
                             continue # Ignore final gulp
@@ -851,7 +878,10 @@ class FlaggerOp(object):
                         acquire_time = curr_time - prev_time
                         prev_time = curr_time
                         
-                        with oseq.reserve(ogulp_size) as ospan:
+                        with ExitStack() as ospan_stack:
+                            ospan, sspan = [ospan_stack.enter_context(o.reserve(s)) \
+                                            for o,s in zip((oseq, sseq), (ogulp_size, sgulp_size))]
+                            
                             curr_time = time.time()
                             reserve_time = curr_time - prev_time
                             prev_time = curr_time
@@ -859,9 +889,18 @@ class FlaggerOp(object):
                             ## Setup and load
                             idata = ispan.data_view(np.complex64).reshape(ishape)
                             odata = ospan.data_view(np.uint8).reshape(oshape)
+                            sdata = sspan.data_view(np.float32).reshape(sshape)
+                            
+                            ## Pull out the auto-correlations
+                            adata = idata[autos,:,:,:].real
+                            adata = adata[:,:,[0,1],[0,1]]
+                            
+                            ## Average the spectr together
+                            mean_spec = (adata*weights).mean(axis=2).mean(axis=0)
                             
                             ## Save
                             odata[...] = mask
+                            sdata[...] = mean_spec
                             
                             time_tag += navg_to_timetag(navg)
                             
@@ -873,7 +912,7 @@ class FlaggerOp(object):
                                                       'reserve_time': reserve_time, 
                                                       'process_time': process_time,})
                             
-        self.log.info("FlaggerOp - Done")            
+        self.log.info("FlaggerOp - Done")
 
 
 class ImagingOp(object):
@@ -1197,10 +1236,11 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, sring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
+        self.sring = sring
         self.output_dir_images = os.path.join(base_dir, 'images')
         self.output_dir_archive = os.path.join(base_dir, 'archive')
         self.output_dir_lwatv = os.path.join(base_dir, 'lwatv')
@@ -1208,11 +1248,21 @@ class WriterOp(object):
         self.core = core
         self.gpu = gpu
         
-        try:
-            self.client = classification_client(logger=self.log)
-        except TypeError:
-            self.client = None
-            
+        self.oarfish = None
+        if PredictionClient is not None:
+            try:
+                self.oarfish = PredictionClient(timeout=0.5, logger=self.log)
+            except Exception as e:
+                self.log.warning("Failed to create oarfish client: %s", str(e))
+                
+            if self.oarfish is not None:
+                try:
+                    self.oarfish.start()
+                    info = self.oarfish.identify()
+                    self.log.info("Connected to oarfish server with %s", info)
+                except Exception as e:
+                    self.log.warning("Failed to start oarfish client: %s", str(e))
+                    
         if not os.path.exists(base_dir):
             os.makedirs(base_dir, exist_ok=True)
         if not os.path.exists(self.output_dir_images):
@@ -1231,9 +1281,10 @@ class WriterOp(object):
         self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
-        self.in_proclog.update({'nring':2,
+        self.in_proclog.update({'nring':3,
                                 'ring0':self.iring.name,
-                                'ring1':self.mring.name})
+                                'ring1':self.mring.name,
+                                'ring2':self.sring.name})
         
         self.station = copy.deepcopy(STATION)
         
@@ -1287,6 +1338,8 @@ class WriterOp(object):
         except Exception as e:
             self.log.warning("Failed to add integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
             
+        return info
+        
     def _save_archive_image(self, station, time_tag, hdr, freq, data, weighting='natural'):
         # Get the fill level as a fraction
         global FILL_QUEUE
@@ -1308,8 +1361,8 @@ class WriterOp(object):
         
         # Classify each channel and assign it a quality score and label
         final_results = {}
-        if self.client is not None:
-            results = self.client.send(hdr, data[:,[0,-1],:,:])
+        if self.oarfish is not None:
+            results = self.oarfish.send(hdr, data[:,[0,-1],:,:])
             final_results = {'quality_score': [r['quality_score'] for r in results],
                              'quality_label': r['final_label'] for r in results]
                             }
@@ -1339,15 +1392,18 @@ class WriterOp(object):
         filename = '%i_%02i%02i%02i_%.3fMHz_%.3fMHz.oims' % (mjd, h, 0, 0, freq.min()/1e6, freq.max()/1e6)
         outname = os.path.join(outname, filename)
         
+        if final_results:
+            self.log.debug("Mean quality score is %.3f", sum(final_results['quality_score'])/len(final_results['quality_score']))
+            
         try:
             with OrvilleImageDB(outname, mode='a', station=station.name) as db:
                 db.add_image(info, data)
             self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
-            if final_results:
-                self.log.debug("Mean quality score is %.3f", sum(final_results['quality_score'])/len(final_results['quality_score']))
         except Exception as e:
             self.log.warning("Failed to add archive integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
             
+        return info
+        
     def main(self):
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
@@ -1375,6 +1431,9 @@ class WriterOp(object):
         lax = fig.add_axes([0.01, 0, 0.12, 0.10], frameon=False)
         lax.set_axis_off()
         lax.imshow(logo, origin='upper', cmap='gray')
+        ## Spectrum
+        sax = fig.add_axes([0.42, 0.85, 0.16, 0.1], facecolor='black', frameon=False)
+        sax.set_axis_off()
         
         # Setup the A Team sources, plus the Sun and Jupiter
         srcs = [ephem.Sun(), ephem.Jupiter()]
@@ -1395,9 +1454,10 @@ class WriterOp(object):
             bdy._epoch = ephem.J2000
             gplane.append(bdy)
             
-        for iseq,mseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True)):
+        for iseq,mseq,sseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True), self.sring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())
             mhdr = json.loads(mseq.header.tostring())
+            shdr = json.loads(sseq.header.tostring())
             
             self.sequence_proclog.update(ihdr)
             self.log.info('WriterOp: Config - %s', ihdr)
@@ -1421,6 +1481,10 @@ class WriterOp(object):
             mshape = (nchan,1,1,1)
             self.mring.resize(mgulp_size, mgulp_size*10)
             
+            sgulp_size = nchan*4                               # float32
+            sshape = (nchan,1,1,1)
+            self.sring.resize(sgulp_size, sgulp_size*10)
+            
             clip_size = 180.0/np.pi/res
             
             # Setup the frequencies
@@ -1439,10 +1503,12 @@ class WriterOp(object):
             
             intCount = 0
             prev_time = time.time()
-            for ispan,mspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size)):
+            for ispan,mspan,sspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size), sseq.read(sgulp_size)):
                 if ispan.size < igulp_size:
                     continue # Ignore final gulp
                 if mspan.size < nchan*1:
+                    continue # Ignore final gulp
+                if sspan.size < nchan*4:
                     continue # Ignore final gulp
                 curr_time = time.time()
                 acquire_time = curr_time - prev_time
@@ -1452,10 +1518,15 @@ class WriterOp(object):
                 idata = ispan.data_view(np.float32).reshape(ishape)
                 mdata = mspan.data_view(np.uint8).reshape(mshape)
                 mdata = mdata.copy()
+                sdata = sspan.data_view(np.float32).reshape(sshape)
                 
                 ## Write the full image set to disk
                 tSave = time.time()
-                self._save_image(self.station, time_tag, ihdr, freq, idata, mask=1-mdata)
+                metadata = self._save_image(self.station, time_tag, ihdr, freq, idata, mask=1-mdata)
+                metadata['station'] = 'lwasv'
+                for key in metadata:
+                    if isinstance(metadata[key], bytes):
+                        metadata[key] = metadata[key].decode()
                 self.log.debug('Save time: %.3f s', time.time()-tSave)
                 
                 ## Write the archive image set to disk
@@ -1489,7 +1560,13 @@ class WriterOp(object):
                 plane_y = np.array(plane_y)
                 
                 ## Plot
-                for lsc,c in zip(lchans,ichans):
+                results = None
+                if self.oarfish is not None:
+                    results = self.oarfish.send(metadata, idata[ichans,:,:,:])
+                if results is None:
+                    results = [{'quality_score': -1.0, 'final_label': ''} for c in ichans]
+                    
+                for lsc,c,r in zip(lchans,ichans,results):
                     for i,p,l in ((0,0,'I'), (1,3,'V')):
                         ### Pull out the data and get it ready for plotting
                         img = idata[c,p,:,:]
@@ -1540,6 +1617,16 @@ class WriterOp(object):
                     ax[1].text(0.99, 0.99, '%.3f MHz' % (freq[c]/1e6,), verticalalignment='top',
                             horizontalalignment='right', color='white',
                             fontsize=14, transform=fig.transFigure)
+                    
+                    ### Add in quality info
+                    ax[1].text(0.99,0.01, r['final_label'], verticalalignment='bottom',
+                               horizontalalignment='right', color='white',
+                               fontsize=14, transform=fig.transFigure)
+                    
+                    ## Add the spectrum
+                    sax.cla()
+                    sax.semilogy(freq, sdata[:,0,0,0], color='white')
+                    sax.scatter(freq[c], sdata[c,0,0,0], marker='o', color='red')
                     
                     ## Save
                     mjd, h, m, s = timetag_to_mjdatetime(time_tag)
@@ -1690,9 +1777,9 @@ class AnalogSettingsOp(object):
                         if entry['value'] is not None:
                             new_config[mapping[setting]] = entry['value']
                     except KeyError as err:
-                        self.log.warn("Failed to load ASP configuration setting '%s': %s", setting, str(err))
+                        self.log.warning"Failed to load ASP configuration setting '%s': %s", setting, str(err))
             except Exception as err:
-                self.log.warn('Failed to download ASP configuration: %s', str(err))
+                self.log.warning'Failed to download ASP configuration: %s', str(err))
                 
             ASP_CONFIG.append(new_config)
             self.log.debug('ASP configuration set to: %s', str(ASP_CONFIG[0]))
@@ -1774,6 +1861,7 @@ def main(args):
     # Create the rings that we need
     capture_ring = Ring(name="capture", space='system')
     rfimask_ring = Ring(name="rfimask", space='system')
+    avgspec_ring = Ring(name="avgspec", space='system')
     writer_ring = Ring(name="writer", space='system')
     
     # Setup the uploader's staging location
@@ -1791,7 +1879,7 @@ def main(args):
     ops.append(CaptureOp(log, capture_ring,
                          isock, nBL*6, 1, 9000, 1, 1, core=cores.pop(0)))
     ## The flagger
-    ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring,
+    ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring, avgspec_ring,
                          core=cores.pop(0)))
     ## The correlation matrix
     ops.append(MatrixOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
@@ -1809,7 +1897,7 @@ def main(args):
                          decimation=args.decimation,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image writer and plotter for LWA TV
-    ops.append(WriterOp(log, writer_ring, rfimask_ring, base_dir=args.output_dir,
+    ops.append(WriterOp(log, writer_ring, rfimask_ring, avgspec_ring, base_dir=args.output_dir,
                          uploader_dir=uploader_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader

@@ -757,11 +757,13 @@ class MatrixOp(object):
         self.log.info("MatrixOp - Done")
 
 class FlaggerOp(object):
-    def __init__(self, flagfile, log, iring, oring, clip=3, core=-1, gpu=-1):
+    def __init__(self, flagfile, log, iring, oring, sring, station, clip=3, core=-1, gpu=-1):
         self.flagfile = flagfile
         self.log = log
         self.iring = iring
         self.oring = oring
+        self.sring = sring
+        self.station = station
         self.clip = clip
         self.core = core
         self.gpu = gpu
@@ -774,7 +776,7 @@ class FlaggerOp(object):
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
         self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
-        self.out_proclog.update({'nring':1, 'ring0':self.oring.name})
+        self.out_proclog.update({'nring':2, 'ring0':self.oring.name, 'ring1':self.sring.name})
         
     def main(self):
         cpu_affinity.set_core(self.core)
@@ -785,7 +787,10 @@ class FlaggerOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
  
-        with self.oring.begin_writing() as oring:
+        with ExitStack() as oring_stack:
+            oring, sring = [oring_stack.enter_context(o.begin_writing()) \
+                            for o in (self.oring, self.sring)]
+            
             for iseq in self.iring.read(guarantee=True):
                 ihdr = json.loads(iseq.header.tostring())
                 
@@ -806,15 +811,33 @@ class FlaggerOp(object):
                 ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
                 ogulp_size = nchan*1              # uint8
                 oshape = (nchan,)
+                sgulp_size = nchan*4              # float32
+                sshape = (nchan,)
                 self.iring.resize(igulp_size, igulp_size*10)
                 self.oring.resize(ogulp_size, ogulp_size*10)
+                self.sring.resize(sgulp_size, sgulp_size*10)
                 
                 ohdr = ihdr.copy()
                 ohdr['type'] = 'mask'
                 ohdr_str = json.dumps(ohdr)
                 
+                shdr = ohdr.copy()
+                shdr['type'] = 'spectrum'
+                shdr_str = json.dumps(shdr)
+                
                 autos = [i*(2*(nstand-1)+1-i)//2+i for i in range(nstand)]
                 
+                weights = np.ones((nstand, nchan, npol), dtype=np.float32)
+                for i in range(nstand):
+                    # Mask out bad antennas
+                    if self.station.antennas[2*i+0].combined_status != 33 or self.station.antennas[2*i+1].combined_status != 33:
+                        weights[:,i,:] = 0.0
+                    if self.station.antennas[2*i+0].combined_status != 33 or self.station.antennas[2*i+1].combined_status != 33:
+                        weights[:,i,:] = 0.0
+                        
+                    if i == (nstand-1):
+                        weights[:,i,:] = 0.0
+                        
                 # Setup the mask
                 freq = chan0*fC + np.arange(nchan)*4*fC
                 mask = np.zeros(freq.size, dtype=np.uint8)
@@ -845,7 +868,10 @@ class FlaggerOp(object):
                 mask = 1 - mask
                     
                 prev_time = time.time()
-                with oring.begin_sequence(time_tag=iseq.time_tag, header=ohdr_str) as oseq:
+                with ExitStack() as oseq_stack:
+                    oseq, sseq = [oseq_stack.enter_context(o.begin_sequence(time_tag=iseq.time_tag, header=h)) \
+                                  for o,h in zip((oring, sring), (ohdr_str, shdr_str))]
+                    
                     for ispan in iseq.read(igulp_size):
                         if ispan.size < igulp_size:
                             continue # Ignore final gulp
@@ -853,7 +879,10 @@ class FlaggerOp(object):
                         acquire_time = curr_time - prev_time
                         prev_time = curr_time
                         
-                        with oseq.reserve(ogulp_size) as ospan:
+                        with ExitStack() as ospan_stack:
+                            ospan, sspan = [ospan_stack.enter_context(o.reserve(s)) \
+                                            for o,s in zip((oseq, sseq), (ogulp_size, sgulp_size))]
+                            
                             curr_time = time.time()
                             reserve_time = curr_time - prev_time
                             prev_time = curr_time
@@ -861,9 +890,18 @@ class FlaggerOp(object):
                             ## Setup and load
                             idata = ispan.data_view(np.complex64).reshape(ishape)
                             odata = ospan.data_view(np.uint8).reshape(oshape)
+                            sdata = sspan.data_view(np.float32).reshape(sshape)
+                            
+                            ## Pull out the auto-correlations
+                            adata = idata[autos,:,:,:].real
+                            adata = adata[:,:,[0,1],[0,1]]
+                            
+                            ## Average the spectr together
+                            mean_spec = (adata*weights).mean(axis=1).mean(axis=1)
                             
                             ## Save
                             odata[...] = mask
+                            sdata[...] = mean_spec
                             
                             time_tag += navg_to_timetag(navg)
                             
@@ -907,7 +945,8 @@ class SubbandSplitterOp(object):
                                   'core0': cpu_affinity.get_core(),})
                                   
         with ExitStack() as oring_stack:
-            out_orings = [oring_stack.enter_context(o.begin_writing()) for o in self.orings]
+            out_orings = [oring_stack.enter_context(o.begin_writing()) \
+                          for o in self.orings]
             
             for iseq in self.iring.read(guarantee=True):
                 ihdr = json.loads(iseq.header.tostring())
@@ -940,6 +979,12 @@ class SubbandSplitterOp(object):
                         ogulp_size = igulp_size // nsub
                         oshape = (nchan//nsub,1,1,1)
                         dtype = np.uint8
+                    elif ihdr['type'] == 'spectrum':
+                        igulp_size = nchan*4              # float32
+                        ishape = (nchan,1,1,1)
+                        ogulp_size = igulp_size // nsub
+                        oshape = (nchan//nsub,1,1,1)
+                        dtype = np.uint8
                 self.iring.resize(igulp_size, igulp_size*10)
                 for o in self.orings:
                     o.resize(ogulp_size, ogulp_size*10)
@@ -966,7 +1011,8 @@ class SubbandSplitterOp(object):
                         prev_time = curr_time
                         
                         with ExitStack() as ospan_stack:
-                            out_ospan = [ospan_stack.enter_context(o.reserve(ogulp_size)) for o in out_oseq]
+                            out_ospan = [ospan_stack.enter_context(o.reserve(ogulp_size)) \
+                                         for o in out_oseq]
                             
                             curr_time = time.time()
                             reserve_time = curr_time - prev_time
@@ -1122,6 +1168,7 @@ class ImagingOp(object):
                 dfreq = freq*1.0
                 dfreq.shape = (freq.size//self.decimation, self.decimation)
                 dfreq = dfreq.mean(axis=1)
+                autos = [i*(2*(nstand-1)+1-i)//2 + i for i in range(nstand)]
                 uvwname = os.path.join(CAL_PATH, 'uvw_%i_%i_%i.npy' % (nbl, chan0, nchan))
                 try:
                     if os.path.exists(uvwname) and os.path.getmtime(uvwname) < os.path.getmtime(__file__):
@@ -1324,10 +1371,11 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, station, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1e6, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, sring, station, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1e6, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
+        self.sring = sring
         self.station = copy.deepcopy(station)
         self.label = label
         self.output_dir_images = os.path.join(base_dir, 'images')
@@ -1528,9 +1576,10 @@ class WriterOp(object):
             bdy._epoch = ephem.J2000
             gplane.append(bdy)
             
-        for iseq,mseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True)):
+        for iseq,mseq,sseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True), self.sring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())
             mhdr = json.loads(mseq.header.tostring())
+            shdr = json.loads(sseq.header.tostring())
             
             self.sequence_proclog.update(ihdr)
             self.log.info('WriterOp%s: Config - %s', self.label, ihdr)
@@ -1553,6 +1602,10 @@ class WriterOp(object):
             mgulp_size = nchan*1                               # uint8
             mshape = (nchan,1,1,1)
             self.mring.resize(mgulp_size, mgulp_size*10)
+            
+            sgulp_size = nchan*4                              # float32
+            sshape = (nchan,1,1,1)
+            self.sring.resize(sgulp_size, sgulp_size*10)
             
             clip_size = 180.0/np.pi/res
             
@@ -1577,10 +1630,12 @@ class WriterOp(object):
             
             intCount = 0
             prev_time = time.time()
-            for ispan,mspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size)):
+            for ispan,mspan,sspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size), sseq.read(sgulp_size)):
                 if ispan.size < igulp_size:
                     continue # Ignore final gulp
                 if mspan.size < nchan*1:
+                    continue # Ignore final gulp
+                if sspan.size < nchan*4:
                     continue # Ignore final gulp
                 curr_time = time.time()
                 acquire_time = curr_time - prev_time
@@ -1590,6 +1645,7 @@ class WriterOp(object):
                 idata = ispan.data_view(np.float32).reshape(ishape)
                 mdata = mspan.data_view(np.uint8).reshape(mshape)
                 mdata = mdata.copy()
+                sdata = sdata.data_view(np.float32).reshape(sshape)
                 
                 ## Write the full image set to disk
                 tSave = time.time()
@@ -1955,12 +2011,15 @@ def main(args):
     # Create the rings that we need
     capture_ring = Ring(name="capture", space='system')
     rfimask_ring = Ring(name="rfimask", space='system')
+    avgspec_ring = Ring(name="avgspec", space='system')
     sub_capture_rings = []
     sub_rfimask_rings = []
+    sub_avgspec_rings = []
     writer_rings = []
     for i in range(orville_config['nsub']):
         sub_capture_rings.append(Ring(name=f"subcapture{i}", space='system'))
         sub_rfimask_rings.append(Ring(name=f"subrfimask{i}", space='system'))
+        sub_avgspec_rings.append(Ring(name=f"subavgspec{i}", space='system'))
         writer_rings.append(Ring(name=f"writer{i}", space='system'))
         
     # Setup the uploader's staging location
@@ -1988,7 +2047,7 @@ def main(args):
                          orville_config['max_packet_size'], 1, 1,
                          nsub=orville_config['nsub'], core=cores.pop(0)))
     ## The flagger
-    ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring,
+    ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring, avgspec_ring, station,
                          core=cores.pop(0)))
     ## The correlation matrix
     ops.append(MatrixOp(log, capture_ring, rfimask_ring, station, base_dir=args.output_dir,
@@ -2006,15 +2065,18 @@ def main(args):
                                  label='Data', core=cores.pop(0)))
     ops.append(SubbandSplitterOp(log, rfimask_ring, sub_rfimask_rings,
                                  label='Mask', core=cores.pop(0)))
+    ops.append(SubbandSplitterOp(log, avgspec_ring, sub_avgspec_rings,
+                                 label='Spectrum', core=cores.pop(0)))
     for i in range(orville_config['nsub']):
         ## The subband imager
         ops.append(ImagingOp(log, sub_capture_rings[i], writer_rings[i], station,
                              decimation=args.decimation, config=orville_config,
                              label=str(i), core=cores.pop(0), gpu=gpus.pop(0)))
         ## The subband image writer and plotter for LWA TV
-        ops.append(WriterOp(log, writer_rings[i], sub_rfimask_rings[i], station, base_dir=args.output_dir,
-                             uploader_dir=uploader_dir, lwatv_freq=args.lwatv_freq,
-                             label=str(i), core=cores.pop(0), gpu=gpus.pop(0)))
+        ops.append(WriterOp(log, writer_rings[i], sub_rfimask_rings[i], sub_avgspec_rings[i], station,
+                            base_dir=args.output_dir, uploader_dir=uploader_dir,
+                            lwatv_freq=args.lwatv_freq, label=str(i),
+                            core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
     ops.append(UploaderOp(log, uploader_dir=uploader_dir,
                           lwatv_channel=orville_config['lwatv_channel'],

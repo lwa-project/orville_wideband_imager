@@ -781,7 +781,9 @@ class FlaggerOp(object):
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
         self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
-        self.out_proclog.update({'nring':2, 'ring0':self.oring.name, 'ring1':self.sring.name})
+        self.out_proclog.update({'nring':2,
+                                 'ring0':self.oring.name,
+                                 'ring1':self.sring.name})
         
     def main(self):
         cpu_affinity.set_core(self.core)
@@ -836,12 +838,10 @@ class FlaggerOp(object):
                 for i in range(nstand):
                     # Mask out bad antennas
                     if self.station.antennas[2*i+0].combined_status != 33 or self.station.antennas[2*i+1].combined_status != 33:
-                        weights[:,i,:] = 0.0
-                    if self.station.antennas[2*i+0].combined_status != 33 or self.station.antennas[2*i+1].combined_status != 33:
-                        weights[:,i,:] = 0.0
+                        weights[i,:,:] = 0.0
                         
                     if i == (nstand-1):
-                        weights[:,i,:] = 0.0
+                        weights[i,:,:] = 0.0
                         
                 # Setup the mask
                 freq = chan0*fC + np.arange(nchan)*4*fC
@@ -1426,9 +1426,10 @@ class WriterOp(object):
         self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
-        self.in_proclog.update({'nring':2,
+        self.in_proclog.update({'nring':3,
                                 'ring0':self.iring.name,
-                                'ring1':self.mring.name})
+                                'ring1':self.mring.name,
+                                'ring2':self.sring.name})
         
     def _save_image(self, station, time_tag, hdr, freq, data, mask=None, weighting='natural'):
         # Get the fill level as a fraction
@@ -1657,7 +1658,12 @@ class WriterOp(object):
                 
                 ## Write the full image set to disk
                 tSave = time.time()
-                self._save_image(self.station, time_tag, ihdr, freq, idata, mask=1-mdata, weighting=weighting)
+                metadata = self._save_image(self.station, time_tag, ihdr,
+                                            freq, idata, mask=1-mdata, weighting=weighting)
+                metadata['station'] = self.station.name.lower().replace('-', '')
+                for key in metadata:
+                    if isinstance(metadata[key], bytes):
+                        metadata[key] = metadata[key].decode()
                 self.log.debug('Save time%s: %.3f s', self.label, time.time()-tSave)
                 
                 ## Write the archive image set to disk
@@ -1671,12 +1677,8 @@ class WriterOp(object):
                     if mask_mean[band,0,0,0] < 0.5:
                         arc_mask[band,:,:,:,:] = 0
                 arc_data = (arc_data*arc_mask).sum(axis=1) / arc_mask.sum(axis=1)
-                metadata = self._save_archive_image(self.station, time_tag, ihdr,
-                                                    arc_freq, arc_data, weighting=weighting)
-                metadata['station'] = self.station.name.lower().replace('-', '')
-                for key in metadata:
-                    if isinstance(metadata[key], bytes):
-                        metadata[key] = metadata[key].decode()
+                self._save_archive_image(self.station, time_tag, ihdr,
+                                         arc_freq, arc_data, weighting=weighting)
                 self.log.debug('Archive save time%s: %.3f s', self.label, time.time()-tArchive)
                 
                 ## Timetag stuff

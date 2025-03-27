@@ -1560,7 +1560,7 @@ class WriterOp(object):
         lax.set_axis_off()
         lax.imshow(logo, origin='upper', cmap='gray')
         ## Spectrum
-        sax = fig.add_axes([0.45, 0.85, 0.1, 0.1], facecolor='black', frameon=False)
+        sax = fig.add_axes([0.42, 0.85, 0.16, 0.1], facecolor='black', frameon=False)
         sax.set_axis_off()
         
         # Setup the A Team sources, plus the Sun and Jupiter

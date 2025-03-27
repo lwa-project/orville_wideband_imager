@@ -669,7 +669,9 @@ class MatrixOp(object):
                                   'core0': cpu_affinity.get_core(),
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
-
+        
+        warnings.filterwarnings("ignore", category=RuntimeWarning, message="divide by zero")
+        
         for iseq,mseq in zip(self.iring.read(guarantee=True),self.mring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())
             mhdr = json.loads(mseq.header.tostring())

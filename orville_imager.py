@@ -1768,6 +1768,8 @@ class WriterOp(object):
                     sax.cla()
                     sax.semilogy(freq, sdata[:,0,0,0], color='white')
                     sax.scatter(freq[c], sdata[c,0,0,0], marker='o', color='red')
+                    sax.set_xticks([])
+                    sax.set_yticks([])
                     
                     ## Save
                     mjd, h, m, s = timetag_to_mjdatetime(time_tag)

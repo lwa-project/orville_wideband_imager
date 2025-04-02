@@ -1874,7 +1874,7 @@ class UploaderOp(object):
 class AnalogSettingsOp(object):
     def __init__(self, log, station_name, core=-1, gpu=-1):
         self.log = log
-        self.name = station_name
+        self.station_name = station_name
         self.core = core
         self.gpu = gpu
         

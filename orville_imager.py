@@ -1376,11 +1376,11 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, fsring, sring, station, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1e6, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, fring, sring, station, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1e6, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
-        self.fsring = fsring
+        self.fring = fring
         self.sring = sring
         self.station = copy.deepcopy(station)
         self.label = label
@@ -1430,7 +1430,7 @@ class WriterOp(object):
         self.in_proclog.update({'nring':4,
                                 'ring0':self.iring.name,
                                 'ring1':self.mring.name,
-                                'ring2':self.fsring.name,
+                                'ring2':self.fring.name,
                                 'ring3':self.sring.name})
         
     def _save_image(self, station, time_tag, hdr, freq, data, mask=None, weighting='natural'):
@@ -1587,10 +1587,10 @@ class WriterOp(object):
             bdy._epoch = ephem.J2000
             gplane.append(bdy)
             
-        for iseq,mseq,fseq,sseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True), self.fsring.read(guarantee=True), self.sring.read(guarantee=True)):
+        for iseq,mseq,fseq,sseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True), self.fring.read(guarantee=True), self.sring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())
             mhdr = json.loads(mseq.header.tostring())
-            fhdr = json.loads(mseq.header.tostring())
+            fhdr = json.loads(fseq.header.tostring())
             shdr = json.loads(sseq.header.tostring())
             
             self.sequence_proclog.update(ihdr)
@@ -1617,7 +1617,7 @@ class WriterOp(object):
             
             fgulp_size = fhdr['nchan']*4                      # float32
             fshape = (fhdr['nchan'],1,1,1)
-            self.fsring.resize(fgulp_size, fgulp_size*10)
+            self.fring.resize(fgulp_size, fgulp_size*10)
             
             sgulp_size = nchan*4                              # float32
             sshape = (nchan,1,1,1)

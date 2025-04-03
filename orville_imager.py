@@ -1642,7 +1642,7 @@ class WriterOp(object):
                 if abs(freq[best_chan] - lf) <= 250e3:
                     ichans.append(best_chan)
                     lchans.append(lsc)
-            fsoffset = ihdr['chan0'] - fhdr['chan0']
+            fsoffset = int(round(ihdr['chan0'] - fhdr['chan0']))
             
             # Setup the buffer for the automatic color scale control
             vmax = [deque([], maxlen=60) for c in freq]
@@ -1780,7 +1780,7 @@ class WriterOp(object):
                     ## Add the spectrum
                     sax.cla()
                     sax.semilogy(full_freq, fdata[:,0,0,0], color='white')
-                    sax.scatter(full_freq[c+fsoffset], fdata[c,0,0,0], marker='o', color='red')
+                    sax.scatter(full_freq[c+fsoffset], fdata[c+fsoffset,0,0,0], marker='o', color='red')
                     sax.axis('off')
                     
                     ## Save

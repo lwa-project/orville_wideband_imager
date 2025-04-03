@@ -1430,7 +1430,7 @@ class WriterOp(object):
         self.in_proclog.update({'nring':4,
                                 'ring0':self.iring.name,
                                 'ring1':self.mring.name,
-                                'ring2':self.fsring.name
+                                'ring2':self.fsring.name,
                                 'ring3':self.sring.name})
         
     def _save_image(self, station, time_tag, hdr, freq, data, mask=None, weighting='natural'):

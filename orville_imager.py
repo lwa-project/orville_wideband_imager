@@ -1780,7 +1780,7 @@ class WriterOp(object):
                     ## Add the spectrum
                     sax.cla()
                     sax.semilogy(full_freq, fdata[:,0,0,0], color='white')
-                    sax.scatter(full_freq[c+fcoffset], fdata[c,0,0,0], marker='o', color='red')
+                    sax.scatter(full_freq[c+fsoffset], fdata[c,0,0,0], marker='o', color='red')
                     sax.axis('off')
                     
                     ## Save

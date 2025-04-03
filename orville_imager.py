@@ -1642,14 +1642,14 @@ class WriterOp(object):
                 if abs(freq[best_chan] - lf) <= 250e3:
                     ichans.append(best_chan)
                     lchans.append(lsc)
-            fsoffset = int(round(ihdr['chan0'] - fhdr['chan0']))
+            fsoffset = int(round(ihdr['chan0'] - fhdr['chan0'])) // 4
             
             # Setup the buffer for the automatic color scale control
             vmax = [deque([], maxlen=60) for c in freq]
             
             intCount = 0
             prev_time = time.time()
-            for ispan,mspan,fspan,sspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size), fseq.read(sgulp_size), sseq.read(sgulp_size)):
+            for ispan,mspan,fspan,sspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size), fseq.read(fgulp_size), sseq.read(sgulp_size)):
                 if ispan.size < igulp_size:
                     continue # Ignore final gulp
                 if mspan.size < nchan*1:

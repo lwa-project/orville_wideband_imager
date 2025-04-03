@@ -1376,10 +1376,11 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, sring, station, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1e6, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, fsring, sring, station, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1e6, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
+        self.fsring = fsring
         self.sring = sring
         self.station = copy.deepcopy(station)
         self.label = label
@@ -1426,10 +1427,11 @@ class WriterOp(object):
         self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
-        self.in_proclog.update({'nring':3,
+        self.in_proclog.update({'nring':4,
                                 'ring0':self.iring.name,
                                 'ring1':self.mring.name,
-                                'ring2':self.sring.name})
+                                'ring2':self.fsring.name
+                                'ring3':self.sring.name})
         
     def _save_image(self, station, time_tag, hdr, freq, data, mask=None, weighting='natural'):
         # Get the fill level as a fraction
@@ -1585,9 +1587,10 @@ class WriterOp(object):
             bdy._epoch = ephem.J2000
             gplane.append(bdy)
             
-        for iseq,mseq,sseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True), self.sring.read(guarantee=True)):
+        for iseq,mseq,fseq,sseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True), self.fsring.read(guarantee=True), self.sring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())
             mhdr = json.loads(mseq.header.tostring())
+            fhdr = json.loads(mseq.header.tostring())
             shdr = json.loads(sseq.header.tostring())
             
             self.sequence_proclog.update(ihdr)
@@ -1612,6 +1615,10 @@ class WriterOp(object):
             mshape = (nchan,1,1,1)
             self.mring.resize(mgulp_size, mgulp_size*10)
             
+            fgulp_size = fhdr['nchan']*4                      # float32
+            fshape = (fhdr['nchan'],1,1,1)
+            self.fsring.resize(fgulp_size, fgulp_size*10)
+            
             sgulp_size = nchan*4                              # float32
             sshape = (nchan,1,1,1)
             self.sring.resize(sgulp_size, sgulp_size*10)
@@ -1625,6 +1632,8 @@ class WriterOp(object):
             arc_freq = arc_freq.reshape(-1, 32)
             arc_freq = arc_freq.mean(axis=1)
             
+            full_freq = fhdr['chan0']*fC + np.arange(fhdr['nchan'])*4*fC
+            
             # Setup the frequencies to write images for
             ichans = []
             lchans = []
@@ -1633,16 +1642,19 @@ class WriterOp(object):
                 if abs(freq[best_chan] - lf) <= 250e3:
                     ichans.append(best_chan)
                     lchans.append(lsc)
-                    
+            fsoffset = ihdr['chan0'] - fhdr['chan0']
+            
             # Setup the buffer for the automatic color scale control
             vmax = [deque([], maxlen=60) for c in freq]
             
             intCount = 0
             prev_time = time.time()
-            for ispan,mspan,sspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size), sseq.read(sgulp_size)):
+            for ispan,mspan,fspan,sspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size), fseq.read(sgulp_size), sseq.read(sgulp_size)):
                 if ispan.size < igulp_size:
                     continue # Ignore final gulp
                 if mspan.size < nchan*1:
+                    continue # Ignore final gulp
+                if fspan.size < fhdr['nchan']*4:
                     continue # Ignore final gulp
                 if sspan.size < nchan*4:
                     continue # Ignore final gulp
@@ -1654,6 +1666,7 @@ class WriterOp(object):
                 idata = ispan.data_view(np.float32).reshape(ishape)
                 mdata = mspan.data_view(np.uint8).reshape(mshape)
                 mdata = mdata.copy()
+                fdata = fspan.data_view(np.float32).reshape(fshape)
                 sdata = sspan.data_view(np.float32).reshape(sshape)
                 
                 ## Write the full image set to disk
@@ -1766,8 +1779,8 @@ class WriterOp(object):
                     
                     ## Add the spectrum
                     sax.cla()
-                    sax.semilogy(freq, sdata[:,0,0,0], color='white')
-                    sax.scatter(freq[c], sdata[c,0,0,0], marker='o', color='red')
+                    sax.semilogy(full_freq, fdata[:,0,0,0], color='white')
+                    sax.scatter(full_freq[c+fcoffset], fdata[c,0,0,0], marker='o', color='red')
                     sax.axis('off')
                     
                     ## Save
@@ -2089,7 +2102,7 @@ def main(args):
                              decimation=args.decimation, config=orville_config,
                              label=str(i), core=cores.pop(0), gpu=gpus.pop(0)))
         ## The subband image writer and plotter for LWA TV
-        ops.append(WriterOp(log, writer_rings[i], sub_rfimask_rings[i], sub_avgspec_rings[i], station,
+        ops.append(WriterOp(log, writer_rings[i], sub_rfimask_rings[i], avgspec_ring, sub_avgspec_rings[i], station,
                             base_dir=args.output_dir, uploader_dir=uploader_dir,
                             lwatv_freq=args.lwatv_freq, label=str(i),
                             core=cores.pop(0), gpu=gpus.pop(0)))

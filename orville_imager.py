@@ -1397,7 +1397,7 @@ class WriterOp(object):
         self.oarfish = None
         if PredictionClient is not None:
             try:
-                self.oarfish = PredictionClient(timeout=0.5, logger=self.log)
+                self.oarfish = PredictionClient(timeout=1, logger=self.log)
             except Exception as e:
                 self.log.warning("Failed to create oarfish client: %s", str(e))
                 

@@ -1543,7 +1543,10 @@ class WriterOp(object):
             try:
                 self.oarfish.start()
                 info = self.oarfish.identify()
-                self.log.info("Connected to oarfish server with %s", info)
+                if info is not None:
+                    self.log.info("Connected to oarfish server with %s", info)
+                else:
+                    self.log.warning("Failed to query oarfish server info")
             except Exception as e:
                 self.log.warning("Failed to start oarfish client: %s", str(e))
                 

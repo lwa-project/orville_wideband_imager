@@ -1401,14 +1401,6 @@ class WriterOp(object):
             except Exception as e:
                 self.log.warning("Failed to create oarfish client: %s", str(e))
                 
-            if self.oarfish is not None:
-                try:
-                    self.oarfish.start()
-                    info = self.oarfish.identify()
-                    self.log.info("Connected to oarfish server with %s", info)
-                except Exception as e:
-                    self.log.warning("Failed to start oarfish client: %s", str(e))
-                    
         if not os.path.exists(base_dir):
             os.makedirs(base_dir, exist_ok=True)
         if not os.path.exists(self.output_dir_images):
@@ -1546,6 +1538,15 @@ class WriterOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
         
+        # Setup the classification client
+        if self.oarfish is not None:
+            try:
+                self.oarfish.start()
+                info = self.oarfish.identify()
+                self.log.info("Connected to oarfish server with %s", info)
+            except Exception as e:
+                self.log.warning("Failed to start oarfish client: %s", str(e))
+                
         # Setup the figure
         ## Import
         import matplotlib

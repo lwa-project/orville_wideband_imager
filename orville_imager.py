@@ -1721,6 +1721,12 @@ class WriterOp(object):
                 results = None
                 if self.oarfish is not None:
                     results = self.oarfish.send(metadata, idata[ichans,:,:,:])
+                    ostats = self.oarfish.get_stats()
+                    if ostats['requests']['timeout'] > 600:
+                        self.log.debug('Restarting oarfish connection to server')
+                        self.oarfish.end()
+                        self.oarfish.start()
+                        
                 if results is None:
                     results = [{'quality_score': -1.0, 'final_label': ''} for c in ichans]
                     

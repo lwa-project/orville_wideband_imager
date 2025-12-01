@@ -6,6 +6,14 @@ ORVILLE_DATA_DIR=/data/orville
 # Where the software is stored
 ORVILLE_SOFTWARE_DIR=/home/jdowell/orville3
 
+# Where the configuration is stored
+ORVILLE_CONFIG_DIR=`realpath $0 | xargs dirname`
+
+# Parse the config. file
+STATION_NAME=`grep name ${ORVILLE_CONFIG_DIR}/defaults.json | tail -n1 | sed -e 's/.*:[ \t]*//;s/,[ \t]*$//;s/"//g;' `
+ARCHIVE_DIR=`echo "Orville${STATION_NAME^^}" | sed -e 's/LWASV//;s/LWA1/1/;s/LWA/-/'`
+LWATV_CHAN=`grep lwatv_channel ${ORVILLE_CONFIG_DIR}/defaults.json | tail -n1 | sed -e 's/.*:[ \t]*//;s/,[ \t]*$//;s/"//g;'`
+
 # Delete (u,v) radial and spectra plots more than three weeks old
 find ${ORVILLE_DATA_DIR}/baselines -mtime +22 -exec rm -r {} \;
 find ${ORVILLE_DATA_DIR}/spectra -mtime +22 -exec rm -r {} \;
@@ -17,6 +25,7 @@ find ${ORVILLE_DATA_DIR}/matrices -mtime +22 -exec rm -r {} \;
 find ${ORVILLE_DATA_DIR}/log -mtime +43 -exec rm {} \;
 
 # Build movies of the LWATV images from previous days
+mkdir -p ${ORVILLE_DATA_DIR}/movies
 for mjd in `find ${ORVILLE_DATA_DIR}/lwatv -type d -name 6\* | sort | head -n -1 `; do
     ${ORVILLE_SOFTWARE_DIR}/make_movies.py -o ${ORVILLE_DATA_DIR}/movies ${mjd}
     if [[ "$?" == "0" ]]; then
@@ -26,11 +35,11 @@ done
 
 # Upload the movies
 rsync -e ssh -avHL ${ORVILLE_DATA_DIR}/movies/*[0-9][0-9].mov ${ORVILLE_DATA_DIR}/movies/movielist.js \
-      mcsdr@lwalab.phys.unm.edu:/var/www/lwatv4/
+      mcsdr@lwalab.phys.unm.edu:/var/www/${LWATV_CHAN}/
 
 # Backup the archive
 rsync -e ssh -avH ${ORVILLE_DATA_DIR}/archive/6* \
-      pasi@lda10g.alliance.unm.edu:/FileStore/Orville-NA/
+      pasi@lda10g.alliance.unm.edu:/FileStore/${ARCHIVE_DIR}/
 find ${ORVILLE_DATA_DIR}/archive/ -type d -mtime +270 | xargs rm -rf
 
 # Delete events as needed to keep us below 30 TB

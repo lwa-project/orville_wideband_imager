@@ -11,6 +11,7 @@ ORVILLE_CONFIG_DIR=`realpath $0 | xargs dirname`
 
 # Parse the config. file
 STATION_NAME=`grep name ${ORVILLE_CONFIG_DIR}/defaults.json | tail -n1 | sed -e 's/.*:[ \t]*//;s/,[ \t]*$//;s/"//g;' `
+STATION_SIZE=`grep diameter ${ORVILLE_CONFIG_DIR}/defaults.json | tail -n1 | sed -e 's/.*:[ \t]*//;s/,[ \t]*$//;s/"//g;' `
 ARCHIVE_DIR=`echo "Orville${STATION_NAME^^}" | sed -e 's/LWASV//;s/LWA1/1/;s/LWA/-/'`
 LWATV_CHAN=`grep lwatv_channel ${ORVILLE_CONFIG_DIR}/defaults.json | tail -n1 | sed -e 's/.*:[ \t]*//;s/,[ \t]*$//;s/"//g;'`
 
@@ -42,9 +43,17 @@ rsync -e ssh -avH ${ORVILLE_DATA_DIR}/archive/6* \
       pasi@lda10g.alliance.unm.edu:/FileStore/${ARCHIVE_DIR}/
 find ${ORVILLE_DATA_DIR}/archive/ -type d -mtime +270 | xargs rm -rf
 
+# Convert the station size to an estimates data volume per day
+IMAGE_TB_DAY=7
+if [[ "${STATION_SIZE}" == "50" ]]; then
+    IMAGE_TB_DAY=2
+fi
+
 # Delete events as needed to keep us below 30 TB
+disksize=`df -B1 ${ORVILLE_DATA_DIR} | tail -n1 | awk '{print $2}'`
+targetsize=$(($disksize - $IMAGE_TB_DAY*1024*1024*1024*1024))
 rawsize=`du -b ${ORVILLE_DATA_DIR}/images | tail -n1 | awk '{print $1}'`
-while [[ "${rawsize}" -ge $((30*1024*1024*1024*1024)) ]]; do
+while [[ "${rawsize}" -ge ${targetsize} ]]; do
     oldest=`ls -td ${ORVILLE_DATA_DIR}/images/6* | tail -n1`
     echo "Removing ${oldest}"
     rm -rf ${oldest}

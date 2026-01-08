@@ -50,14 +50,13 @@ if [[ "${STATION_SIZE}" == "50" ]]; then
 fi
 
 # Delete events as needed to keep us below 30 TB
-disksize=`df -B1 ${ORVILLE_DATA_DIR} | tail -n1 | awk '{print $2}'`
-targetsize=$(($disksize - $IMAGE_TB_DAY*1024*1024*1024*1024))
-rawsize=`du -b ${ORVILLE_DATA_DIR}/images | tail -n1 | awk '{print $1}'`
-while [[ "${rawsize}" -ge ${targetsize} ]]; do
+targetfree=$(($IMAGE_TB_DAY*1024*1024*1024*1024))
+rawfree=`df -B1 ${ORVILLE_DATA_DIR} | tail -n1 | awk '{print $4}'`
+while [[ "${rawfree}" -lt ${targetfree} ]]; do
     oldest=`ls -td ${ORVILLE_DATA_DIR}/images/6* | tail -n1`
     echo "Removing ${oldest}"
     rm -rf ${oldest}
-    rawsize=`du -b ${ORVILLE_DATA_DIR}/images | tail -n1 | awk '{print $1}'`
+    rawfree=`df -B1 ${ORVILLE_DATA_DIR} | tail -n1 | awk '{print $4}'`
 done
 
 # Report on disk usage

@@ -41,7 +41,7 @@ rsync -e ssh -avHL ${ORVILLE_DATA_DIR}/movies/*[0-9][0-9].mov ${ORVILLE_DATA_DIR
 # Backup the archive
 rsync -e ssh -avH ${ORVILLE_DATA_DIR}/archive/6* \
       pasi@lda10g.alliance.unm.edu:/FileStore/${ARCHIVE_DIR}/
-find ${ORVILLE_DATA_DIR}/archive/ -type d -mtime +270 | xargs rm -rf
+find ${ORVILLE_DATA_DIR}/archive/ -type d -mtime +45 | xargs rm -rf
 
 # Convert the station size to an estimates data volume per day
 IMAGE_TB_DAY=7

@@ -1509,9 +1509,7 @@ class WriterOp(object):
         elif len(chan_selection) != freq.size:
             freq = freq[chan_selection]
             data = data[chan_selection,...]
-            if mask is not None:
-                mask = mask[chan_selection,...]
-                
+            
         # Get the date
         mjd, h, m, s = timetag_to_mjdatetime(time_tag)
         

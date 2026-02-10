@@ -1376,7 +1376,7 @@ class ImagingOp(object):
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, fring, sring, station, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1e6, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, fring, sring, station, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1e6, min_save_freq=0.0, max_save_freq=98e6, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
@@ -1391,6 +1391,8 @@ class WriterOp(object):
         if not isinstance(lwatv_freq, (tuple, list)):
             lwatv_freq = [lwatv_freq,]
         self.lwatv_freq = lwatv_freq
+        self.min_save_freq = min_save_freq
+        self.max_save_freq = max_save_freq
         self.core = core
         self.gpu = gpu
         
@@ -1436,6 +1438,17 @@ class WriterOp(object):
         except queue.Empty:
             fill = 0.0
             
+        # Downselect
+        chan_selection = np.where((freq >= self.min_save_freq) & (freq <= self.max_save_freq))[0]
+        if len(chan_selection) == 0:
+            return {}
+            
+        elif len(chan_selection) != freq.size:
+            freq = freq[chan_selection]
+            data = data[chan_selection,...]
+            if mask is not None:
+                mask = mask[chan_selection,...]
+                
         # Get the date
         mjd, h, m, s = timetag_to_mjdatetime(time_tag)
         
@@ -1488,6 +1501,17 @@ class WriterOp(object):
         except queue.Empty:
             fill = 0.0
             
+        # Downselect
+        chan_selection = np.where((freq >= self.min_save_freq) & (freq <= self.max_save_freq))[0]
+        if len(chan_selection) == 0:
+            return {}
+            
+        elif len(chan_selection) != freq.size:
+            freq = freq[chan_selection]
+            data = data[chan_selection,...]
+            if mask is not None:
+                mask = mask[chan_selection,...]
+                
         # Get the date
         mjd, h, m, s = timetag_to_mjdatetime(time_tag)
         
@@ -2006,7 +2030,9 @@ def main(args):
                       'nsub':            1,
                       'max_packet_size': 9000, # B
                       'buffer_factor':   6,
-                      'lwatv_channel':   ''}
+                      'lwatv_channel':   '',
+                      'min_save_freq':   0.0,
+                      'max_save_freq':   98.0e6}
     if args.configfile is not None:
         with open(args.configfile, 'r') as fh:
             config = json.loads(json_minify.json_minify(fh.read()))
@@ -2115,6 +2141,8 @@ def main(args):
         ops.append(WriterOp(log, writer_rings[i], sub_rfimask_rings[i], avgspec_ring, sub_avgspec_rings[i], station,
                             base_dir=args.output_dir, uploader_dir=uploader_dir,
                             lwatv_freq=args.lwatv_freq, label=str(i),
+                            min_save_freq=orville_config['min_save_freq'],
+                            max_save_freq=orville_config['max_save_freq'],
                             core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
     ops.append(UploaderOp(log, uploader_dir=uploader_dir,

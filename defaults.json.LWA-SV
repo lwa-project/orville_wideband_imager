@@ -24,5 +24,9 @@
   "buffer_factor": 6,
   
   /* LWATV channel */
-  "lwatv_channel": "lwatv2"
+  "lwatv_channel": "lwatv2",
+  
+  /* Frequency range in Hz to write to disk */
+  "min_save_freq": 30e6,
+  "max_save_freq": 85e6
 }

@@ -27,6 +27,6 @@
   "lwatv_channel": "lwatv4",
   
   /* Frequency range in Hz to write to disk */
-  "min_save_freq": 30e6,
+  "min_save_freq": 35e6,
   "max_save_freq": 85e6
 }

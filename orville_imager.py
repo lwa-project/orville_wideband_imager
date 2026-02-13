@@ -1942,7 +1942,7 @@ class AnalogSettingsOp(object):
         
         mapping = {'AT1': 'asp_atten_1',
                    'AT2': 'asp_atten_2',
-                   'ATS': 'asp_atten_s',
+                   'AT3': 'asp_atten_3',
                    'FIL': 'asp_filter'}
         
         prev_time = time.time()
@@ -1954,7 +1954,7 @@ class AnalogSettingsOp(object):
             new_config = {'asp_filter':  -1,
                           'asp_atten_1': -1,
                           'asp_atten_2': -1,
-                          'asp_atten_s': -1}
+                          'asp_atten_3': -1}
             
             try:
                 with urlopen(f"https://lwalab.phys.unm.edu/OpScreen/{self.station_name}/arx.json", timeout=5) as uh:

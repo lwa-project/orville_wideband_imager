@@ -12,7 +12,7 @@ from astropy.time import Time
 from datetime import datetime, timedelta
 import os
 import sys
-import numpy
+import numpy as np
 import argparse
 
 from lsl_toolkits.OrvilleImage import OrvilleImageDB
@@ -22,32 +22,32 @@ def calcbeamprops(az,alt,header,freq):
     # az and alt need to be the same shape as the image we will correct
 
     i = 0
-    beamDict = numpy.load(os.path.join(dataPath, 'lwa1-dipole-emp.npz'))
+    beamDict = np.load(os.path.join(dataPath, 'lwa1-dipole-emp.npz'))
     polarpatterns = []
     for beamCoeff in (beamDict['fitX'], beamDict['fitY']):
-        alphaE = numpy.polyval(beamCoeff[0,0,:],freq )
-        betaE =  numpy.polyval(beamCoeff[0,1,:],freq )
-        gammaE = numpy.polyval(beamCoeff[0,2,:],freq )
-        deltaE = numpy.polyval(beamCoeff[0,3,:],freq )
-        alphaH = numpy.polyval(beamCoeff[1,0,:],freq )
-        betaH =  numpy.polyval(beamCoeff[1,1,:],freq )
-        gammaH = numpy.polyval(beamCoeff[1,2,:],freq )
-        deltaH = numpy.polyval(beamCoeff[1,3,:],freq )
+        alphaE = np.polyval(beamCoeff[0,0,:],freq )
+        betaE =  np.polyval(beamCoeff[0,1,:],freq )
+        gammaE = np.polyval(beamCoeff[0,2,:],freq )
+        deltaE = np.polyval(beamCoeff[0,3,:],freq )
+        alphaH = np.polyval(beamCoeff[1,0,:],freq )
+        betaH =  np.polyval(beamCoeff[1,1,:],freq )
+        gammaH = np.polyval(beamCoeff[1,2,:],freq )
+        deltaH = np.polyval(beamCoeff[1,3,:],freq )
         corrFnc = None
 
         def compute_beam_pattern(az, alt, corr=corrFnc):
-            zaR = numpy.pi/2 - alt*numpy.pi / 180.0
-            azR = az*numpy.pi / 180.0
+            zaR = np.pi/2 - alt*np.pi / 180.0
+            azR = az*np.pi / 180.0
 
             c = 1.0
             if corrFnc is not None:
-                c = corrFnc(alt*numpy.pi / 180.0)
-                c = numpy.where(numpy.isfinite(c), c, 1.0)
+                c = corrFnc(alt*np.pi / 180.0)
+                c = np.where(np.isfinite(c), c, 1.0)
 
-            pE = (1-(2*zaR/numpy.pi)**alphaE)*numpy.cos(zaR)**betaE + gammaE*(2*zaR/numpy.pi)*numpy.cos(zaR)**deltaE
-            pH = (1-(2*zaR/numpy.pi)**alphaH)*numpy.cos(zaR)**betaH + gammaH*(2*zaR/numpy.pi)*numpy.cos(zaR)**deltaH
+            pE = (1-(2*zaR/np.pi)**alphaE)*np.cos(zaR)**betaE + gammaE*(2*zaR/np.pi)*np.cos(zaR)**deltaE
+            pH = (1-(2*zaR/np.pi)**alphaH)*np.cos(zaR)**betaH + gammaH*(2*zaR/np.pi)*np.cos(zaR)**deltaH
 
-            return c*numpy.sqrt((pE*numpy.cos(azR))**2 + (pH*numpy.sin(azR))**2)
+            return c*np.sqrt((pE*np.cos(azR))**2 + (pH*np.sin(azR))**2)
         # Calculate the beam
         pattern = compute_beam_pattern(az, alt)
         polarpatterns.append(pattern)
@@ -57,15 +57,15 @@ def calcbeamprops(az,alt,header,freq):
 
 def pbcorroims(header,imSize,chan):
     pScale = header['pixel_size']
-    sRad   = 360.0/pScale/numpy.pi / 2
+    sRad   = 360.0/pScale/np.pi / 2
     w = WCS(naxis=2)
     w.wcs.crpix = [imSize/2 + 1 + 0.5 * ((imSize+1)%2),imSize/2 + 1 + 0.5 * ((imSize+1)%2)]
-    w.wcs.cdelt = numpy.array([-360.0/(2*sRad)/numpy.pi, 360.0/(2*sRad)/numpy.pi])
+    w.wcs.cdelt = np.array([-360.0/(2*sRad)/np.pi, 360.0/(2*sRad)/np.pi])
     w.wcs.crval = [header['center_ra'], header['center_dec']]
     w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
-    x = numpy.arange(imSize) - 0.5
-    y = numpy.arange(imSize) - 0.5
-    x,y = numpy.meshgrid(x,y)
+    x = np.arange(imSize) - 0.5
+    y = np.arange(imSize) - 0.5
+    x,y = np.meshgrid(x,y)
     maskpix  = ((x-imSize/2.0)**2 + (y-imSize/2.0)**2) > ((0.98*sRad)**2)
     x[maskpix] = imSize/2
     y[maskpix] = imSize/2
@@ -108,34 +108,34 @@ def main(args):
             hdrlist = []
             if args.index is not None:
                 if not args.diff:
-                    data = numpy.zeros((1,nchan,4,ngrid,ngrid))
+                    data = np.zeros((1,nchan,4,ngrid,ngrid))
                     db.seek(args.index)
                     hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
-                    data[0] = numpy.asarray(alldata.data)
+                    data[0] = np.asarray(alldata.data)
                 else:
-                    data = numpy.zeros((1,nchan,4,ngrid,ngrid))
+                    data = np.zeros((1,nchan,4,ngrid,ngrid))
                     # FIRST do the next image
                     db.seek(args.index+1)
                     hdr,alldata = db.read_image()
-                    data[0] = numpy.asarray(alldata.data)
+                    data[0] = np.asarray(alldata.data)
                     # Next subtract our image
                     db.seek(args.index)
                     hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
-                    data[0] = data[0] - numpy.asarray(alldata.data)
+                    data[0] = data[0] - np.asarray(alldata.data)
                 hdr = hdrlist[0]
             else:    
-                data = numpy.zeros((ints,nchan,4,ngrid,ngrid))
+                data = np.zeros((ints,nchan,4,ngrid,ngrid))
                 for i in range(ints):
                     db.seek(i)
                     hdr,alldata = db.read_image()
                     hdrlist.append(hdr)
-                    data[i] = numpy.asarray(alldata.data)
+                    data[i] = np.asarray(alldata.data)
                 hdr = hdrlist[0]
                 if args.diff:
-                    tmpdata = numpy.copy(data)
-                    data = numpy.zeros((len(data)-1,6,4,ngrid,ngrid))
+                    tmpdata = np.copy(data)
+                    data = np.zeros((len(data)-1,6,4,ngrid,ngrid))
                     for i in range(len(data)):
                         data[i] = tmpdata[i+1] - tmpdata[i]
             for chan in range(nchan):
@@ -153,11 +153,11 @@ def main(args):
                     
                     ## Zero outside of the horizon so avoid problems
                     pScale = psize
-                    sRad   = 360.0/pScale/numpy.pi / 2
-                    x = numpy.arange(data.shape[-2]) - 0.5
-                    y = numpy.arange(data.shape[-1]) - 0.5
-                    x,y = numpy.meshgrid(x,y)
-                    invalid = numpy.where( ((x-imSize/2.0)**2 + (y-imSize/2.0)**2) > (sRad**2) )
+                    sRad   = 360.0/pScale/np.pi / 2
+                    x = np.arange(data.shape[-2]) - 0.5
+                    y = np.arange(data.shape[-1]) - 0.5
+                    x,y = np.meshgrid(x,y)
+                    invalid = np.where( ((x-imSize/2.0)**2 + (y-imSize/2.0)**2) > (sRad**2) )
                     imdata[:,invalid[0], invalid[1]] = 0.0
                     ext = imSize/(2*sRad)
                     if args.pbcorr:
@@ -189,12 +189,12 @@ def main(args):
                     hdu.header['NAXIS'] = 3
                     hdu.header['CTYPE1'] = 'RA---SIN'
                     hdu.header['CRPIX1'] = imSize/2 + 1 + 0.5 * ((imSize+1)%2)
-                    hdu.header['CDELT1'] = -360.0/(2*sRad)/numpy.pi
+                    hdu.header['CDELT1'] = -360.0/(2*sRad)/np.pi
                     hdu.header['CRVAL1'] = hdr['center_ra']
                     hdu.header['CUNIT1'] = 'deg'
                     hdu.header['CTYPE2'] = 'DEC--SIN'
                     hdu.header['CRPIX2'] = imSize/2 + 1 + 0.5 * ((imSize+1)%2)
-                    hdu.header['CDELT2'] = 360.0/(2*sRad)/numpy.pi
+                    hdu.header['CDELT2'] = 360.0/(2*sRad)/np.pi
                     hdu.header['CRVAL2'] = hdr['center_dec']
                     hdu.header['CUNIT2'] = 'deg'
                     ### Coordinates - Stokes parameters

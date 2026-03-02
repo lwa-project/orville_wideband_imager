@@ -35,7 +35,9 @@ jobs:
             "numpy<2" \
             matplotlib \
             scipy \
-            h5py
+            h5py \
+            fpzip \
+            zfpy
           python -m pip install git+https://github.com/lwa-project/lsl.git
           python -m pip install pylint
       - name: "Build and Install"

@@ -811,7 +811,6 @@ class OrvilleImageDB(object):
         for i in range(inDB.nint):
             inDB.file.seek(inDB._offsets[i] + inDB._TIME_OFFSET, os.SEEK_SET)
             times[i] = struct.unpack('<d', inDB.file.read(8))[0]
-            
         intOrder = times.argsort()
         
         # Second pass: write the sorted file one integration at a time,

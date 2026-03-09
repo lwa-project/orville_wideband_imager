@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from lsl.common.mcs import mjdmpm_to_datetime
-from lsl.common.paths import DATA as dataPath
 from lsl.common.stations import lwasv
 from lsl.misc import parser as aph
 from scipy.interpolate import interp1d

@@ -32,7 +32,7 @@ speedOfLight = speedOfLight.to('m/s').value
 from lsl.common.stations import lwa1, lwasv, lwana, parse_ssmif
 from lsl.correlator import uvutils
 from lsl.imaging import utils
-from lsl.common.adp import fS
+from lsl.common.ndp import fS
 fC = fS / 8192
 from lsl.astro import MJD_OFFSET, DJD_OFFSET
 

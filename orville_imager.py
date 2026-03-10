@@ -1482,7 +1482,7 @@ class WriterOp(object):
         outname = os.path.join(outname, filename)
         
         try:
-            with OrvilleImageDB(outname, mode='a', station=station.name, compression='fpzip') as db:
+            with OrvilleImageDB(outname, mode='a', station=station.name) as db:
                 db.add_image(info, data, mask=mask)
             self.log.debug("Added integration to disk as part of '%s'", os.path.basename(outname))
         except Exception as e:
@@ -2055,11 +2055,11 @@ def main(args):
         log.info("  %s: %s", key, value)
         
     # Setup the cores and GPUs to use
-    cores = [0, 1, 2, 3, 4, 5, 6, 7, 7]
+    cores = [0, 1, 2, 3, 4, 5, 6, 7, 7, 8, 8]
     gpus  = [0,]*len(cores)
-    while len(cores) < 9 + orville_config['nsub']*2:
-        cores.extend(cores)
-        gpus.extend(gpus)
+    while len(cores) < 11 + orville_config['nsub']*2:
+        cores.extend([(cores[-2]+1) % 16, (cores[-1]+1) % 16])
+        gpus.extend([gpus[-2], gpus[-1]])
         
     log.info("CPUs:         %s", ' '.join([str(v) for v in cores]))
     log.info("GPUs:         %s", ' '.join([str(v) for v in gpus]))

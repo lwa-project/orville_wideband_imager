@@ -41,7 +41,7 @@ jobs:
           python -m pip install git+https://github.com/lwa-project/lsl.git
           python -m pip install pylint
       - if: ${{ matrix.python-version != '3.8' }}
-        run: python -m pip install fzpy
+        run: python -m pip install zfpy
       - name: "Build and Install"
         run: python -m pip install .
       - name: Test

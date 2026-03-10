@@ -284,6 +284,9 @@ class OrvilleImageDB(object):
         self._compress = comp
         self._decompress = decomp
         
+        # Sort out whether or not we can support extended attributes
+        self._allow_ext_attr = True
+        
         # For read mode, we do not create a new file.  Raise an error if it
         # does not exist, and create an empty OrvilleImageDB object if its length
         # is zero.
@@ -337,30 +340,35 @@ class OrvilleImageDB(object):
                     self._TIME_OFFSET = self._TIME_OFFSET_v1
                     self._compress = None
                     self._decompress = None
+                    self._allow_ext_attr = False
                 elif self.version == 'OrvilleImageDBv002':
                     self._FileHeader = self._FileHeader_v2
                     self._EntryHeader = self._EntryHeader_v2
                     self._TIME_OFFSET = self._TIME_OFFSET_v2
                     self._compress = None
                     self._decompress = None
+                    self._allow_ext_attr = False
                 elif self.version == 'OrvilleImageDBv003':
                     self._FileHeader = self._FileHeader_v3
                     self._EntryHeader = self._EntryHeader_v3
                     self._TIME_OFFSET = self._TIME_OFFSET_v3
                     self._compress = None
                     self._decompress = None
+                    self._allow_ext_attr = False
                 elif self.version == 'OrvilleImageDBv004':
                     self._FileHeader = self._FileHeader_v4
                     self._EntryHeader = self._EntryHeader_v4
                     self._TIME_OFFSET = self._TIME_OFFSET_v4
                     self._compress = None
                     self._decompress = None
+                    self._allow_ext_attr = False
                 elif self.version == 'OrvilleImageDBv005':
                     self._FileHeader = self._FileHeader_v5
                     self._EntryHeader = self._EntryHeader_v5
                     self._TIME_OFFSET = self._TIME_OFFSET_v5
                     self._compress = None
                     self._decompress = None
+                    self._allow_ext_attr = False
                 else:
                     raise KeyError('The file "%s" does not appear to be a '
                                    'OrvilleImageDB file.  Initial string: "%s"' %
@@ -661,11 +669,12 @@ class OrvilleImageDB(object):
             setattr(entry_header, key, info[key])
             
         extended = None
-        if 'extended_attributes' in info:
-            extended = json.dumps(info['extended_attributes']).encode()
-            setattr(entry_header, 'extended', len(extended))
-        else:
-            setattr(entry_header, 'extended', -1)
+        if self._allow_ext_attr:
+            if 'extended_attributes' in info:
+                extended = json.dumps(info['extended_attributes']).encode()
+                setattr(entry_header, 'extended', len(extended))
+            else:
+                setattr(entry_header, 'extended', -1)
         if self._compress is not None:
             cdata = self._compress(data)
             setattr(entry_header, 'payload', len(cdata))

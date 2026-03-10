@@ -9,7 +9,11 @@ import shutil
 import tempfile
 
 import fpzip
-import zfpy
+try:
+    import zfpy
+    _HAVE_ZFPY = True
+except ImportError:
+    _HAVE_ZFPY = False
 
 from lsl.common.progress import ProgressBarPlus
 
@@ -39,7 +43,7 @@ def _get_compression_method(name):
         decomp = lambda cdata: \
                      fpzip.decompress(cdata).transpose(1,0,2,3)
         
-    elif name.startswith('zfp-'):
+    elif _HAVE_ZFPY and name.startswith('zfp-'):
         # Lossy compression with zfpy
         _, param, value = name.split('-', 2)
         try:

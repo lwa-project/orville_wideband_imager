@@ -9,6 +9,12 @@ import unittest
 
 from lsl_toolkits.OrvilleImage import OrvilleImageDB, BAD_FREQ_LIST
 
+try:
+    import zfpy
+    _HAVE_ZFPY = True
+except ImportError:
+    _HAVE_ZFPY = False
+
 
 __version__  = "0.2"
 __author__    = "Jayce Dowell"
@@ -142,6 +148,9 @@ class oims_tests(unittest.TestCase):
         for (cname,cmode,decimal) in [('lossless','fpzip',6),
                                       ('lossy','zfp-tol-0.001',2),
                                       ('lossy', 'zfp-prec-30',4)]:
+            if cmode.startswith('zfp-') and not _HAVE_ZFPY:
+                continue
+                
             with self.subTest(type=cname, method=cmode):
                 testFile = os.path.join(self.testPath, 'test.oims')
                 try:
@@ -239,6 +248,9 @@ class oims_tests(unittest.TestCase):
         for (cname,cmode,decimal) in [('lossless','fpzip',6),
                                       ('lossy','zfp-tol-0.001',2),
                                       ('lossy', 'zfp-prec-30',4)]:
+            if cmode.startswith('zfp-') and not _HAVE_ZFPY:
+                continue
+                
             with self.subTest(type=cname, method=cmode):
                 testFile = os.path.join(self.testPath, 'test.oims')
                 try:
@@ -305,6 +317,9 @@ class oims_tests(unittest.TestCase):
         for (cname,cmode,decimal) in [('lossless','fpzip',6),
                                       ('lossy','zfp-tol-0.001',2),
                                       ('lossy', 'zfp-prec-30',4)]:
+            if cmode.startswith('zfp-') and not _HAVE_ZFPY:
+                continue
+                
             with self.subTest(type=cname, method=cmode):
                 testFile = os.path.join(self.testPath, 'test.oims')
                 try:
@@ -409,6 +424,9 @@ class oims_tests(unittest.TestCase):
         for (cname,cmode,decimal) in [('lossless','fpzip',6),
                                       ('lossy','zfp-tol-0.001',2),
                                       ('lossy', 'zfp-prec-30',4)]:
+            if cmode.startswith('zfp-') and not _HAVE_ZFPY:
+                continue
+                
             with self.subTest(type=cname, method=cmode):
                 testFile = os.path.join(self.testPath, 'test.oims')
                 try:
@@ -471,6 +489,9 @@ class oims_tests(unittest.TestCase):
         for (cname,cmode,decimal) in [('lossless','fpzip',6),
                                       ('lossy','zfp-tol-0.001',2),
                                       ('lossy', 'zfp-prec-30',4)]:
+            if cmode.startswith('zfp-') and not _HAVE_ZFPY:
+                continue
+                
             with self.subTest(type=cname, method=cmode):
                 testFile = os.path.join(self.testPath, 'test.oims')
                 try:

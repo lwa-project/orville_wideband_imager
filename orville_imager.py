@@ -1715,7 +1715,8 @@ class WriterOp(object):
                 for band in range(mask_mean.shape[0]):
                     if mask_mean[band,0,0,0] < 0.5:
                         arc_mask[band,:,:,:,:] = 0
-                arc_data = (arc_data*arc_mask).sum(axis=1) / arc_mask.sum(axis=1)
+                arc_data = (arc_data*arc_mask).sum(axis=1, dtype=idata.dtype) \
+                            / arc_mask.sum(axis=1, dtype=idata.dtype)
                 arc_results = None
                 if self.oarfish is not None:
                     arc_results =  self.oarfish.send(metadata, arc_data)

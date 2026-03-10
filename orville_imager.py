@@ -1482,7 +1482,7 @@ class WriterOp(object):
         outname = os.path.join(outname, filename)
         
         try:
-            with OrvilleImageDB(outname, mode='a', station=station.name) as db:
+            with OrvilleImageDB(outname, mode='a', station=station.name, compression='fpzip') as db:
                 db.add_image(info, data, mask=mask)
             self.log.debug("Added integration to disk as part of '%s'", os.path.basename(outname))
         except Exception as e:
@@ -1543,7 +1543,7 @@ class WriterOp(object):
         outname = os.path.join(outname, filename)
         
         try:
-            with OrvilleImageDB(outname, mode='a', station=station.name) as db:
+            with OrvilleImageDB(outname, mode='a', station=station.name, compression='fpzip') as db:
                 db.add_image(info, data)
             self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
         except Exception as e:

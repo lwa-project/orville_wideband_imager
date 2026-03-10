@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.10', '3.12', '3.14']
+        python-version: ['3.8', '3.10', '3.12', '3.14']
       fail-fast: false
     steps:
       - name: "Software Install - Ubuntu"
@@ -37,10 +37,11 @@ jobs:
             matplotlib \
             scipy \
             h5py \
-            fpzip \
-            zfpy
+            fpzip
           python -m pip install git+https://github.com/lwa-project/lsl.git
           python -m pip install pylint
+      - if: ${{ matrix.python-version != '3.8' }}
+        run: python -m pip install fzpy
       - name: "Build and Install"
         run: python -m pip install .
       - name: Test

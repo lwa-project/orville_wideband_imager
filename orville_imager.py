@@ -1716,6 +1716,20 @@ class WriterOp(object):
                     if mask_mean[band,0,0,0] < 0.5:
                         arc_mask[band,:,:,:,:] = 0
                 arc_data = (arc_data*arc_mask).sum(axis=1) / arc_mask.sum(axis=1)
+                arc_results = None
+                if self.oarfish is not None:
+                    arc_results =  self.oarfish.send(metadata, arc_data)
+                    arc_ostats = self.oarfish.get_stats()
+                    if arc_ostats['requests']['timeout'] > 600:
+                        self.log.debug('Restarting oarfish connection to server')
+                        self.oarfish.end()
+                        self.oarfish.start()
+                        
+                if arc_results is not None:
+                    ihdr['extended_attributes'] = arc_results
+                elif 'extended_attributes' in ihdr:
+                    del ihdr['extended_attributes']
+                    
                 self._save_archive_image(self.station, time_tag, ihdr,
                                          arc_freq, arc_data, weighting=weighting)
                 self.log.debug('Archive save time%s: %.3f s', self.label, time.time()-tArchive)

@@ -17,7 +17,7 @@ import argparse
 import threading
 import subprocess
 import json_minify
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import deque
 from contextlib import ExitStack
 from urllib.request import urlopen
@@ -354,7 +354,7 @@ class SpectraOp(object):
                 
         # Summary
         ySummary = height * (box_size+1) + 2
-        timeStr = datetime.utcfromtimestamp(time_tag / fS)
+        timeStr = datetime.fromtimestamp(time_tag / fS, tz=timezone.utc)
         timeStr = timeStr.strftime("%Y/%m/%d %H:%M:%S UTC")
         draw.text((5, ySummary), timeStr, font = font, fill = '#000000')
         rangeStr = 'range shown: %.3f to %.3f dB' % (minval, maxval)
@@ -537,7 +537,7 @@ class BaselineOp(object):
             
         # Details and labels
         ySummary = height * 300 + 2
-        timeStr = datetime.utcfromtimestamp(time_tag / fS)
+        timeStr = datetime.fromtimestamp(time_tag / fS, tz=timezone.utc)
         timeStr = timeStr.strftime("%Y/%m/%d %H:%M:%S UTC")
         draw.text((5, ySummary), timeStr, font = font, fill = '#000000')
         rangeStr = 'range shown: %.6f - %.6f' % (minval, maxval)
@@ -1737,7 +1737,7 @@ class WriterOp(object):
                 
                 ## Timetag stuff
                 unix_time_tag_s = time_tag // int(fS)
-                date_str = datetime.utcfromtimestamp(unix_time_tag_s).strftime('%Y/%m/%d %H:%M:%S UTC')
+                date_str = datetime.fromtimestamp(unix_time_tag_s, tz=timezone.utc).strftime('%Y/%m/%d %H:%M:%S UTC')
                 
                 ## Compute the locations of the brigth sources and the Galactic plane
                 if ichans:

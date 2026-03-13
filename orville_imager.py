@@ -362,7 +362,7 @@ class SpectraOp(object):
         x = im.size[0] + 15
         for label, c in reversed(list(zip(('good XX','good YY','flagged XX','flagged YY'),
                                           ('#1F77B4','#FF7F0E','#799CB4',   '#FFC28C')))):
-            x -= draw.textsize(label, font = font)[0] + 20
+            x -= draw.textlength(label, font = font) + 20
             draw.text((x, ySummary), label, font = font, fill = c)
             
         return im
@@ -545,7 +545,7 @@ class BaselineOp(object):
         x = im.size[0] + 15
         #for label, c in reversed(list(zip(('XX','XY','YY'), ('#1F77B4','#A00000','#FF7F0E')))):
         for label, c in reversed(list(zip(('XX','YY'), ('#1F77B4','#FF7F0E')))):
-            x -= draw.textsize(label, font = font)[0] + 20
+            x -= draw.textlength(label, font = font) + 20
             draw.text((x, ySummary), label, font = font, fill = c)
             
         return im

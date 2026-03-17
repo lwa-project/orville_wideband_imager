@@ -260,7 +260,8 @@ class CaptureOp(object):
                 good, missing = new_good, new_missing
                 
                 try:
-                    for i in range(self.nsub):
+                    # Add one for every subband/every full res and archival image
+                    for i in range(2*self.nsub):
                         FILL_QUEUE.put_nowait(fill_level)
                 except queue.Full:
                     pass
@@ -1472,6 +1473,8 @@ class WriterOp(object):
                 'center_alt':    hdr['phase_center_alt'] * 180/np.pi,
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
+        if 'extended_attributes' in hdr:
+            info['extended_attributes'] = hdr['extended_attributes']
         info.update(ASP_CONFIG[0])
         
         # Write the image to disk
@@ -1533,8 +1536,10 @@ class WriterOp(object):
                 'center_alt':    hdr['phase_center_alt'] * 180/np.pi,
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
+        if 'extended_attributes' in hdr:
+            info['extended_attributes'] = hdr['extended_attributes']
         info.update(ASP_CONFIG[0])
-        
+
         # Write the image to disk
         outname = os.path.join(self.output_dir_archive, str(mjd))
         if not os.path.exists(outname):

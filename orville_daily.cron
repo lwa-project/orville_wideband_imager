@@ -2,7 +2,7 @@
 
 full_daily_run=1
 if [[ "${1}" == "--archive-only" ]]; then
-    full_daily_run=1
+    full_daily_run=0
 fi
 
 # Where the data are stored

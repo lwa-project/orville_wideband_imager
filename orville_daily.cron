@@ -1,5 +1,10 @@
 #!/bin/bash
 
+full_daily_run=1
+if [[ "${1}" == "--archive-only" ]]; then
+    full_daily_run=1
+fi
+
 # Where the data are stored
 ORVILLE_DATA_DIR=/data/orville
 
@@ -15,29 +20,35 @@ STATION_SIZE=`grep diameter ${ORVILLE_CONFIG_DIR}/defaults.json | tail -n1 | sed
 ARCHIVE_DIR=`echo "Orville${STATION_NAME^^}" | sed -e 's/LWASV//;s/LWA1/1/;s/LWA/-/'`
 LWATV_CHAN=`grep lwatv_channel ${ORVILLE_CONFIG_DIR}/defaults.json | tail -n1 | sed -e 's/.*:[ \t]*//;s/,[ \t]*$//;s/"//g;'`
 
-# Delete (u,v) radial and spectra plots more than three weeks old
-find ${ORVILLE_DATA_DIR}/baselines -mtime +22 -exec rm -r {} \;
-find ${ORVILLE_DATA_DIR}/spectra -mtime +22 -exec rm -r {} \;
+# Monitoring and diagnostic cleanups
+if [[ "${full_daily_run}" == "1" ]]; then
+    ## Delete (u,v) radial and spectra plots more than three weeks old
+    find ${ORVILLE_DATA_DIR}/baselines -mtime +22 -exec rm -r {} \;
+    find ${ORVILLE_DATA_DIR}/spectra -mtime +22 -exec rm -r {} \;
+    
+    ## Delete correlation matrix data more than three weeks old
+    find ${ORVILLE_DATA_DIR}/matrices -mtime +22 -exec rm -r {} \;
+    
+    ## Delete old logs more than 6 weeks old
+    find ${ORVILLE_DATA_DIR}/log -mtime +43 -exec rm {} \;
+fi
 
-# Delete correlation matrix data more than three weeks old
-find ${ORVILLE_DATA_DIR}/matrices -mtime +22 -exec rm -r {} \;
-
-# Delete old logs more than 6 weeks old
-find ${ORVILLE_DATA_DIR}/log -mtime +43 -exec rm {} \;
-
-# Build movies of the LWATV images from previous days
-mkdir -p ${ORVILLE_DATA_DIR}/movies
-for mjd in `find ${ORVILLE_DATA_DIR}/lwatv -type d -name 6\* | sort | head -n -1 `; do
-    ${ORVILLE_SOFTWARE_DIR}/make_movies.py -o ${ORVILLE_DATA_DIR}/movies ${mjd}
-    if [[ "$?" == "0" ]]; then
-        rm -rf ${mjd}
-    fi
-done
-
-# Upload the movies
-rsync -e ssh -avHL ${ORVILLE_DATA_DIR}/movies/*[0-9][0-9].mov ${ORVILLE_DATA_DIR}/movies/movielist.js \
-      mcsdr@lwalab.phys.unm.edu:/var/www/${LWATV_CHAN}/
-
+# LWATV movies
+if [[ "${full_daily_run}" == "1" ]]; then
+    ## Build movies of the LWATV images from previous days
+    mkdir -p ${ORVILLE_DATA_DIR}/movies
+    for mjd in `find ${ORVILLE_DATA_DIR}/lwatv -type d -name 6\* | sort | head -n -1 `; do
+        ${ORVILLE_SOFTWARE_DIR}/make_movies.py -o ${ORVILLE_DATA_DIR}/movies ${mjd}
+        if [[ "$?" == "0" ]]; then
+            rm -rf ${mjd}
+        fi
+    done
+    
+    ## Upload the movies
+    rsync -e ssh -avHL ${ORVILLE_DATA_DIR}/movies/*[0-9][0-9].mov ${ORVILLE_DATA_DIR}/movies/movielist.js \
+          mcsdr@lwalab.phys.unm.edu:/var/www/${LWATV_CHAN}/
+fi
+    
 # Backup the archive
 rsync -e ssh -avH ${ORVILLE_DATA_DIR}/archive/6* \
       pasi@lda10g.alliance.unm.edu:/FileStore/${ARCHIVE_DIR}/
@@ -45,22 +56,25 @@ if [[ "$?" == "0" ]]; then
     find ${ORVILLE_DATA_DIR}/archive/ -type d -mtime +45 | xargs rm -rf
 fi
 
-# Convert the station size to an estimates data volume per day
-IMAGE_TB_DAY=7
-if [[ "${STATION_SIZE}" == "50" ]]; then
-    IMAGE_TB_DAY=2
-fi
-
-# Delete events as needed to keep us below 30 TB
-targetfree=$(($IMAGE_TB_DAY*1024*1024*1024*1024))
-rawfree=`df -B1 ${ORVILLE_DATA_DIR} | tail -n1 | awk '{print $4}'`
-while [[ "${rawfree}" -lt ${targetfree} ]]; do
-    oldest=`ls -td ${ORVILLE_DATA_DIR}/images/6* | tail -n1`
-    echo "Removing ${oldest}"
-    rm -rf ${oldest}
+# Full resolution image ring buffer maintenance
+if [[ "${full_daily_run}" == "1" ]]; then
+    ## Convert the station size to an estimates data volume per day
+    IMAGE_TB_DAY=7
+    if [[ "${STATION_SIZE}" == "50" ]]; then
+        IMAGE_TB_DAY=2
+    fi
+    
+    ## Delete events as needed to keep us below 30 TB
+    targetfree=$(($IMAGE_TB_DAY*1024*1024*1024*1024))
     rawfree=`df -B1 ${ORVILLE_DATA_DIR} | tail -n1 | awk '{print $4}'`
-done
-
+    while [[ "${rawfree}" -lt ${targetfree} ]]; do
+        oldest=`ls -td ${ORVILLE_DATA_DIR}/images/6* | tail -n1`
+        echo "Removing ${oldest}"
+        rm -rf ${oldest}
+        rawfree=`df -B1 ${ORVILLE_DATA_DIR} | tail -n1 | awk '{print $4}'`
+    done
+fi
+    
 # Report on disk usage
 echo "Orville Disk Usage:"
 usage=`du -hs ${ORVILLE_DATA_DIR}/baselines | tail -n1 | awk '{print $1}'`

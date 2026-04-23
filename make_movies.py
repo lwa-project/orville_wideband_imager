@@ -74,7 +74,7 @@ def main(args):
         shutil.rmtree(temp_path)
         
         ## Symlink _0.mov to a flat .mov file for easy upload later
-        if i == 0:
+        if os.path.exists(moviename) and i == 0:
             os.system('ln -s %s %s' % (moviename, moviename.replace('_0.', '.')))
             
         success += 1
@@ -86,6 +86,9 @@ def main(args):
         movie_mjds.extend(list(range(span[0], span[1]+1)))
     all_movies = glob.glob(os.path.join(args.output_dir, '*[0-9][0-9][0-9].mov'))
     for moviename in all_movies:
+        if os.path.islink(moviename):
+            if not os.path.exists(os.readlink(moviename)):
+                continue
         mjd = os.path.splitext(os.path.basename(moviename))[0]
         mjd = int(mjd, 10)
         if mjd <= OLD_LWATV4_MOVIES[-1][1]:

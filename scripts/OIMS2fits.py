@@ -18,9 +18,9 @@ from lsl_toolkits.OrvilleImage.pbtools import pbcorroims
 def main(args):
     for filename in args.filename:
         with OrvilleImageDB(filename, 'r') as db:
-        
+
             # Get parameters from the input file
-            
+
             ints = db.nint # number of integrations
             station =  db.header.station # station info
             stokes = db.header.stokes_params # Stokes parameter info
@@ -51,7 +51,7 @@ def main(args):
                     hdrlist.append(hdr)
                     data[0] = data[0] - np.asarray(alldata.data)
                 hdr = hdrlist[0]
-            else:    
+            else:
                 data = np.zeros((ints,nchan,4,ngrid,ngrid), dtype=np.float32)
                 for i in range(ints):
                     db.seek(i)
@@ -75,8 +75,8 @@ def main(args):
                         imdata = args.corrfac*data[myint,chan,:,:,:]
                     else:
                         imdata = args.corrfac*(data[myint,chan,:,:,:] - args.background)
-                    imSize = ngrid    
-                    
+                    imSize = ngrid
+
                     ## Zero outside of the horizon so avoid problems
                     pScale = psize
                     sRad   = 360.0/pScale/np.pi / 2
@@ -89,7 +89,7 @@ def main(args):
                     if args.pbcorr:
                         XX,YY = pbcorroims(hdrlist[myint],imSize,chan,station)
                         imdata[0]/=((XX+YY)/2)
-                    
+
                     ## Convert the start MJD into a datetime instance and then use
                     ## that to come up with a stop time
                     mjd = int(hdr['start_time'])
@@ -106,7 +106,7 @@ def main(args):
                         print("    end time: %s" % dateEnd)
                         print("    integration time: %.3f s" % tInt)
                         print("    frequency: %.3f MHz" % header['freq'])
-                        
+
                     ## Create the FITS HDU and fill in the header information
                     hdu = astrofits.ImageHDU(data=imdata)
                     hdu.header['TELESCOP'] = station.decode()
@@ -131,16 +131,16 @@ def main(args):
                     hdu.header['RESTFRQ'] = midfreq
                     hdu.header['RESTBW'] = hdr['bandwidth']
                     hdu.header['SPECSYS'] = 'TOPOCENT'
-                    
+
                     ## Write it to disk
                     hdulist.append(hdu)
                 filedir,filebase = os.path.split(os.path.abspath(os.path.expanduser(filename)))
                 if args.output_dir is not None:
                     filedir = args.output_dir
-                    
+
                 if args.diff:
                     outName = filedir + os.path.sep + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz-diff.fits"
-                else: 
+                else:
                     outName = filedir + os.path.sep + filebase[0:13] + f"{round(midfreq*1e-6,1)}MHz.fits"
                 if args.index is not None:
                     outName = outName.replace(".fits",f"-{args.index}.fits")

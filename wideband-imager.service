@@ -1,5 +1,5 @@
 [Unit]
-Description=ADP Wideband Imager Server
+Description=NDP Wideband Imager Server
 After=network-online.target
 Wants=network-online.target
 
@@ -22,20 +22,12 @@ Environment=BIFROST_INCLUDE_PATH=/home/jdowell/orville3/bifrost/src/bifrost
 Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64:/home/jdowell/orville3/bifrost/lib:$LD_LIBRARY_PATH
 Environment=PYTHONPATH=/home/jdowell/orville3/bifrost/python:$PYTHONPATH
 
-#Environment=LD_PRELOAD=libvma.so
-Environment=VMA_TRACELEVEL=0
-Environment=VMA_RX_POLL=1000
-Environment=VMA_INTERNAL_THREAD_AFFINITY=0
-Environment=VMA_RX_PREFETCH_BYTES=128
-Environment=VMA_THREAD_MODE=0
-Environment=VMA_MTU=9000 
-
 ExecStart=/bin/bash -ec '\
-numactl --cpunodebind=0 --membind=0 -- \
 python3 /home/jdowell/orville3/orville_imager.py \
-   --flagfile   /home/jdowell/orville3/bad_freq.txt \
+   --configfile /home/jdowell/orville3/defaults.json \
 	 --logfile    /data/orville/log/wideband-imager.log \
-	 --output-dir /data/orville'
+	 --output-dir /data/orville \
+	 --lwatv-freq 38.1,25.6,51.0,64.0,74.0'
 
 [Install]
 WantedBy=multi-user.target

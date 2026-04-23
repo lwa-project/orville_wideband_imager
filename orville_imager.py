@@ -16,9 +16,12 @@ from logging.handlers import TimedRotatingFileHandler
 import argparse
 import threading
 import subprocess
-from datetime import datetime
+import json_minify
+from datetime import datetime, timezone
 from collections import deque
+from contextlib import ExitStack
 from urllib.request import urlopen
+import warnings
 
 from scipy.special import pro_ang1, iv
 from scipy.stats import scoreatpercentile as percentile
@@ -26,10 +29,11 @@ from scipy.stats import scoreatpercentile as percentile
 from astropy.constants import c as speedOfLight
 speedOfLight = speedOfLight.to('m/s').value
 
-from lsl.common.stations import lwasv, parse_ssmif
+from lsl.common.stations import lwa1, lwasv, lwana, parse_ssmif
 from lsl.correlator import uvutils
 from lsl.imaging import utils
-from lsl.common.adp import fS, fC
+from lsl.common.ndp import fS
+fC = fS / 8192
 from lsl.astro import MJD_OFFSET, DJD_OFFSET
 
 from bifrost.address import Address
@@ -56,18 +60,16 @@ import PIL.Image, PIL.ImageDraw, PIL.ImageFont
 
 from lsl_toolkits.OrvilleImage import OrvilleImageDB
 
+try:
+    from oarfish.client import PredictionClient
+except ImportError:
+    PredictionClient = None
+
 
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 CAL_PATH = os.path.join(BASE_PATH, 'calibration')
 if not os.path.exists(CAL_PATH):
     os.makedirs(CAL_PATH, exist_ok=True)
-
-
-STATION = lwasv
-ANTENNAS = STATION.antennas
-
-
-W_STEP = 0.1
 
 
 SUPPORT_SIZE = 7
@@ -126,7 +128,7 @@ def navg_to_timetag(navg):
     Convert an integration time into a timetag increment.
     """
     
-    return navg * (int(fS) // 100)
+    return navg
 
 
 class MultiQueue(object):
@@ -177,7 +179,7 @@ class MultiQueue(object):
             slot.join()
 
 
-FILL_QUEUE = queue.Queue(maxsize=4)
+FILL_QUEUE = queue.Queue(maxsize=32)
 
 
 def get_good_and_missing_rx():
@@ -203,6 +205,11 @@ class CaptureOp(object):
         self.args   = args
         self.kwargs = kwargs
         self.shutdown_event = threading.Event()
+        
+        self.nsub   = 1
+        if 'nsub' in self.kwargs:
+            self.nsub = self.kwargs['nsub']
+            del self.kwargs['nsub']
         ## HACK TESTING
         #self.seq_callback = None
     def shutdown(self):
@@ -253,17 +260,20 @@ class CaptureOp(object):
                 good, missing = new_good, new_missing
                 
                 try:
-                    FILL_QUEUE.put_nowait(fill_level)
+                    # Add one for every subband/every full res and archival image
+                    for i in range(2*self.nsub):
+                        FILL_QUEUE.put_nowait(fill_level)
                 except queue.Full:
                     pass
                     
         del capture
 
 class SpectraOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, station, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
+        self.station = station
         self.output_dir = os.path.join(base_dir, 'spectra')
         self.uploader_dir = uploader_dir
         self.core = core
@@ -294,6 +304,7 @@ class SpectraOp(object):
         try:
             minval = np.min(specs[np.where(np.isfinite(specs))])
             maxval = np.max(specs[np.where(np.isfinite(specs))])
+            minval = maxval - 20
         except ValueError:
             minval = 0.0
             maxval = 1.0
@@ -344,7 +355,7 @@ class SpectraOp(object):
                 
         # Summary
         ySummary = height * (box_size+1) + 2
-        timeStr = datetime.utcfromtimestamp(time_tag / fS)
+        timeStr = datetime.fromtimestamp(time_tag / fS, tz=timezone.utc)
         timeStr = timeStr.strftime("%Y/%m/%d %H:%M:%S UTC")
         draw.text((5, ySummary), timeStr, font = font, fill = '#000000')
         rangeStr = 'range shown: %.3f to %.3f dB' % (minval, maxval)
@@ -352,7 +363,10 @@ class SpectraOp(object):
         x = im.size[0] + 15
         for label, c in reversed(list(zip(('good XX','good YY','flagged XX','flagged YY'),
                                           ('#1F77B4','#FF7F0E','#799CB4',   '#FFC28C')))):
-            x -= draw.textsize(label, font = font)[0] + 20
+            try:
+                x -= draw.textlength(label, font = font) + 20
+            except AttributeError:
+                x -= draw.textsize(label, font = font)[0] + 20
             draw.text((x, ySummary), label, font = font, fill = c)
             
         return im
@@ -366,8 +380,10 @@ class SpectraOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
         
-        labels = [ant.stand.id for ant in ANTENNAS]
-        status = [ant.combined_status for ant in ANTENNAS]
+        warnings.filterwarnings("ignore", category=RuntimeWarning, message="divide by zero")
+        
+        labels = [ant.stand.id for ant in self.station.antennas]
+        status = [ant.combined_status for ant in self.station.antennas]
         
         for iseq,mseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())
@@ -449,9 +465,10 @@ class SpectraOp(object):
 
 
 class BaselineOp(object):
-    def __init__(self, log, iring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
+    def __init__(self, log, iring, station, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
+        self.station = station
         self.output_dir = os.path.join(base_dir, 'baselines')
         self.uploader_dir = uploader_dir
         self.core = core
@@ -472,8 +489,6 @@ class BaselineOp(object):
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
         self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
-        
-        self.station = STATION
         
     def _plot_baselines(self, time_tag, freq, dist, baselines, valid):
         # Plotting setup
@@ -526,7 +541,7 @@ class BaselineOp(object):
             
         # Details and labels
         ySummary = height * 300 + 2
-        timeStr = datetime.utcfromtimestamp(time_tag / fS)
+        timeStr = datetime.fromtimestamp(time_tag / fS, tz=timezone.utc)
         timeStr = timeStr.strftime("%Y/%m/%d %H:%M:%S UTC")
         draw.text((5, ySummary), timeStr, font = font, fill = '#000000')
         rangeStr = 'range shown: %.6f - %.6f' % (minval, maxval)
@@ -534,7 +549,10 @@ class BaselineOp(object):
         x = im.size[0] + 15
         #for label, c in reversed(list(zip(('XX','XY','YY'), ('#1F77B4','#A00000','#FF7F0E')))):
         for label, c in reversed(list(zip(('XX','YY'), ('#1F77B4','#FF7F0E')))):
-            x -= draw.textsize(label, font = font)[0] + 20
+            try:
+                x -= draw.textlength(label, font = font) + 20
+            except AttributeError:
+                x -= draw.textsize(label, font = font)[0] + 20
             draw.text((x, ySummary), label, font = font, fill = c)
             
         return im
@@ -577,7 +595,7 @@ class BaselineOp(object):
                 dist = np.load(distname)
             except IOError:
                 print('dist cache failed')
-                uvw = uvutils.compute_uvw(ANTENNAS[0::2], HA=0, dec=self.station.lat*180/np.pi,
+                uvw = uvutils.compute_uvw(self.station.antennas[0::2], HA=0, dec=self.station.lat*180/np.pi,
                                             freq=freq[0], site=self.station.get_observer(), include_auto=True)
                 print('uvw.shape', uvw.shape)
                 dist = np.sqrt(uvw[:,0,0]**2 + uvw[:,1,0]**2)
@@ -628,10 +646,11 @@ class BaselineOp(object):
         self.log.info("BaselineOp - Done")
 
 class MatrixOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, station, base_dir=os.getcwd(), core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
+        self.station = station
         self.output_dir = os.path.join(base_dir, 'matrices')
         self.core = core
         self.gpu = gpu
@@ -649,8 +668,6 @@ class MatrixOp(object):
         
         self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
         
-        self.station = STATION
-        
     def main(self):
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
@@ -659,7 +676,9 @@ class MatrixOp(object):
                                   'core0': cpu_affinity.get_core(),
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
-
+        
+        warnings.filterwarnings("ignore", category=RuntimeWarning, message="invalid value encountered in divide")
+        
         for iseq,mseq in zip(self.iring.read(guarantee=True),self.mring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())
             mhdr = json.loads(mseq.header.tostring())
@@ -750,11 +769,13 @@ class MatrixOp(object):
         self.log.info("MatrixOp - Done")
 
 class FlaggerOp(object):
-    def __init__(self, flagfile, log, iring, oring, clip=3, core=-1, gpu=-1):
+    def __init__(self, flagfile, log, iring, oring, sring, station, clip=3, core=-1, gpu=-1):
         self.flagfile = flagfile
         self.log = log
         self.iring = iring
         self.oring = oring
+        self.sring = sring
+        self.station = station
         self.clip = clip
         self.core = core
         self.gpu = gpu
@@ -767,7 +788,9 @@ class FlaggerOp(object):
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
         self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
-        self.out_proclog.update({'nring':1, 'ring0':self.oring.name})
+        self.out_proclog.update({'nring':2,
+                                 'ring0':self.oring.name,
+                                 'ring1':self.sring.name})
         
     def main(self):
         cpu_affinity.set_core(self.core)
@@ -778,7 +801,10 @@ class FlaggerOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
  
-        with self.oring.begin_writing() as oring:
+        with ExitStack() as oring_stack:
+            oring, sring = [oring_stack.enter_context(o.begin_writing()) \
+                            for o in (self.oring, self.sring)]
+            
             for iseq in self.iring.read(guarantee=True):
                 ihdr = json.loads(iseq.header.tostring())
                 
@@ -799,15 +825,31 @@ class FlaggerOp(object):
                 ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
                 ogulp_size = nchan*1              # uint8
                 oshape = (nchan,)
+                sgulp_size = nchan*4              # float32
+                sshape = (nchan,)
                 self.iring.resize(igulp_size, igulp_size*10)
                 self.oring.resize(ogulp_size, ogulp_size*10)
+                self.sring.resize(sgulp_size, sgulp_size*10)
                 
                 ohdr = ihdr.copy()
                 ohdr['type'] = 'mask'
                 ohdr_str = json.dumps(ohdr)
                 
+                shdr = ohdr.copy()
+                shdr['type'] = 'spectrum'
+                shdr_str = json.dumps(shdr)
+                
                 autos = [i*(2*(nstand-1)+1-i)//2+i for i in range(nstand)]
                 
+                weights = np.ones((nstand, nchan, npol), dtype=np.float32)
+                for i in range(nstand):
+                    # Mask out bad antennas
+                    if self.station.antennas[2*i+0].combined_status != 33 or self.station.antennas[2*i+1].combined_status != 33:
+                        weights[i,:,:] = 0.0
+                        
+                    if i == (nstand-1):
+                        weights[i,:,:] = 0.0
+                        
                 # Setup the mask
                 freq = chan0*fC + np.arange(nchan)*4*fC
                 mask = np.zeros(freq.size, dtype=np.uint8)
@@ -827,7 +869,7 @@ class FlaggerOp(object):
                                 except ValueError:
                                     pass
                     except OSError as err:
-                        self.log.warn("Cannot load frequency flag file: %s", str(err))
+                        self.log.warning("Cannot load frequency flag file: %s", str(err))
                         
                 ## Report
                 self.log.info("Frequency flag file is '%s'", str(self.flagfile))
@@ -838,7 +880,10 @@ class FlaggerOp(object):
                 mask = 1 - mask
                     
                 prev_time = time.time()
-                with oring.begin_sequence(time_tag=iseq.time_tag, header=ohdr_str) as oseq:
+                with ExitStack() as oseq_stack:
+                    oseq, sseq = [oseq_stack.enter_context(o.begin_sequence(time_tag=iseq.time_tag, header=h)) \
+                                  for o,h in zip((oring, sring), (ohdr_str, shdr_str))]
+                    
                     for ispan in iseq.read(igulp_size):
                         if ispan.size < igulp_size:
                             continue # Ignore final gulp
@@ -846,7 +891,10 @@ class FlaggerOp(object):
                         acquire_time = curr_time - prev_time
                         prev_time = curr_time
                         
-                        with oseq.reserve(ogulp_size) as ospan:
+                        with ExitStack() as ospan_stack:
+                            ospan, sspan = [ospan_stack.enter_context(o.reserve(s)) \
+                                            for o,s in zip((oseq, sseq), (ogulp_size, sgulp_size))]
+                            
                             curr_time = time.time()
                             reserve_time = curr_time - prev_time
                             prev_time = curr_time
@@ -854,9 +902,18 @@ class FlaggerOp(object):
                             ## Setup and load
                             idata = ispan.data_view(np.complex64).reshape(ishape)
                             odata = ospan.data_view(np.uint8).reshape(oshape)
+                            sdata = sspan.data_view(np.float32).reshape(sshape)
+                            
+                            ## Pull out the auto-correlations
+                            adata = idata[autos,:,:,:].real
+                            adata = adata[:,:,[0,1],[0,1]]
+                            
+                            ## Average the spectr together
+                            mean_spec = (adata*weights).mean(axis=2).mean(axis=0)
                             
                             ## Save
                             odata[...] = mask
+                            sdata[...] = mean_spec
                             
                             time_tag += navg_to_timetag(navg)
                             
@@ -871,11 +928,141 @@ class FlaggerOp(object):
         self.log.info("FlaggerOp - Done")            
 
 
+class SubbandSplitterOp(object):
+    def __init__(self, log, iring, orings, label='', core=-1, gpu=-1):
+        self.log = log
+        self.iring = iring
+        self.orings = orings
+        self.label = label
+        self.core = core
+        self.gpu = gpu
+        
+        self.bind_proclog = ProcLog(type(self).__name__+"/bind")
+        self.in_proclog   = ProcLog(type(self).__name__+"/in")
+        self.out_proclog  = ProcLog(type(self).__name__+"/out")
+        self.size_proclog = ProcLog(type(self).__name__+"/size")
+        self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
+        self.perf_proclog = ProcLog(type(self).__name__+"/perf")
+        
+        self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
+        
+        odict = {'nring':len(self.orings)}
+        for i,o in enumerate(self.orings):
+            odict[f"ring{i}"] = o.name
+        self.out_proclog.update(odict)
+        
+    def main(self):
+        cpu_affinity.set_core(self.core)
+        self.bind_proclog.update({'ncore': 1, 
+                                  'core0': cpu_affinity.get_core(),})
+                                  
+        with ExitStack() as oring_stack:
+            out_orings = [oring_stack.enter_context(o.begin_writing()) \
+                          for o in self.orings]
+            
+            for iseq in self.iring.read(guarantee=True):
+                ihdr = json.loads(iseq.header.tostring())
+                
+                self.sequence_proclog.update(ihdr)
+                self.log.info('SubbandSplitterOp%s: Config - %s', self.label, ihdr)
+                
+                # Setup the ring metadata and gulp sizes
+                chan0  = ihdr['chan0']
+                nchan  = ihdr['nchan']
+                cdecim = ihdr['cdecim']
+                nbl    = ihdr['nbl']
+                nstand = int(np.sqrt(8*nbl+1)-1)//2
+                npol   = ihdr['npol']
+                navg   = ihdr['navg']
+                time_tag0 = iseq.time_tag
+                time_tag  = time_tag0*1
+                
+                nsub = len(self.orings)
+                
+                igulp_size = nstand*(nstand+1)//2*nchan*npol*npol*8      # complex64
+                ishape = (nstand*(nstand+1)//2,nchan,npol,npol)
+                ogulp_size = igulp_size // nsub
+                oshape = (nstand*(nstand+1)//2,nchan//nsub,npol,npol)
+                dtype = np.complex64
+                if 'type' in ihdr:
+                    if ihdr['type'] == 'mask':
+                        igulp_size = nchan*1              # uint8
+                        ishape = (nchan,1,1,1)
+                        ogulp_size = igulp_size // nsub
+                        oshape = (nchan//nsub,1,1,1)
+                        dtype = np.uint8
+                    elif ihdr['type'] == 'spectrum':
+                        igulp_size = nchan*4              # float32
+                        ishape = (nchan,1,1,1)
+                        ogulp_size = igulp_size // nsub
+                        oshape = (nchan//nsub,1,1,1)
+                        dtype = np.float32
+                self.iring.resize(igulp_size, igulp_size*10)
+                for o in self.orings:
+                    o.resize(ogulp_size, ogulp_size*10)
+                    
+                ohdr = ihdr.copy()
+                ohdr['nchan'] = nchan // nsub
+                ohdr['bw'] = nchan*cdecim // nsub * fC
+                
+                prev_time = time.time()
+                with ExitStack() as oseq_stack:
+                    out_oseq = []
+                    for i,o in enumerate(out_orings):
+                        out_ohdr = ohdr.copy()
+                        out_ohdr['chan0'] = chan0 + nchan*cdecim//nsub * i
+                        out_ohdr['cfreq'] = out_ohdr['chan0'] * fC
+                        out_ohdr_str = json.dumps(out_ohdr)
+                        out_oseq.append(oseq_stack.enter_context(o.begin_sequence(time_tag=iseq.time_tag, header=out_ohdr_str)))
+                        
+                    for ispan in iseq.read(igulp_size):
+                        if ispan.size < igulp_size:
+                            continue # Ignore final gulp
+                        curr_time = time.time()
+                        acquire_time = curr_time - prev_time
+                        prev_time = curr_time
+                        
+                        with ExitStack() as ospan_stack:
+                            out_ospan = [ospan_stack.enter_context(o.reserve(ogulp_size)) \
+                                         for o in out_oseq]
+                            
+                            curr_time = time.time()
+                            reserve_time = curr_time - prev_time
+                            prev_time = curr_time
+                            
+                            ## Setup and load
+                            idata = ispan.data_view(dtype).reshape(ishape)
+                            odata = [ospan.data_view(dtype).reshape(oshape) for ospan in out_ospan]
+                            
+                            ## Split and save
+                            for i,o in enumerate(odata):
+                                if dtype == np.complex64:
+                                    subband = np.s_[:,nchan//nsub*i:nchan//nsub*(i+1),:,:]
+                                else:
+                                    subband = np.s_[nchan//nsub*i:nchan//nsub*(i+1),:,:,:]
+                                o[...] = idata[subband].copy()
+                                
+                        time_tag += navg_to_timetag(navg)
+                        
+                        curr_time = time.time()
+                        process_time = curr_time - prev_time
+                        self.log.debug('SubbandSplitterOp%s processing time was %.3f s', self.label, process_time)
+                        prev_time = curr_time
+                        self.perf_proclog.update({'acquire_time': acquire_time, 
+                                                    'reserve_time': reserve_time, 
+                                                    'process_time': process_time,})
+                        
+        self.log.info("SubandSplitterOp%s - Done", self.label)
+                    
+        
 class ImagingOp(object):
-    def __init__(self, log, iring, oring, decimation=1, core=-1, gpu=-1):
+    def __init__(self, log, iring, oring, station, label='', config=None, decimation=1, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.oring = oring
+        self.station = copy.deepcopy(station)
+        self.label = label
+        self.config = config
         self.decimation = decimation
         self.core = core
         self.gpu = gpu
@@ -890,15 +1077,18 @@ class ImagingOp(object):
         self.in_proclog.update({'nring':1, 'ring0':self.iring.name})
         self.out_proclog.update({'nring':1, 'ring0':self.oring.name})
         
-        self.station = copy.deepcopy(STATION)
-        
         self.phase_center_ha = 0.0                  # radians
         self.phase_center_dec = self.station.lat    # radians
-        if self.station.id == 'SV':
-            # Alternate phase center for Sevilleta that minimized the w RMS
-            self.phase_center_ha = 1.0*ephem.hours("-0:07:59.82")
-            self.phase_center_dec = 1.0*ephem.degrees("33:21:27.5")
-            
+        if self.config is not None:
+            try:
+                _phase_center_ha = 1.0*ephem.hours(self.config['phase_center'][0])
+                _phase_center_dec = 1.0*ephem.degrees(self.config['phase_center'][1])
+                
+                self.phase_center_ha = _phase_center_ha
+                self.phase_center_dec = _phase_center_dec
+            except Exception as e:
+                self.log.warning('ImagingOp%s: Failed to parse phase center - %s', self.label, str(e))
+                
     def main(self):
         cpu_affinity.set_core(self.core)
         if self.gpu != -1:
@@ -926,7 +1116,7 @@ class ImagingOp(object):
                 ihdr = json.loads(iseq.header.tostring())
                 
                 self.sequence_proclog.update(ihdr)
-                self.log.info('ImagingOp: Config - %s', ihdr)
+                self.log.info('ImagingOp%s: Config - %s', self.label, ihdr)
                 
                 # Setup the ring metadata and gulp sizes
                 chan0  = ihdr['chan0']
@@ -939,12 +1129,12 @@ class ImagingOp(object):
                 time_tag  = time_tag0*1
                 
                 # Figure out the grid size and resolution - assumes a station size of 
-                # 100 m and maximum angular extent for the sky of 130 degrees
+                # 50 m and maximum angular extent for the sky of 130 degrees
                 min_lambda = 299792458.0 / ((chan0 + 4*nchan-1)*fC)     # m
-                rayleigh_res = 1.22 * min_lambda / 100.0 * 180/np.pi # deg
+                rayleigh_res = 1.22 * min_lambda / self.config['diameter'] * 180/np.pi # deg
                 res = rayleigh_res / 4.0    # deg
                 grid_size = int(np.ceil(130.0 / res))    # px
-                grid_size = max([grid_size, 128])           # px
+                grid_size = max([grid_size, self.config['min_grid_size']])            # px
                 grid_size = round_up_to_even(grid_size)     # px
                 grid_res = 130.0 / grid_size                # deg/px
                 
@@ -952,7 +1142,7 @@ class ImagingOp(object):
                 weighting = 'briggs@0.5'
                 
                 # Report
-                self.log.info("ImagerOp: grid is %i by %i with a resolution of %.3f deg/px", grid_size, grid_size, grid_res)
+                self.log.info("ImagerOp%s: grid is %i by %i with a resolution of %.3f deg/px", self.label, grid_size, grid_size, grid_res)
                 
                 ochan = nchan // self.decimation
                 igulp_size = nstand*(nstand+1)//2*nchan*npol*npol*8      # complex64
@@ -990,6 +1180,7 @@ class ImagingOp(object):
                 dfreq = freq*1.0
                 dfreq.shape = (freq.size//self.decimation, self.decimation)
                 dfreq = dfreq.mean(axis=1)
+                autos = [i*(2*(nstand-1)+1-i)//2 + i for i in range(nstand)]
                 uvwname = os.path.join(CAL_PATH, 'uvw_%i_%i_%i.npy' % (nbl, chan0, nchan))
                 try:
                     if os.path.exists(uvwname) and os.path.getmtime(uvwname) < os.path.getmtime(__file__):
@@ -998,7 +1189,7 @@ class ImagingOp(object):
                 except IOError:
                     print('uvw cache failed')
                     uvw = np.zeros((3,nchan,nstand,nstand,1,1), dtype=np.float32)
-                    uvwT = uvutils.compute_uvw(ANTENNAS[0::2], HA=self.phase_center_ha*12/np.pi, dec=self.phase_center_dec*180/np.pi,
+                    uvwT = uvutils.compute_uvw(self.station.antennas[0::2], HA=self.phase_center_ha*12/np.pi, dec=self.phase_center_dec*180/np.pi,
                                               freq=freq, site=self.station.get_observer(), include_auto=True).transpose(1,2,0)
                     uvwT.shape += (1,1)
                     k = 0
@@ -1024,33 +1215,33 @@ class ImagingOp(object):
                     k = 0
                     for i in range(nstand):
                         ## X
-                        a = ANTENNAS[2*i + 0]
+                        a = self.station.antennas[2*i + 0]
                         delayX0 = a.cable.delay(freq) - np.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
                         gainX0 = a.cable.gain(freq)
                         cgainX0 = np.exp(2j*np.pi*freq*delayX0) / np.sqrt(gainX0)
                         ## Y
-                        a = ANTENNAS[2*i + 1]
+                        a = self.station.antennas[2*i + 1]
                         delayY0 = a.cable.delay(freq) - np.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
                         gainY0 = a.cable.gain(freq)
                         cgainY0 = np.exp(2j*np.pi*freq*delayY0) / np.sqrt(gainY0)
                         ## Goodness check
-                        if ANTENNAS[2*i + 0].combined_status != 33 or ANTENNAS[2*i + 1].combined_status != 33:
+                        if self.station.antennas[2*i + 0].combined_status != 33 or self.station.antennas[2*i + 1].combined_status != 33:
                             cgainX0 *= 0.0
                             cgainY0 *= 0.0
                             
                         for j in range(i, nstand):
                             ## X
-                            a = ANTENNAS[2*j + 0]
+                            a = self.station.antennas[2*j + 0]
                             delayX1 = a.cable.delay(freq) - np.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
                             gainX1 = a.cable.gain(freq)
                             cgainX1 = np.exp(2j*np.pi*freq*delayX1) / np.sqrt(gainX1)
                             ## Y
-                            a = ANTENNAS[2*j + 1]
+                            a = self.station.antennas[2*j + 1]
                             delayY1 = a.cable.delay(freq) - np.dot(phase_center, [a.stand.x, a.stand.y, a.stand.z]) / speedOfLight
                             gainY1 = a.cable.gain(freq)
                             cgainY1 = np.exp(2j*np.pi*freq*delayY1) / np.sqrt(gainY1)
                             ## Goodness check
-                            if ANTENNAS[2*j + 0].combined_status != 33 or ANTENNAS[2*j + 1].combined_status != 33:
+                            if self.station.antennas[2*j + 0].combined_status != 33 or self.station.antennas[2*j + 1].combined_status != 33:
                                 cgainX1 *= 0.0
                                 cgainY1 *= 0.0
                                 
@@ -1073,9 +1264,9 @@ class ImagingOp(object):
                 weights = np.ones((nchan,nstand,nstand,npol,npol), dtype=np.complex64)
                 for i in range(nstand):
                     # Mask out bad antennas
-                    if ANTENNAS[2*i+0].combined_status != 33 or ANTENNAS[2*i+1].combined_status != 33:
+                    if self.station.antennas[2*i+0].combined_status != 33 or self.station.antennas[2*i+1].combined_status != 33:
                         weights[:,i,:,:,:] = 0.0
-                    if ANTENNAS[2*i+0].combined_status != 33 or ANTENNAS[2*i+1].combined_status != 33:
+                    if self.station.antennas[2*i+0].combined_status != 33 or self.station.antennas[2*i+1].combined_status != 33:
                         weights[:,:,i,:,:] = 0.0
                         
                     for j in range(nstand):
@@ -1126,10 +1317,10 @@ class ImagingOp(object):
                             BFMap("""
                                 if( j > i ) {
                                     auto k = i*(2*(%i-1)+1-i)/2 + j;
-                                    auto xx = idata(k,c,0,0).conj() * phases(c,k,0,0);
-                                    auto yx = idata(k,c,0,1).conj() * phases(c,k,0,1);
-                                    auto xy = idata(k,c,1,0).conj() * phases(c,k,1,0);
-                                    auto yy = idata(k,c,1,1).conj() * phases(c,k,1,1);
+                                    auto xx = idata(k,c,0,0) * phases(c,k,0,0);
+                                    auto yx = idata(k,c,0,1) * phases(c,k,0,1);
+                                    auto xy = idata(k,c,1,0) * phases(c,k,1,0);
+                                    auto yy = idata(k,c,1,1) * phases(c,k,1,1);
                                     
                                     odata(c,i,j,0,0) = xx + yy;
                                     odata(c,i,j,0,1) = xx - yy;
@@ -1160,7 +1351,7 @@ class ImagingOp(object):
                                 except NameError:
                                     bfdg = Gridder()
                                     bfdg.init(self.guvws, self.gwgts, self.gkernel, 
-                                            grid_size, grid_res, W_STEP, SUPPORT_OVERSAMPLE, 
+                                            grid_size, grid_res, self.config['w_step'], SUPPORT_OVERSAMPLE, 
                                             polmajor=False)
                                     #bfdg.set_stream(stream)
                                     bfdg.execute(self.sdata, self.grid, weighting=weighting)
@@ -1176,7 +1367,7 @@ class ImagingOp(object):
                             
                             curr_time = time.time()
                             process_time = curr_time - prev_time
-                            self.log.debug('Imager processing time was %.3f s', process_time)
+                            self.log.debug('Imager%s processing time was %.3f s', self.label, process_time)
                             prev_time = curr_time
                             self.perf_proclog.update({'acquire_time': acquire_time, 
                                                         'reserve_time': reserve_time, 
@@ -1188,21 +1379,37 @@ class ImagingOp(object):
                 except (AttributeError, NameError):
                     pass
                     
-        self.log.info("ImagingOp - Done")
+        self.log.info("ImagingOp%s - Done", self.label)
 
 
 class WriterOp(object):
-    def __init__(self, log, iring, mring, base_dir=os.getcwd(), uploader_dir=None, core=-1, gpu=-1):
+    def __init__(self, log, iring, mring, fring, sring, station, label='', base_dir=os.getcwd(), uploader_dir=None, lwatv_freq=38.1e6, min_save_freq=0.0, max_save_freq=98e6, core=-1, gpu=-1):
         self.log = log
         self.iring = iring
         self.mring = mring
+        self.fring = fring
+        self.sring = sring
+        self.station = copy.deepcopy(station)
+        self.label = label
         self.output_dir_images = os.path.join(base_dir, 'images')
         self.output_dir_archive = os.path.join(base_dir, 'archive')
         self.output_dir_lwatv = os.path.join(base_dir, 'lwatv')
         self.uploader_dir = uploader_dir
+        if not isinstance(lwatv_freq, (tuple, list)):
+            lwatv_freq = [lwatv_freq,]
+        self.lwatv_freq = lwatv_freq
+        self.min_save_freq = min_save_freq
+        self.max_save_freq = max_save_freq
         self.core = core
         self.gpu = gpu
         
+        self.oarfish = None
+        if PredictionClient is not None:
+            try:
+                self.oarfish = PredictionClient(timeout=1, logger=self.log)
+            except Exception as e:
+                self.log.warning("Failed to create oarfish client: %s", str(e))
+                
         if not os.path.exists(base_dir):
             os.makedirs(base_dir, exist_ok=True)
         if not os.path.exists(self.output_dir_images):
@@ -1221,11 +1428,11 @@ class WriterOp(object):
         self.sequence_proclog = ProcLog(type(self).__name__+"/sequence0")
         self.perf_proclog = ProcLog(type(self).__name__+"/perf")
         
-        self.in_proclog.update({'nring':2,
+        self.in_proclog.update({'nring':4,
                                 'ring0':self.iring.name,
-                                'ring1':self.mring.name})
-        
-        self.station = copy.deepcopy(STATION)
+                                'ring1':self.mring.name,
+                                'ring2':self.fring.name,
+                                'ring3':self.sring.name})
         
     def _save_image(self, station, time_tag, hdr, freq, data, mask=None, weighting='natural'):
         # Get the fill level as a fraction
@@ -1233,11 +1440,22 @@ class WriterOp(object):
         global ASP_CONFIG
         try:
             fill = FILL_QUEUE.get_nowait()
-            self.log.debug("Fill level is %.1f%%", 100.0*fill)
+            self.log.debug("Fill level%s is %.1f%%", self.label, 100.0*fill)
             FILL_QUEUE.task_done()
         except queue.Empty:
             fill = 0.0
             
+        # Downselect
+        chan_selection = np.where((freq >= self.min_save_freq) & (freq <= self.max_save_freq))[0]
+        if len(chan_selection) == 0:
+            return {}
+            
+        elif len(chan_selection) != freq.size:
+            freq = freq[chan_selection]
+            data = data[chan_selection,...]
+            if mask is not None:
+                mask = mask[chan_selection,...]
+                
         # Get the date
         mjd, h, m, s = timetag_to_mjdatetime(time_tag)
         
@@ -1261,6 +1479,8 @@ class WriterOp(object):
                 'center_alt':    hdr['phase_center_alt'] * 180/np.pi,
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
+        if 'extended_attributes' in hdr:
+            info['extended_attributes'] = hdr['extended_attributes']
         info.update(ASP_CONFIG[0])
         
         # Write the image to disk
@@ -1277,16 +1497,27 @@ class WriterOp(object):
         except Exception as e:
             self.log.warning("Failed to add integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
             
+        return info
+            
     def _save_archive_image(self, station, time_tag, hdr, freq, data, weighting='natural'):
         # Get the fill level as a fraction
         global FILL_QUEUE
         global ASP_CONFIG
         try:
             fill = FILL_QUEUE.get_nowait()
-            self.log.debug("Fill level is %.1f%%", 100.0*fill)
+            self.log.debug("Fill level%s is %.1f%%", self.label, 100.0*fill)
             FILL_QUEUE.task_done()
         except queue.Empty:
             fill = 0.0
+            
+        # Downselect
+        chan_selection = np.where((freq >= self.min_save_freq) & (freq <= self.max_save_freq))[0]
+        if len(chan_selection) == 0:
+            return {}
+            
+        elif len(chan_selection) != freq.size:
+            freq = freq[chan_selection]
+            data = data[chan_selection,...]
             
         # Get the date
         mjd, h, m, s = timetag_to_mjdatetime(time_tag)
@@ -1311,8 +1542,10 @@ class WriterOp(object):
                 'center_alt':    hdr['phase_center_alt'] * 180/np.pi,
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
+        if 'extended_attributes' in hdr:
+            info['extended_attributes'] = hdr['extended_attributes']
         info.update(ASP_CONFIG[0])
-        
+
         # Write the image to disk
         outname = os.path.join(self.output_dir_archive, str(mjd))
         if not os.path.exists(outname):
@@ -1321,11 +1554,13 @@ class WriterOp(object):
         outname = os.path.join(outname, filename)
         
         try:
-            with OrvilleImageDB(outname, mode='a', station=station.name) as db:
+            with OrvilleImageDB(outname, mode='a', station=station.name, compression='fpzip') as db:
                 db.add_image(info, data)
             self.log.debug("Added archive integration to disk as part of '%s'", os.path.basename(outname))
         except Exception as e:
             self.log.warning("Failed to add archive integration to disk as part of '%s': %s", os.path.basename(outname), str(e))
+            
+        return info
             
     def main(self):
         cpu_affinity.set_core(self.core)
@@ -1336,6 +1571,18 @@ class WriterOp(object):
                                   'ngpu': 1,
                                   'gpu0': BFGetGPU(),})
         
+        # Setup the classification client
+        if self.oarfish is not None:
+            try:
+                self.oarfish.start()
+                info = self.oarfish.identify()
+                if info is not None:
+                    self.log.info("Connected to oarfish server with %s", info)
+                else:
+                    self.log.warning("Failed to query oarfish server info")
+            except Exception as e:
+                self.log.warning("Failed to start oarfish client: %s", str(e))
+                
         # Setup the figure
         ## Import
         import matplotlib
@@ -1354,6 +1601,9 @@ class WriterOp(object):
         lax = fig.add_axes([0.01, 0, 0.12, 0.10], frameon=False)
         lax.set_axis_off()
         lax.imshow(logo, origin='upper', cmap='gray')
+        ## Spectrum
+        sax = fig.add_axes([0.42, 0.85, 0.16, 0.1], facecolor='black', frameon=False)
+        sax.set_axis_off()
         
         # Setup the A Team sources, plus the Sun and Jupiter
         srcs = [ephem.Sun(), ephem.Jupiter()]
@@ -1374,12 +1624,14 @@ class WriterOp(object):
             bdy._epoch = ephem.J2000
             gplane.append(bdy)
             
-        for iseq,mseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True)):
+        for iseq,mseq,fseq,sseq in zip(self.iring.read(guarantee=True), self.mring.read(guarantee=True), self.fring.read(guarantee=True), self.sring.read(guarantee=True)):
             ihdr = json.loads(iseq.header.tostring())
             mhdr = json.loads(mseq.header.tostring())
+            fhdr = json.loads(fseq.header.tostring())
+            shdr = json.loads(sseq.header.tostring())
             
             self.sequence_proclog.update(ihdr)
-            self.log.info('WriterOp: Config - %s', ihdr)
+            self.log.info('WriterOp%s: Config - %s', self.label, ihdr)
             
             # Setup the ring metadata and gulp sizes
             chan0      = ihdr['chan0']
@@ -1400,28 +1652,48 @@ class WriterOp(object):
             mshape = (nchan,1,1,1)
             self.mring.resize(mgulp_size, mgulp_size*10)
             
+            fgulp_size = fhdr['nchan']*4                      # float32
+            fshape = (fhdr['nchan'],1,1,1)
+            self.fring.resize(fgulp_size, fgulp_size*10)
+            
+            sgulp_size = nchan*4                              # float32
+            sshape = (nchan,1,1,1)
+            self.sring.resize(sgulp_size, sgulp_size*10)
+            
             clip_size = 180.0/np.pi/res
             
             # Setup the frequencies
             t0 = time.time()
             freq = chan0*fC + np.arange(nchan)*4*fC
             arc_freq = freq*1.0
-            arc_freq = arc_freq.reshape(6, -1)
+            arc_freq = arc_freq.reshape(-1, 32)
             arc_freq = arc_freq.mean(axis=1)
             
+            full_freq = fhdr['chan0']*fC + np.arange(fhdr['nchan'])*4*fC
+            
             # Setup the frequencies to write images for
-            ichans = [nchan//2, nchan//2-80, nchan//2+80]
-            lchans = [0, 1, 2]
+            ichans = []
+            lchans = []
+            for lsc,lf in enumerate(args.lwatv_freq):
+                best_chan = np.argmin(np.abs(freq - lf))
+                if abs(freq[best_chan] - lf) <= 250e3:
+                    ichans.append(best_chan)
+                    lchans.append(lsc)
+            fsoffset = int(round(ihdr['chan0'] - fhdr['chan0'])) // 4
             
             # Setup the buffer for the automatic color scale control
             vmax = [deque([], maxlen=60) for c in freq]
             
             intCount = 0
             prev_time = time.time()
-            for ispan,mspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size)):
+            for ispan,mspan,fspan,sspan in zip(iseq.read(igulp_size), mseq.read(mgulp_size), fseq.read(fgulp_size), sseq.read(sgulp_size)):
                 if ispan.size < igulp_size:
                     continue # Ignore final gulp
                 if mspan.size < nchan*1:
+                    continue # Ignore final gulp
+                if fspan.size < fhdr['nchan']*4:
+                    continue # Ignore final gulp
+                if sspan.size < nchan*4:
                     continue # Ignore final gulp
                 curr_time = time.time()
                 acquire_time = curr_time - prev_time
@@ -1431,44 +1703,82 @@ class WriterOp(object):
                 idata = ispan.data_view(np.float32).reshape(ishape)
                 mdata = mspan.data_view(np.uint8).reshape(mshape)
                 mdata = mdata.copy()
+                fdata = fspan.data_view(np.float32).reshape(fshape)
+                sdata = sspan.data_view(np.float32).reshape(sshape)
                 
                 ## Write the full image set to disk
                 tSave = time.time()
-                self._save_image(self.station, time_tag, ihdr, freq, idata, mask=1-mdata)
-                self.log.debug('Save time: %.3f s', time.time()-tSave)
+                metadata = self._save_image(self.station, time_tag, ihdr,
+                                            freq, idata, mask=1-mdata, weighting=weighting)
+                metadata['station'] = self.station.name.lower().replace('-', '')
+                for key in metadata:
+                    if isinstance(metadata[key], bytes):
+                        metadata[key] = metadata[key].decode()
+                self.log.debug('Save time%s: %.3f s', self.label, time.time()-tSave)
                 
                 ## Write the archive image set to disk
                 tArchive = time.time()
-                arc_data = idata.reshape(arc_freq.size,-1,npol*npol,ngrid,ngrid)
-                arc_mask = mdata.reshape(arc_freq.size,-1,1,1,1)
+                arc_data = idata
+                arc_data = arc_data.reshape(arc_freq.size,-1,npol*npol,ngrid,ngrid)
+                arc_mask = mdata
+                arc_mask = arc_mask.reshape(arc_freq.size,-1,1,1,1)
                 mask_mean = arc_mask.sum(axis=1) / arc_mask.shape[1]
                 for band in range(mask_mean.shape[0]):
                     if mask_mean[band,0,0,0] < 0.5:
                         arc_mask[band,:,:,:,:] = 0
-                arc_data = (arc_data*arc_mask).sum(axis=1) / arc_mask.sum(axis=1)
-                self._save_archive_image(self.station, time_tag, ihdr, arc_freq, arc_data)
-                self.log.debug('Archive save time: %.3f s', time.time()-tArchive)
+                arc_data = (arc_data*arc_mask).sum(axis=1, dtype=idata.dtype) \
+                            / arc_mask.sum(axis=1, dtype=idata.dtype)
+                arc_results = None
+                if self.oarfish is not None:
+                    arc_results =  self.oarfish.send(metadata, arc_data)
+                    arc_ostats = self.oarfish.get_stats()
+                    if arc_ostats['requests']['timeout'] > 600:
+                        self.log.debug('Restarting oarfish connection to server')
+                        self.oarfish.end()
+                        self.oarfish.start()
+                        
+                if arc_results is not None:
+                    ihdr['extended_attributes'] = arc_results
+                elif 'extended_attributes' in ihdr:
+                    del ihdr['extended_attributes']
+                    
+                self._save_archive_image(self.station, time_tag, ihdr,
+                                         arc_freq, arc_data, weighting=weighting)
+                self.log.debug('Archive save time%s: %.3f s', self.label, time.time()-tArchive)
                 
                 ## Timetag stuff
                 unix_time_tag_s = time_tag // int(fS)
-                date_str = datetime.utcfromtimestamp(unix_time_tag_s).strftime('%Y/%m/%d %H:%M:%S UTC')
+                date_str = datetime.fromtimestamp(unix_time_tag_s, tz=timezone.utc).strftime('%Y/%m/%d %H:%M:%S UTC')
                 
                 ## Compute the locations of the brigth sources and the Galactic plane
-                self.station.date = date_str[:-4]
-                for src in srcs:
-                    src.compute(self.station)
-                ateam_x = [np.cos(src.alt)*np.sin(src.az) for src in srcs if src.alt > 0]
-                ateam_y = [np.cos(src.alt)*np.cos(src.az) for src in srcs if src.alt > 0]
-                ateam_s = [src.name                       for src in srcs if src.alt > 0]
-                for g in gplane:
-                    g.compute(self.station)
-                plane_x = [np.cos(g.alt)*np.sin(g.az) if g.alt > 0 else np.nan for g in gplane]
-                plane_x = np.array(plane_x)
-                plane_y = [np.cos(g.alt)*np.cos(g.az) if g.alt > 0 else np.nan for g in gplane]
-                plane_y = np.array(plane_y)
-                
+                if ichans:
+                    self.station.date = date_str[:-4]
+                    for src in srcs:
+                        src.compute(self.station)
+                    ateam_x = [np.cos(src.alt)*np.sin(src.az) for src in srcs if src.alt > 0]
+                    ateam_y = [np.cos(src.alt)*np.cos(src.az) for src in srcs if src.alt > 0]
+                    ateam_s = [src.name                       for src in srcs if src.alt > 0]
+                    for g in gplane:
+                        g.compute(self.station)
+                    plane_x = [np.cos(g.alt)*np.sin(g.az) if g.alt > 0 else np.nan for g in gplane]
+                    plane_x = np.array(plane_x)
+                    plane_y = [np.cos(g.alt)*np.cos(g.az) if g.alt > 0 else np.nan for g in gplane]
+                    plane_y = np.array(plane_y)
+                    
                 ## Plot
-                for lsc,c in zip(lchans,ichans):
+                results = None
+                if self.oarfish is not None:
+                    results = self.oarfish.send(metadata, idata[ichans,:,:,:])
+                    ostats = self.oarfish.get_stats()
+                    if ostats['requests']['timeout'] > 600:
+                        self.log.debug('Restarting oarfish connection to server')
+                        self.oarfish.end()
+                        self.oarfish.start()
+                        
+                if results is None:
+                    results = [{'quality_score': -1.0, 'final_label': ''} for c in ichans]
+                    
+                for lsc,c,r in zip(lchans,ichans,results):
                     for i,p,l in ((0,0,'I'), (1,3,'V')):
                         ### Pull out the data and get it ready for plotting
                         img = idata[c,p,:,:]
@@ -1520,6 +1830,17 @@ class WriterOp(object):
                             horizontalalignment='right', color='white',
                             fontsize=14, transform=fig.transFigure)
                     
+                    ### Add in quality info
+                    ax[1].text(0.99,0.01, r['final_label'], verticalalignment='bottom',
+                               horizontalalignment='right', color='white',
+                               fontsize=14, transform=fig.transFigure)
+                    
+                    ## Add the spectrum
+                    sax.cla()
+                    sax.semilogy(full_freq, fdata[:,0,0,0], color='white')
+                    sax.scatter(full_freq[c+fsoffset], fdata[c+fsoffset,0,0,0], marker='o', color='red')
+                    sax.axis('off')
+                    
                     ## Save
                     mjd, h, m, s = timetag_to_mjdatetime(time_tag)
                     outname = os.path.join(self.output_dir_lwatv, str(mjd))
@@ -1542,7 +1863,7 @@ class WriterOp(object):
                         label = '' if lsc == 0 else ('.'+str(lsc))
                         shutil.copy2(outname, os.path.join(self.uploader_dir, f"lwatv{label}.png"))
                         if lsc == 0:
-                            shutil.copy2(outname_ts, os.path.join(self.uploader_dir, 'lwatv_timestamp'))    
+                            shutil.copy2(outname_ts, os.path.join(self.uploader_dir, 'lwatv_timestamp'))
                             
                     self.log.debug("Wrote LWATV%s %i, %i to disk as '%s'", label, intCount, c, os.path.basename(outname))
                     
@@ -1551,19 +1872,20 @@ class WriterOp(object):
                 
                 curr_time = time.time()
                 process_time = curr_time - prev_time
-                self.log.debug('Writer processing time was %.3f s', process_time)
+                self.log.debug('Writer%s processing time was %.3f s', self.label, process_time)
                 prev_time = curr_time
                 self.perf_proclog.update({'acquire_time': acquire_time, 
                                           'reserve_time': -1, 
                                           'process_time': process_time,})
                 
-        self.log.info("WriterOp - Done")
+        self.log.info("WriterOp%s - Done", self.label)
 
 
 class UploaderOp(object):
-    def __init__(self, log, uploader_dir=None, core=-1, gpu=-1):
+    def __init__(self, log, uploader_dir=None, lwatv_channel='', core=-1, gpu=-1):
         self.log = log
         self.uploader_dir = uploader_dir
+        self.lwatv_channel = lwatv_channel
         self.core = core
         self.gpu = gpu
         
@@ -1594,13 +1916,13 @@ class UploaderOp(object):
             acquire_time = curr_time - prev_time
             prev_time = curr_time
             
-            # Upload and make active
-            if self.uploader_dir is not None:
+            ## Upload and make active
+            if self.uploader_dir is not None and self.lwatv_channel != '':
                 if os.listdir(self.uploader_dir):
                     try:
                         ## Upload and stage
                         p = subprocess.Popen(['timeout', '2', 'rsync', '-e', 'ssh', '-a', self.uploader_dir+os.path.sep,
-                                              'mcsdr@lwalab.phys.unm.edu:/var/www/lwatv2/'],
+                                              f"mcsdr@lwalab.phys.unm.edu:/var/www/{self.lwatv_channel}/"],
                                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                         _, error = p.communicate()
                         if p.returncode != 0:
@@ -1621,8 +1943,9 @@ class UploaderOp(object):
 
 
 class AnalogSettingsOp(object):
-    def __init__(self, log, core=-1, gpu=-1):
+    def __init__(self, log, station_name, core=-1, gpu=-1):
         self.log = log
+        self.station_name = station_name
         self.core = core
         self.gpu = gpu
         
@@ -1645,7 +1968,7 @@ class AnalogSettingsOp(object):
         
         mapping = {'AT1': 'asp_atten_1',
                    'AT2': 'asp_atten_2',
-                   'ATS': 'asp_atten_s',
+                   'AT3': 'asp_atten_3',
                    'FIL': 'asp_filter'}
         
         prev_time = time.time()
@@ -1657,10 +1980,10 @@ class AnalogSettingsOp(object):
             new_config = {'asp_filter':  -1,
                           'asp_atten_1': -1,
                           'asp_atten_2': -1,
-                          'asp_atten_s': -1}
+                          'asp_atten_3': -1}
             
             try:
-                with urlopen('https://lwalab.phys.unm.edu/OpScreen/lwasv/arx.json', timeout=5) as uh:
+                with urlopen(f"https://lwalab.phys.unm.edu/OpScreen/{self.station_name}/arx.json", timeout=5) as uh:
                     config = json.load(uh)
                     
                 for entry in config:
@@ -1669,9 +1992,9 @@ class AnalogSettingsOp(object):
                         if entry['value'] is not None:
                             new_config[mapping[setting]] = entry['value']
                     except KeyError as err:
-                        self.log.warn("Failed to load ASP configuration setting '%s': %s", setting, str(err))
+                        self.log.warning("Failed to load ASP configuration setting '%s': %s", setting, str(err))
             except Exception as err:
-                self.log.warn('Failed to download ASP configuration: %s', str(err))
+                self.log.warning('Failed to download ASP configuration: %s', str(err))
                 
             ASP_CONFIG.append(new_config)
             self.log.debug('ASP configuration set to: %s', str(ASP_CONFIG[0]))
@@ -1722,9 +2045,33 @@ def main(args):
     for arg in vars(args):
         log.info("  %s: %s", arg, getattr(args, arg))
         
+    # Read in the configuration file (if provided)
+    orville_config = {'name':            'lwa1',
+                      'diameter':        100, # m
+                      'min_grid_size':   128,
+                      'w_step':          0.3,
+                      'phase_center':    ["00:00:00.000", str(lwa1.lat)], # HA (hours str), dec (deg str)
+                      'nsub':            1,
+                      'max_packet_size': 9000, # B
+                      'buffer_factor':   6,
+                      'lwatv_channel':   '',
+                      'min_save_freq':   0.0,
+                      'max_save_freq':   98.0e6}
+    if args.configfile is not None:
+        with open(args.configfile, 'r') as fh:
+            config = json.loads(json_minify.json_minify(fh.read()))
+        orville_config.update(config)
+    log.info('Config args:')
+    for key,value in orville_config.items():
+        log.info("  %s: %s", key, value)
+        
     # Setup the cores and GPUs to use
-    cores = [0, 1, 2, 3, 4, 5, 6, 7, 7]
+    cores = [0, 1, 2, 3, 4, 5, 6, 7, 7, 8, 8]
     gpus  = [0,]*len(cores)
+    while len(cores) < 11 + orville_config['nsub']*2:
+        cores.extend([(cores[-2]+1) % 16, (cores[-1]+1) % 16])
+        gpus.extend([gpus[-2], gpus[-1]])
+        
     log.info("CPUs:         %s", ' '.join([str(v) for v in cores]))
     log.info("GPUs:         %s", ' '.join([str(v) for v in gpus]))
     
@@ -1753,8 +2100,17 @@ def main(args):
     # Create the rings that we need
     capture_ring = Ring(name="capture", space='system')
     rfimask_ring = Ring(name="rfimask", space='system')
-    writer_ring = Ring(name="writer", space='system')
-    
+    avgspec_ring = Ring(name="avgspec", space='system')
+    sub_capture_rings = []
+    sub_rfimask_rings = []
+    sub_avgspec_rings = []
+    writer_rings = []
+    for i in range(orville_config['nsub']):
+        sub_capture_rings.append(Ring(name=f"subcapture{i}", space='system'))
+        sub_rfimask_rings.append(Ring(name=f"subrfimask{i}", space='system'))
+        sub_avgspec_rings.append(Ring(name=f"subavgspec{i}", space='system'))
+        writer_rings.append(Ring(name=f"writer{i}", space='system'))
+        
     # Setup the uploader's staging location
     uploader_dir = '/dev/shm/orville_uploader'
     if not os.path.exists(uploader_dir):
@@ -1762,40 +2118,62 @@ def main(args):
         
     # Setup the processing blocks
     ## A reader
-    nBL = len(ANTENNAS)//2*(len(ANTENNAS)//2+1)//2
+    if orville_config['name'] == 'lwa1':
+        station = lwa1
+    elif orville_config['name'] == 'lwasv':
+        station = lwasv
+    elif orville_config['name'] == 'lwana':
+        station = lwana
+    else:
+        raise RuntimeError(f"Unknown station '{orville_config['name']}'")
+    nBL = len(station.antennas)//2*(len(station.antennas)//2+1)//2
     iaddr = Address(args.address, args.port)
     isock = UDPSocket()
     isock.bind(iaddr)
     isock.timeout = 5.0
     ops.append(CaptureOp(log, capture_ring,
-                         isock, nBL*6, 1, 9000, 1, 1, core=cores.pop(0)))
+                         isock, nBL*orville_config['buffer_factor'], 1,
+                         orville_config['max_packet_size'], 1, 1,
+                         nsub=orville_config['nsub'], core=cores.pop(0)))
     ## The flagger
-    ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring,
+    ops.append(FlaggerOp(args.flagfile, log, capture_ring, rfimask_ring, avgspec_ring, station,
                          core=cores.pop(0)))
     ## The correlation matrix
-    ops.append(MatrixOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
+    ops.append(MatrixOp(log, capture_ring, rfimask_ring, station, base_dir=args.output_dir,
                         core=cores.pop(0), gpu=gpus.pop(0)))
     ## The spectra plotter
-    ops.append(SpectraOp(log, capture_ring, rfimask_ring, base_dir=args.output_dir,
+    ops.append(SpectraOp(log, capture_ring, rfimask_ring, station, base_dir=args.output_dir,
                          uploader_dir=uploader_dir,
                          core=cores.pop(0), gpu=gpus.pop(0)))
     ## The radial (u,v) plotter
-    ops.append(BaselineOp(log, capture_ring, base_dir=args.output_dir,
+    ops.append(BaselineOp(log, capture_ring, station, base_dir=args.output_dir,
                           uploader_dir=uploader_dir,
                           core=cores.pop(0), gpu=gpus.pop(0)))
-    ## The imager
-    ops.append(ImagingOp(log, capture_ring, writer_ring,
-                         decimation=args.decimation,
-                         core=cores.pop(0), gpu=gpus.pop(0)))
-    ## The image writer and plotter for LWA TV
-    ops.append(WriterOp(log, writer_ring, rfimask_ring, base_dir=args.output_dir,
-                         uploader_dir=uploader_dir,
-                         core=cores.pop(0), gpu=gpus.pop(0)))
+    ## The subband splitters
+    ops.append(SubbandSplitterOp(log, capture_ring, sub_capture_rings,
+                                 label='Data', core=cores.pop(0)))
+    ops.append(SubbandSplitterOp(log, rfimask_ring, sub_rfimask_rings,
+                                 label='Mask', core=cores.pop(0)))
+    ops.append(SubbandSplitterOp(log, avgspec_ring, sub_avgspec_rings,
+                                 label='Spectrum', core=cores.pop(0)))
+    for i in range(orville_config['nsub']):
+        ## The subband imager
+        ops.append(ImagingOp(log, sub_capture_rings[i], writer_rings[i], station,
+                             decimation=args.decimation, config=orville_config,
+                             label=str(i), core=cores.pop(0), gpu=gpus.pop(0)))
+        ## The subband image writer and plotter for LWA TV
+        ops.append(WriterOp(log, writer_rings[i], sub_rfimask_rings[i], avgspec_ring, sub_avgspec_rings[i], station,
+                            base_dir=args.output_dir, uploader_dir=uploader_dir,
+                            lwatv_freq=args.lwatv_freq, label=str(i),
+                            min_save_freq=orville_config['min_save_freq'],
+                            max_save_freq=orville_config['max_save_freq'],
+                            core=cores.pop(0), gpu=gpus.pop(0)))
     ## The image uploader
     ops.append(UploaderOp(log, uploader_dir=uploader_dir,
+                          lwatv_channel=orville_config['lwatv_channel'],
                           core=cores.pop(0), gpu=gpus.pop(0)))
     ## The ASP settings getter
-    ops.append(AnalogSettingsOp(log,
+    ops.append(AnalogSettingsOp(log, orville_config['name'],
                                 core=cores.pop(0), gpu=gpus.pop(0)))
     
     # Launch everything and wait
@@ -1816,10 +2194,12 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description="Capture data from the ADP wideband correlator mode and image it",
+        description="Capture data from the NDP wideband correlator mode and image it",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
         )
-    parser.add_argument('-a', '--address', type=str, default='192.168.40.47',
+    parser.add_argument('-c', '--configfile', type=str,
+                        help='Orville configuration file')
+    parser.add_argument('-a', '--address', type=str, default='192.168.40.46',
                         help='IP address to listen to')
     parser.add_argument('-p', '--port', type=int, default=11000,
                         help='UDP port to listen to')
@@ -1831,6 +2211,13 @@ if __name__ == '__main__':
                         help='base directory to write output data to')
     parser.add_argument('-f', '--flagfile', type=str,
                         help='path to flagger file that gives frequencies to flag')
+    parser.add_argument('-t', '--lwatv-freq', type=str, default='38.1',
+                        help='LWATV frequency in MHz')
     args = parser.parse_args()
+    if args.lwatv_freq.find(',') != -1:
+        values = args.lwatv_freq.split(',')
+        args.lwatv_freq = [float(v)*1e6 for v in values]
+    else:
+        args.lwatv_freq = [float(args.lwatv_freq)*1e6,]
+        
     main(args)
-    

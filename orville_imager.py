@@ -260,7 +260,8 @@ class CaptureOp(object):
                 good, missing = new_good, new_missing
                 
                 try:
-                    for i in range(self.nsub):
+                    # Add one for every subband/every full res and archival image
+                    for i in range(2*self.nsub):
                         FILL_QUEUE.put_nowait(fill_level)
                 except queue.Full:
                     pass
@@ -362,7 +363,10 @@ class SpectraOp(object):
         x = im.size[0] + 15
         for label, c in reversed(list(zip(('good XX','good YY','flagged XX','flagged YY'),
                                           ('#1F77B4','#FF7F0E','#799CB4',   '#FFC28C')))):
-            x -= draw.textlength(label, font = font) + 20
+            try:
+                x -= draw.textlength(label, font = font) + 20
+            except AttributeError:
+                x -= draw.textsize(label, font = font)[0] + 20
             draw.text((x, ySummary), label, font = font, fill = c)
             
         return im
@@ -545,7 +549,10 @@ class BaselineOp(object):
         x = im.size[0] + 15
         #for label, c in reversed(list(zip(('XX','XY','YY'), ('#1F77B4','#A00000','#FF7F0E')))):
         for label, c in reversed(list(zip(('XX','YY'), ('#1F77B4','#FF7F0E')))):
-            x -= draw.textlength(label, font = font) + 20
+            try:
+                x -= draw.textlength(label, font = font) + 20
+            except AttributeError:
+                x -= draw.textsize(label, font = font)[0] + 20
             draw.text((x, ySummary), label, font = font, fill = c)
             
         return im
@@ -1472,6 +1479,8 @@ class WriterOp(object):
                 'center_alt':    hdr['phase_center_alt'] * 180/np.pi,
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
+        if 'extended_attributes' in hdr:
+            info['extended_attributes'] = hdr['extended_attributes']
         info.update(ASP_CONFIG[0])
         
         # Write the image to disk
@@ -1533,8 +1542,10 @@ class WriterOp(object):
                 'center_alt':    hdr['phase_center_alt'] * 180/np.pi,
                 'pixel_size':    hdr['res'],
                 'stokes_params': ('I,Q,U,V' if hdr['basis'] == 'Stokes' else 'XX,XY,YX,YY')}
+        if 'extended_attributes' in hdr:
+            info['extended_attributes'] = hdr['extended_attributes']
         info.update(ASP_CONFIG[0])
-        
+
         # Write the image to disk
         outname = os.path.join(self.output_dir_archive, str(mjd))
         if not os.path.exists(outname):

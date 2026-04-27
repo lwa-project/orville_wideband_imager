@@ -14,6 +14,9 @@
   /* Phase center to minimize the w term (HA in hours; dec in deg) */
   "phase_center": ["0:00:0.0", "33:21:27.5"],
   
+  /* Weighting method to use for the images */
+  "weighting": "natural",
+  
   /* Number of sub-bands to use for imaging */
   "nsub": 4,
   

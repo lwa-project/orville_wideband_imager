@@ -1139,10 +1139,10 @@ class ImagingOp(object):
                 grid_res = 130.0 / grid_size                # deg/px
                 
                 # Setup the image weighting
-                weighting = 'briggs@0.5'
+                weighting = self.config['weighting']
                 
                 # Report
-                self.log.info("ImagerOp%s: grid is %i by %i with a resolution of %.3f deg/px", self.label, grid_size, grid_size, grid_res)
+                self.log.info("ImagerOp%s: grid is %i by %i with a resolution of %.3f deg/px (weighting=%s)", self.label, grid_size, grid_size, grid_res, weighting)
                 
                 ochan = nchan // self.decimation
                 igulp_size = nstand*(nstand+1)//2*nchan*npol*npol*8      # complex64
@@ -2051,6 +2051,7 @@ def main(args):
                       'min_grid_size':   128,
                       'w_step':          0.3,
                       'phase_center':    ["00:00:00.000", str(lwa1.lat)], # HA (hours str), dec (deg str)
+                      'weighting':       "natural",
                       'nsub':            1,
                       'max_packet_size': 9000, # B
                       'buffer_factor':   6,

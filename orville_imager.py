@@ -1231,7 +1231,7 @@ class ImagingOp(object):
                             cgainY0 *= 0.0
                             
                         ## Distance test
-                        if np.sqrt(a.stand.x**2 + a.stand.y**2) > 200:
+                        if np.sqrt(a.stand.x**2 + a.stand.y**2) > 125:
                             exclude.append(i)
                             
                         for j in range(i, nstand):

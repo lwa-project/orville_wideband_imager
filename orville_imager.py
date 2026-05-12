@@ -1213,7 +1213,6 @@ class ImagingOp(object):
                     print('phase cache failed')
                     phases = np.zeros((nchan,nstand*(nstand+1)//2,npol,npol), dtype=np.complex64)
                     k = 0
-                    exclude = []
                     for i in range(nstand):
                         ## X
                         a = self.station.antennas[2*i + 0]
@@ -1229,10 +1228,6 @@ class ImagingOp(object):
                         if self.station.antennas[2*i + 0].combined_status != 33 or self.station.antennas[2*i + 1].combined_status != 33:
                             cgainX0 *= 0.0
                             cgainY0 *= 0.0
-                            
-                        ## Distance test
-                        if np.sqrt(a.stand.x**2 + a.stand.y**2) > 125:
-                            exclude.append(i)
                             
                         for j in range(i, nstand):
                             ## X
@@ -1268,14 +1263,20 @@ class ImagingOp(object):
                 t0 = time.time()
                 weights = np.ones((nchan,nstand,nstand,npol,npol), dtype=np.complex64)
                 for i in range(nstand):
+                    a = self.station.antennas[2*i + 0]
                     # Mask out bad antennas
                     if self.station.antennas[2*i+0].combined_status != 33 or self.station.antennas[2*i+1].combined_status != 33:
                         weights[:,i,:,:,:] = 0.0
                     if self.station.antennas[2*i+0].combined_status != 33 or self.station.antennas[2*i+1].combined_status != 33:
                         weights[:,:,i,:,:] = 0.0
                         
+                    ## Distance test
+                    if np.sqrt(a.stand.x**2 + a.stand.y**2) > 125:
+                        weights[:,i,:,:,:] = 0.0
+                        weights[:,:,i,:,:] = 0.0
+                        
                     for j in range(nstand):
-                        if i == j or i in exclude or j in exclude:
+                        if i == j:
                              weights[:,i,j,:,:] = 0.0
                         
                 print('@weights', time.time() - t0, '@', weights.shape, weights.size*(4+4)/1024.**2)

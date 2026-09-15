@@ -24,7 +24,7 @@
   "max_packet_size": 4500,
   
   /* Ring buffer factor (should be related to the number of DRX pipelines) */
-  "buffer_factor": 16,
+  "buffer_factor": 12,
   
   /* LWATV channel */
   "lwatv_channel": "lwatv2",
